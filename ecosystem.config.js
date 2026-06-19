@@ -38,7 +38,7 @@ module.exports = {
       watch: false,
       max_memory_restart: '200M',
       env: {
-        PORT: 8090,
+        PORT: 3022,
       },
       error_file: '/tmp/gravity-web-error.log',
       out_file: '/tmp/gravity-web-out.log',
