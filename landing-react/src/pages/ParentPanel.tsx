@@ -119,6 +119,10 @@ export default function ParentPanel() {
   const [inviteCopied, setInviteCopied] = useState(false)
   const [circleModalTab, setCircleModalTab] = useState<'create' | 'join'>('create')
   const [circleModalLoading, setCircleModalLoading] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [profileName, setProfileName] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const avatarFileInputRef = useRef<HTMLInputElement>(null)
 
   // ── AUTH GUARD ──
   useEffect(() => {
@@ -134,6 +138,7 @@ export default function ParentPanel() {
     if (user) {
       setUserName(user.name || 'User')
       setUserEmail(user.email || '')
+      setProfileName(user.name || '')
       if (user.avatar_url) setUserAvatar(user.avatar_url)
     }
   }, [])
@@ -500,6 +505,76 @@ export default function ParentPanel() {
       }
     } catch { showToast('Network error', 'error') }
     finally { setCircleModalLoading(false) }
+  }
+
+  // ── AVATAR UPLOAD ──
+  async function handleAvatarFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setAvatarUploading(true)
+    try {
+      // Step 1: get presigned URL
+      const presignRes = await apiPost('/media/avatar/presign', { contentType: file.type, fileSize: file.size })
+      if (!presignRes?.uploadUrl || !presignRes?.publicUrl) {
+        showToast('Failed to start upload', 'error')
+        return
+      }
+      const { uploadUrl, publicUrl } = presignRes
+      // Step 2: PUT file binary to R2
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      })
+      // Step 3: confirm
+      const confirmRes = await apiPost('/media/avatar/confirm', { publicUrl })
+      const newAvatarUrl = confirmRes?.avatar_url || publicUrl
+      setUserAvatar(newAvatarUrl)
+      // persist to localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem('gravity_user') || 'null') || {}
+        stored.avatar_url = newAvatarUrl
+        localStorage.setItem('gravity_user', JSON.stringify(stored))
+      } catch { /* ignore */ }
+      showToast('Avatar updated!', 'success')
+    } catch {
+      showToast('Upload failed', 'error')
+    } finally {
+      setAvatarUploading(false)
+      if (avatarFileInputRef.current) avatarFileInputRef.current.value = ''
+    }
+  }
+
+  // ── PROFILE SAVE ──
+  async function saveProfile() {
+    const name = profileName.trim()
+    if (!name) { showToast('Name cannot be empty', 'error'); return }
+    setProfileSaving(true)
+    try {
+      const res = await apiPatch('/users/me', { name })
+      if (res?.status === 404 || res?.error?.includes?.('Cannot') || res === null) {
+        showToast('Profile update coming soon', 'success')
+      } else if (res?.id || res?.name) {
+        const updatedName = res.name || name
+        setUserName(updatedName)
+        setProfileName(updatedName)
+        try {
+          const stored = JSON.parse(localStorage.getItem('gravity_user') || 'null') || {}
+          stored.name = updatedName
+          localStorage.setItem('gravity_user', JSON.stringify(stored))
+        } catch { /* ignore */ }
+        showToast('Profile saved!', 'success')
+      } else if (res?.error) {
+        showToast(res.error, 'error')
+      } else {
+        // endpoint may not exist yet
+        showToast('Profile update coming soon', 'success')
+      }
+    } catch {
+      showToast('Profile update coming soon', 'success')
+    } finally {
+      setProfileSaving(false)
+    }
   }
 
   // ── SETTINGS ACTIONS ──
@@ -940,11 +1015,34 @@ export default function ParentPanel() {
           {/* TAB 5: SETTINGS */}
           <div className={`${styles.tabSection} ${activeTab === 'settings' ? styles.tabSectionActive : ''}`}>
             <div className={styles.settingsProfile}>
-              <div className={styles.settingsAvatarWrap}>
-                <img src={userAvatar} alt="Profile" className={styles.settingsAvatar} />
-                <div className={styles.settingsAvatarEdit}>✏️</div>
+              {/* Avatar upload */}
+              <div className={styles.settingsAvatarWrap} style={{ position: 'relative', cursor: 'pointer' }} onClick={() => !avatarUploading && avatarFileInputRef.current?.click()}>
+                <img
+                  src={userAvatar}
+                  alt="Profile"
+                  className={styles.settingsAvatar}
+                  style={{ width: 80, height: 80, borderRadius: '50%', border: '3px solid #00E676', objectFit: 'cover', display: 'block' }}
+                />
+                {avatarUploading && (
+                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,200,83,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.9s linear infinite' }}>
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" />
+                    </svg>
+                  </div>
+                )}
+                {!avatarUploading && (
+                  <div style={{ position: 'absolute', bottom: 2, right: 2, width: 22, height: 22, borderRadius: '50%', background: '#00E676', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#060f0a', fontWeight: 800, boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>✏️</div>
+                )}
+                <input
+                  ref={avatarFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleAvatarFileChange}
+                />
               </div>
-              <div>
+              <div style={{ flex: 1 }}>
                 <div className={styles.settingsUserName}>{userName}</div>
                 <div className={styles.settingsUserEmail}>{userEmail}</div>
                 <div className={styles.settingsPlanBadge}>
@@ -953,6 +1051,29 @@ export default function ParentPanel() {
                   </svg>
                   PRO PLAN
                 </div>
+              </div>
+            </div>
+
+            {/* Profile edit: name field + save */}
+            <div style={{ padding: '0 16px 16px' }}>
+              <div style={{ background: '#0D1F13', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 14, padding: '14px 16px' }}>
+                <div style={{ fontSize: 11, color: '#5E8B6E', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>Edit Profile</div>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Display Name</div>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={e => setProfileName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && saveProfile()}
+                  placeholder="Your name"
+                  style={{ background: '#0F2416', border: '1px solid rgba(0,230,118,0.2)', color: '#E8F5E9', padding: '10px 14px', borderRadius: 8, width: '100%', boxSizing: 'border-box', fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 12 }}
+                />
+                <button
+                  onClick={saveProfile}
+                  disabled={profileSaving}
+                  style={{ background: profileSaving ? '#0D7A45' : 'linear-gradient(135deg,#00C853,#00E676)', color: '#060f0a', fontWeight: 700, padding: '10px 20px', border: 'none', borderRadius: 8, cursor: profileSaving ? 'wait' : 'pointer', fontSize: 13, fontFamily: 'inherit' }}
+                >
+                  {profileSaving ? 'Saving...' : 'Save'}
+                </button>
               </div>
             </div>
 

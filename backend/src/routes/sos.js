@@ -23,6 +23,15 @@ router.post('/', authenticate, async (req, res) => {
   for (const row of circles.rows) {
     await sendToCircleMembers(row.circle_id, 'sos_alert', sosData)
   }
+  // Log SOS to DB
+  for (const row of circles.rows) {
+    await query(
+      `INSERT INTO sos_events (user_id, user_name, circle_id, latitude, longitude, message)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT DO NOTHING`,
+      [userId, req.user.name, row.circle_id, latitude || null, longitude || null, message || 'SOS! I need help!']
+    ).catch(() => {})
+  }
   // Log SOS event in geofence_events table if location available
   if (latitude && longitude) {
     await query(
@@ -34,9 +43,19 @@ router.post('/', authenticate, async (req, res) => {
   res.json({ success: true, message: 'SOS sent to all circle members' })
 })
 
-// GET /api/v1/sos/history — get SOS history (placeholder)
+// GET /api/v1/sos/history — get SOS history
 router.get('/history', authenticate, async (req, res) => {
-  res.json({ sos_events: [] })
+  await query(`CREATE TABLE IF NOT EXISTS sos_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_name TEXT, circle_id UUID, latitude FLOAT, longitude FLOAT,
+    message TEXT, resolved BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW()
+  )`).catch(() => {})
+  const r = await query(
+    'SELECT se.*, u.phone FROM sos_events se LEFT JOIN users u ON u.id=se.user_id ORDER BY se.created_at DESC LIMIT 50',
+    []
+  )
+  res.json({ sos_events: r.rows })
 })
 
 module.exports = router

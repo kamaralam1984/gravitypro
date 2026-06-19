@@ -173,6 +173,8 @@ router.get('/otps', adminAuth, async (req, res) => {
 
 // GET /api/v1/admin/system
 router.get('/system', adminAuth, async (req, res) => {
+  const { getConnectedCount } = require('../services/sse')
+  const connected = getConnectedCount()
   const [tables, dbSize] = await Promise.all([
     query(`SELECT relname table_name, n_live_tup row_count FROM pg_stat_user_tables ORDER BY n_live_tup DESC`).catch(() => ({ rows: [] })),
     query(`SELECT pg_size_pretty(pg_database_size(current_database())) db_size`).catch(() => ({ rows: [{ db_size: 'N/A' }] })),
@@ -183,6 +185,7 @@ router.get('/system', adminAuth, async (req, res) => {
     rateLimit: { windowMs: 900000, max: 1000 },
     nodeVersion: process.version,
     uptime: process.uptime(),
+    connectedClients: connected,
   })
 })
 
@@ -197,13 +200,10 @@ router.delete('/locations/purge', adminAuth, async (req, res) => {
 router.post('/broadcast', adminAuth, async (req, res) => {
   const { message, type = 'info' } = req.body
   if (!message) return res.status(400).json({ error: 'message required' })
-  try {
-    const { sendToAllConnected } = require('../services/sse')
-    if (typeof sendToAllConnected === 'function') {
-      sendToAllConnected('admin_broadcast', { message, type, timestamp: new Date().toISOString() })
-    }
-  } catch {}
-  res.json({ sent: true, message, type })
+  const { sendToAllConnected, getConnectedCount } = require('../services/sse')
+  const count = getConnectedCount()
+  sendToAllConnected('admin_broadcast', { message, type, timestamp: new Date().toISOString() })
+  res.json({ sent: true, message, type, recipients: count })
 })
 
 module.exports = router

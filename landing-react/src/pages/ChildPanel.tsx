@@ -79,6 +79,10 @@ export default function ChildPanel() {
   const [hasCircle, setHasCircle] = useState<boolean | null>(null)
   const [joinCode, setJoinCode] = useState<string>('')
   const [joinLoading, setJoinLoading] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [alerts, setAlerts] = useState<Array<{id:string;type:string;userName:string;zoneName:string;eventType:string;message:string;timestamp:string;read:boolean}>>([])
+  const [unreadAlerts, setUnreadAlerts] = useState(0)
 
   // SOS state — home
   const [homeSosActive, setHomeSosActive] = useState(false)
@@ -100,6 +104,7 @@ export default function ChildPanel() {
   const currentCircleIdRef = useRef<string | null>(null)
   const displayMembersRef = useRef<Member[]>([])
   const toastCounterRef = useRef(0)
+  const avatarFileRef = useRef<HTMLInputElement>(null)
 
   // Auth check
   const gravityToken = useMemo(() => localStorage.getItem('gravity_token'), [])
@@ -251,9 +256,35 @@ export default function ChildPanel() {
         return updated
       })
     })
+    evtSource.addEventListener('geofence_event', (e: MessageEvent) => {
+      const data = JSON.parse(e.data)
+      setAlerts(prev => [{
+        id: Date.now().toString(),
+        type: 'geofence',
+        userName: data.userName || 'Family member',
+        zoneName: data.zoneName || 'Safe zone',
+        eventType: data.eventType || 'entry',
+        message: data.eventType === 'entry' ? `${data.userName} arrived at ${data.zoneName}` : `${data.userName} left ${data.zoneName}`,
+        timestamp: data.timestamp || new Date().toISOString(),
+        read: false
+      }, ...prev].slice(0, 50))
+      setUnreadAlerts(prev => prev + 1)
+    })
     evtSource.addEventListener('sos_alert', (e: MessageEvent) => {
       const d = JSON.parse(e.data)
       showToast('🆘 SOS from ' + (d.userName || 'Family member'), 'sos')
+      const data = d
+      setAlerts(prev => [{
+        id: Date.now().toString(),
+        type: 'sos',
+        userName: data.userName || 'Family member',
+        zoneName: '',
+        eventType: 'sos',
+        message: data.message || 'SOS Alert!',
+        timestamp: data.timestamp || new Date().toISOString(),
+        read: false
+      }, ...prev].slice(0, 50))
+      setUnreadAlerts(prev => prev + 1)
     })
     evtSource.onerror = () => evtSource.close()
   }, [gravityToken, showToast])
@@ -374,6 +405,10 @@ export default function ChildPanel() {
     if (tabId === 'map' && !mapInitRef.current) {
       setTimeout(initMap, 80)
     }
+    if (tabId === 'alerts') {
+      setUnreadAlerts(0)
+      setAlerts(prev => prev.map(a => ({ ...a, read: true })))
+    }
     setTimeout(() => {
       document.querySelectorAll(`.${styles.reveal}:not(.visible)`).forEach(el => {
         const rect = el.getBoundingClientRect()
@@ -464,6 +499,104 @@ export default function ChildPanel() {
       showToast(next[key] ? '✓ Setting enabled' : '○ Setting disabled')
       return next
     })
+  }
+
+  const handleAvatarUpload = async (file: File) => {
+    if (!file) return
+    setAvatarUploading(true)
+    try {
+      // Step 1: get presigned URL
+      const presignRes = await fetch(API_BASE + '/media/avatar/presign', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + gravityToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentType: file.type, fileSize: file.size })
+      })
+      if (!presignRes.ok) throw new Error('Presign failed')
+      const { uploadUrl, publicUrl } = await presignRes.json()
+
+      // Step 2: PUT file binary to R2 (no auth header)
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file
+      })
+      if (!putRes.ok) throw new Error('Upload failed')
+
+      // Step 3: confirm
+      const confirmRes = await fetch(API_BASE + '/media/avatar/confirm', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + gravityToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicUrl })
+      })
+      if (!confirmRes.ok) throw new Error('Confirm failed')
+      const { avatar_url } = await confirmRes.json()
+
+      // Update state and localStorage
+      setHeaderAvatar(avatar_url)
+      const stored = localStorage.getItem('gravity_user')
+      if (stored) {
+        try {
+          const u = JSON.parse(stored)
+          u.avatar_url = avatar_url
+          localStorage.setItem('gravity_user', JSON.stringify(u))
+        } catch { /* ignore */ }
+      }
+      showToast('Avatar updated!')
+    } catch (e) {
+      showToast('Avatar upload failed', 'error')
+      console.error('Avatar upload error', e)
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  const handleProfileSave = async () => {
+    const name = profileName.trim()
+    if (!name) { showToast('Name cannot be empty', 'error'); return }
+    setProfileSaving(true)
+    try {
+      const res = await fetch(API_BASE + '/users/me', {
+        method: 'PATCH',
+        headers: { 'Authorization': 'Bearer ' + gravityToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      })
+      if (!res.ok && res.status !== 404) throw new Error('Save failed')
+      if (res.status === 404 || !res.ok) {
+        // Update localStorage only
+        const stored = localStorage.getItem('gravity_user')
+        if (stored) {
+          try {
+            const u = JSON.parse(stored)
+            u.name = name
+            localStorage.setItem('gravity_user', JSON.stringify(u))
+          } catch { /* ignore */ }
+        }
+        showToast('Saved locally')
+      } else {
+        const stored = localStorage.getItem('gravity_user')
+        if (stored) {
+          try {
+            const u = JSON.parse(stored)
+            u.name = name
+            localStorage.setItem('gravity_user', JSON.stringify(u))
+          } catch { /* ignore */ }
+        }
+        setHeaderUserName(`Hey, ${name} 👋`)
+        showToast('Profile saved!')
+      }
+    } catch {
+      const stored = localStorage.getItem('gravity_user')
+      if (stored) {
+        try {
+          const u = JSON.parse(stored)
+          u.name = name
+          localStorage.setItem('gravity_user', JSON.stringify(u))
+        } catch { /* ignore */ }
+      }
+      showToast('Saved locally')
+    } finally {
+      setProfileSaving(false)
+    }
   }
 
   const doLogout = () => {
@@ -868,16 +1001,162 @@ export default function ChildPanel() {
           </div>{/* /tab-family */}
 
 
-          {/* ══ TAB 5: PROFILE ══ */}
+          {/* ══ TAB 5: ALERTS ══ */}
+          <div className={`${styles.tabPane} ${activeTab === 'alerts' ? styles.active : ''}`} id="tab-alerts">
+            <div style={{padding:'0 0 16px'}}>
+              <div style={{fontSize:16,fontWeight:700,color:'#E8F5E9',marginBottom:4}}>Alerts</div>
+              <div style={{fontSize:12,color:'#5E8B6E'}}>{alerts.length} notification{alerts.length !== 1 ? 's' : ''}</div>
+            </div>
+            {alerts.length === 0 ? (
+              <div style={{textAlign:'center',padding:'48px 20px',color:'#5E8B6E'}}>
+                <div style={{fontSize:36,marginBottom:12}}>🔔</div>
+                <div style={{fontSize:14}}>No alerts yet</div>
+                <div style={{fontSize:12,marginTop:6,color:'#3E6B4E'}}>Geofence entries/exits and SOS alerts appear here</div>
+              </div>
+            ) : alerts.map(alert => (
+              <div key={alert.id} style={{
+                background: alert.type === 'sos' ? 'rgba(255,82,82,0.08)' : 'rgba(0,230,118,0.05)',
+                border: `1px solid ${alert.type === 'sos' ? 'rgba(255,82,82,0.25)' : 'rgba(0,230,118,0.15)'}`,
+                borderRadius: 12, padding: '14px 16px', marginBottom: 10,
+                borderLeft: `3px solid ${alert.type === 'sos' ? '#FF5252' : alert.eventType === 'entry' ? '#00E676' : '#FFB300'}`
+              }}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:18}}>{alert.type === 'sos' ? '🆘' : alert.eventType === 'entry' ? '✅' : '🚶'}</span>
+                    <span style={{fontWeight:600,color:'#E8F5E9',fontSize:13}}>{alert.userName}</span>
+                  </div>
+                  <span style={{fontSize:11,color:'#5E8B6E'}}>{new Date(alert.timestamp).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+                </div>
+                <div style={{fontSize:13,color:'#B2D8BF',marginLeft:26}}>{alert.message}</div>
+              </div>
+            ))}
+          </div>{/* /tab-alerts */}
+
+
+          {/* ══ TAB 6: PROFILE ══ */}
           <div className={`${styles.tabPane} ${activeTab === 'profile' ? styles.active : ''}`} id="tab-profile">
             <div className={styles.profileHeader}>
-              <div className={styles.profileAvatarWrap}>
-                <img className={styles.profileAvatar} src={headerAvatar} alt={profileName} />
-                <div className={styles.profileEditBtn} onClick={() => showToast('✏️ Edit mode coming soon')}>✏</div>
+              {/* Hidden file input for avatar */}
+              <input
+                ref={avatarFileRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) handleAvatarUpload(file)
+                  e.target.value = ''
+                }}
+              />
+
+              {/* Clickable avatar with upload overlay */}
+              <div
+                style={{ position: 'relative', width: '72px', height: '72px', margin: '0 auto 12px', cursor: 'pointer' }}
+                onClick={() => !avatarUploading && avatarFileRef.current?.click()}
+              >
+                <img
+                  src={headerAvatar}
+                  alt={profileName}
+                  style={{
+                    width: '72px',
+                    height: '72px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: '2.5px solid #00C853',
+                    display: 'block'
+                  }}
+                />
+                {/* Camera hint overlay (always subtle) */}
+                {!avatarUploading && (
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.35)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: 0,
+                    transition: 'opacity 0.2s'
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
+                  >
+                    <span style={{ fontSize: '20px' }}>📷</span>
+                  </div>
+                )}
+                {/* Uploading spinner overlay */}
+                {avatarUploading && (
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.5)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{
+                      width: '22px',
+                      height: '22px',
+                      border: '3px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#00E676',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite'
+                    }}></div>
+                  </div>
+                )}
               </div>
-              <div className={styles.profileName}>{profileName}</div>
+
+              {/* Editable name field */}
+              <div style={{ width: '100%', maxWidth: '260px', margin: '0 auto 8px' }}>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={e => setProfileName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,200,83,0.08)',
+                    border: '1.5px solid rgba(0,200,83,0.3)',
+                    borderRadius: '10px',
+                    color: '#E8F5E9',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    padding: '9px 14px',
+                    textAlign: 'center',
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#00C853' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = 'rgba(0,200,83,0.3)' }}
+                />
+              </div>
+
               <div className={styles.profileAge}>{profileRole}</div>
-              <button className={styles.profileEditFull} onClick={() => showToast('✏️ Edit profile coming soon')}>Edit Profile</button>
+
+              {/* Save Profile button */}
+              <button
+                style={{
+                  background: profileSaving ? 'rgba(0,200,83,0.3)' : 'linear-gradient(135deg,#00C853,#0A5C35)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '10px 28px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: profileSaving ? 'not-allowed' : 'pointer',
+                  marginBottom: '10px',
+                  fontFamily: 'inherit',
+                  opacity: profileSaving ? 0.7 : 1,
+                  transition: 'opacity 0.2s'
+                }}
+                onClick={handleProfileSave}
+                disabled={profileSaving}
+              >
+                {profileSaving ? 'Saving...' : 'Save Profile'}
+              </button>
+
               <button className={styles.logoutBtn} onClick={doLogout}>🚪 Logout</button>
             </div>
 
@@ -1029,6 +1308,18 @@ export default function ChildPanel() {
             <span className={styles.navIcon}>👨‍👩‍👦</span>
             <span className={styles.navLabel}>Family</span>
           </button>
+          <div
+            className={`${styles.navTab} ${activeTab === 'alerts' ? styles.active : ''}`}
+            onClick={() => switchTab('alerts')}
+            style={{position:'relative'}}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span>Alerts</span>
+            {unreadAlerts > 0 && <span style={{position:'absolute',top:2,right:2,background:'#FF5252',color:'#fff',fontSize:9,fontWeight:700,borderRadius:'50%',width:16,height:16,display:'flex',alignItems:'center',justifyContent:'center'}}>{unreadAlerts}</span>}
+          </div>
           <button
             className={`${styles.navTab} ${activeTab === 'profile' ? styles.active : ''}`}
             onClick={() => switchTab('profile')}

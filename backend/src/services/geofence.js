@@ -51,6 +51,14 @@ const notifyCircleMembers = async (userId, zone, eventType) => {
       data: { type: 'geofence_event', zone_id: zone.id, event_type: eventType, user_id: userId }
     })
   }
+  const { sendToCircleMembers } = require('./sse')
+  await sendToCircleMembers(zone.circle_id, 'geofence_event', {
+    userId,
+    userName,
+    zoneName: zone.name,
+    eventType,
+    timestamp: new Date().toISOString()
+  }).catch(() => {})
 }
 
 const sendPushNotifications = async (tokens, message) => {

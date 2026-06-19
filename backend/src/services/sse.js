@@ -28,4 +28,19 @@ const sendToUser = (userId, event, data) => {
   }
 }
 
-module.exports = { addClient, removeClient, sendToCircleMembers, sendToUser }
+const sendToAllConnected = (event, data) => {
+  const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+  for (const [userId, resSet] of clients.entries()) {
+    for (const res of resSet) {
+      try { res.write(message) } catch (e) { removeClient(userId, res) }
+    }
+  }
+}
+
+const getConnectedCount = () => {
+  let count = 0
+  for (const resSet of clients.values()) count += resSet.size
+  return count
+}
+
+module.exports = { addClient, removeClient, sendToCircleMembers, sendToUser, sendToAllConnected, getConnectedCount }
