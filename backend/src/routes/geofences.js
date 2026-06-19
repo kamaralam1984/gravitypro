@@ -76,6 +76,47 @@ router.post('/', authenticate, validate(createZoneSchema), async (req, res) => {
   res.status(201).json({ safe_zone: result.rows[0] })
 })
 
+// PATCH edit safe zone
+const updateZoneSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  center_lat: z.number().optional(),
+  center_lng: z.number().optional(),
+  radius_meters: z.number().min(50).max(50000).optional(),
+})
+
+router.patch('/:id', authenticate, validate(updateZoneSchema), async (req, res) => {
+  const zone = await query(
+    `SELECT sz.id, sz.name, sz.radius_meters,
+       ST_X(ST_Centroid(sz.geom)) as center_lng,
+       ST_Y(ST_Centroid(sz.geom)) as center_lat,
+       cm.role
+     FROM safe_zones sz
+     JOIN circle_members cm ON cm.circle_id = sz.circle_id
+     WHERE sz.id = $1 AND cm.user_id = $2`,
+    [req.params.id, req.user.id]
+  )
+  if (!zone.rows.length) return res.status(403).json({ error: 'Access denied' })
+
+  const current = zone.rows[0]
+  const name = req.body.name ?? current.name
+  const lat = req.body.center_lat ?? current.center_lat
+  const lng = req.body.center_lng ?? current.center_lng
+  const radius = req.body.radius_meters ?? current.radius_meters
+
+  const result = await query(
+    `UPDATE safe_zones
+     SET name = $1,
+         geom = ST_Buffer(ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $4)::geometry,
+         radius_meters = $4
+     WHERE id = $5
+     RETURNING id, name, radius_meters, created_at,
+       ST_X(ST_Centroid(geom)) as center_lng,
+       ST_Y(ST_Centroid(geom)) as center_lat`,
+    [name, lng, lat, radius, req.params.id]
+  )
+  res.json({ safe_zone: result.rows[0] })
+})
+
 // DELETE safe zone
 router.delete('/:id', authenticate, async (req, res) => {
   const zone = await query(

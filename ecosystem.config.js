@@ -31,7 +31,7 @@ module.exports = {
     },
     {
       name: 'gravity-web',
-      script: 'server.js',
+      script: 'server.cjs',
       cwd: '/media/server/linux-part/Gravity/landing-react',
       instances: 1,
       autorestart: true,

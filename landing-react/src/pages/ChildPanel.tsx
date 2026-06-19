@@ -76,6 +76,9 @@ export default function ChildPanel() {
     geofence: true
   })
   const [precision, setPrecisionState] = useState<string>('exact')
+  const [hasCircle, setHasCircle] = useState<boolean | null>(null)
+  const [joinCode, setJoinCode] = useState<string>('')
+  const [joinLoading, setJoinLoading] = useState(false)
 
   // SOS state — home
   const [homeSosActive, setHomeSosActive] = useState(false)
@@ -104,7 +107,7 @@ export default function ChildPanel() {
 
   useEffect(() => {
     if (!gravityToken) {
-      localStorage.setItem('gravity_redirect', 'child-panel.html')
+      localStorage.setItem('gravity_redirect', '/child/panel')
       navigate('/login')
     }
   }, [gravityToken, navigate])
@@ -185,10 +188,12 @@ export default function ChildPanel() {
 
         const data = await apiGet('/circles')
         if (!data || !data.circles || !data.circles.length) {
+          setHasCircle(false)
           setFamilySafeBannerText('No circle joined yet')
           setFamilyTabSub('No members · Join a circle')
           return
         }
+        setHasCircle(true)
         currentCircleIdRef.current = data.circles[0].id
 
         const membersData = await apiGet('/circles/' + currentCircleIdRef.current + '/members')
@@ -218,9 +223,14 @@ export default function ChildPanel() {
         connectSSE()
       } catch (e) {
         console.error('Child loadRealData error', e)
+        setHasCircle(false)
       }
     }
     loadRealData()
+    const fallback = setTimeout(() => {
+      setHasCircle(prev => prev === null ? false : prev)
+    }, 4000)
+    return () => clearTimeout(fallback)
   }, [apiGet, gravityUser])
 
   // SSE
@@ -453,6 +463,29 @@ export default function ChildPanel() {
     navigate('/login')
   }
 
+  const joinCircle = async () => {
+    const code = joinCode.trim()
+    if (!code) { showToast('Enter invite code', 'error'); return }
+    setJoinLoading(true)
+    try {
+      const res = await fetch(API_BASE + '/circles/join', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + gravityToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invite_code: code })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to join')
+      setJoinCode('')
+      setHasCircle(true)
+      showToast('Joined family circle!')
+      window.location.reload()
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Invalid invite code', 'error')
+    } finally {
+      setJoinLoading(false)
+    }
+  }
+
   const others = displayMembers.filter(m => !m.isMe)
 
   return (
@@ -548,7 +581,11 @@ export default function ChildPanel() {
                 </button>
               </div>
               <div className={styles.sosHint}>Hold <strong style={{color:'#FF5252'}}>3 seconds</strong> to send emergency alert</div>
-              <div className={styles.sosContactsHint}>Alerts: Mom, Dad + 2 more</div>
+              <div className={styles.sosContactsHint}>
+                {others.length > 0
+                  ? `Alerts: ${others.slice(0, 2).map(m => m.name.split(' ')[0]).join(', ')}${others.length > 2 ? ` + ${others.length - 2} more` : ''}`
+                  : 'Alerts: Your family circle'}
+              </div>
             </div>
 
             {/* QUICK ACTIONS */}
@@ -644,16 +681,18 @@ export default function ChildPanel() {
               ))}
             </div>
 
-            <div className={`${styles.nearestCard} ${styles.reveal}`}>
-              <div className={styles.nearestLabel}>Nearest Family Member</div>
-              <div className={styles.nearestInfo}>
-                <img className={styles.nearestAvatar} src="https://picsum.photos/seed/woman-mom/56/56" alt="Mom" />
-                <div>
-                  <div className={styles.nearestName}>Mom</div>
-                  <div className={styles.nearestDist}>📍 0.8 km away · Santacruz West</div>
+            {others.length > 0 && (
+              <div className={`${styles.nearestCard} ${styles.reveal}`}>
+                <div className={styles.nearestLabel}>Nearest Family Member</div>
+                <div className={styles.nearestInfo}>
+                  <img className={styles.nearestAvatar} src={others[0].avatar} alt={others[0].name} />
+                  <div>
+                    <div className={styles.nearestName}>{others[0].name.split(' ')[0]}</div>
+                    <div className={styles.nearestDist}>📍 {others[0].lat ? 'Location shared' : 'Location not shared'} · {others[0].status}</div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
             <div style={{height:'20px'}}></div>
           </div>{/* /tab-map */}
 
@@ -706,22 +745,19 @@ export default function ChildPanel() {
             {/* Emergency Contacts */}
             <div className={styles.emergContacts}>
               <div className={styles.sectionTitle} style={{paddingLeft:0,marginBottom:'10px'}}>Emergency Contacts</div>
-              <div className={styles.emergCard}>
-                <img className={styles.emergAvatar} src="https://picsum.photos/seed/woman-mom/56/56" alt="Mom" style={{border:'2px solid #00E676'}} />
-                <div style={{flex:1}}>
-                  <div className={styles.emergName}>Mom</div>
-                  <div className={styles.emergPhone}>📞 +91-98765-43210</div>
+              {others.length === 0 && (
+                <p style={{color:'#5E8B6E',fontSize:13,marginBottom:12}}>Join a family circle to see emergency contacts</p>
+              )}
+              {others.map((m) => (
+                <div key={m.id} className={styles.emergCard}>
+                  <img className={styles.emergAvatar} src={m.avatar} alt={m.name} style={{border:`2px solid ${m.color}`}} />
+                  <div style={{flex:1}}>
+                    <div className={styles.emergName}>{m.name}</div>
+                    <div className={styles.emergPhone}>👤 {m.role || 'Family member'} · {m.status}</div>
+                  </div>
+                  <button className={`${styles.callBtn} ${styles.callGreen}`} onClick={() => showToast(`📞 Calling ${m.name.split(' ')[0]}...`)}>Call</button>
                 </div>
-                <button className={`${styles.callBtn} ${styles.callGreen}`} onClick={() => showToast('📞 Calling Mom...')}>Call</button>
-              </div>
-              <div className={styles.emergCard}>
-                <img className={styles.emergAvatar} src="https://picsum.photos/seed/man-dad/56/56" alt="Dad" style={{border:'2px solid #00C853'}} />
-                <div style={{flex:1}}>
-                  <div className={styles.emergName}>Dad</div>
-                  <div className={styles.emergPhone}>📞 +91-98765-43211</div>
-                </div>
-                <button className={`${styles.callBtn} ${styles.callGreen}`} onClick={() => showToast('📞 Calling Dad...')}>Call</button>
-              </div>
+              ))}
               <div className={`${styles.emergCard} ${styles.emergCardPolice}`}>
                 <div className={styles.policeIconWrap}>🚔</div>
                 <div style={{flex:1}}>
@@ -741,8 +777,38 @@ export default function ChildPanel() {
               <div className={styles.familyTabSub}>{familyTabSub}</div>
             </div>
             <div className={styles.familyCards}>
-              {displayMembers.length === 0 && (
-                <p style={{color:'#5E8B6E',textAlign:'center',padding:'24px'}}>No family members yet</p>
+              {hasCircle === false && (
+                <div className={styles.joinCircleBox}>
+                  <div className={styles.joinCircleIcon}>🔗</div>
+                  <div className={styles.joinCircleTitle}>Join Your Family Circle</div>
+                  <div className={styles.joinCircleDesc}>
+                    Ask your parent to share the invite code from their Family tab
+                  </div>
+                  <div className={styles.joinCircleRow}>
+                    <input
+                      className={styles.joinCircleInput}
+                      type="text"
+                      placeholder="e.g. B107FC2C056D"
+                      value={joinCode}
+                      onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                      onKeyDown={e => e.key === 'Enter' && joinCircle()}
+                      maxLength={12}
+                    />
+                    <button
+                      className={styles.joinCircleBtn}
+                      onClick={joinCircle}
+                      disabled={joinLoading}
+                    >
+                      {joinLoading ? '...' : 'Join'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {hasCircle === null && (
+                <p style={{color:'#5E8B6E',textAlign:'center',padding:'24px'}}>Loading...</p>
+              )}
+              {hasCircle === true && displayMembers.length === 0 && (
+                <p style={{color:'#5E8B6E',textAlign:'center',padding:'24px'}}>Loading members...</p>
               )}
               {displayMembers.map(m => {
                 const color = m.color || '#00E676'
@@ -797,7 +863,7 @@ export default function ChildPanel() {
           <div className={`${styles.tabPane} ${activeTab === 'profile' ? styles.active : ''}`} id="tab-profile">
             <div className={styles.profileHeader}>
               <div className={styles.profileAvatarWrap}>
-                <img className={styles.profileAvatar} src="https://picsum.photos/seed/boy-rahul/56/56" alt={profileName} />
+                <img className={styles.profileAvatar} src={headerAvatar} alt={profileName} />
                 <div className={styles.profileEditBtn} onClick={() => showToast('✏️ Edit mode coming soon')}>✏</div>
               </div>
               <div className={styles.profileName}>{profileName}</div>
@@ -915,16 +981,8 @@ export default function ChildPanel() {
 
             {/* Links */}
             <div className={styles.profileLinks}>
-              <Link className={styles.profileLink} to="/parent/panel">
-                <span className={styles.profileLinkText}>👨‍👩‍👧‍👦 View Parent Panel</span>
-                <span className={styles.profileLinkArrow}>→</span>
-              </Link>
               <Link className={styles.profileLink} to="/">
                 <span className={styles.profileLinkText}>🏠 Back to Home</span>
-                <span className={styles.profileLinkArrow}>→</span>
-              </Link>
-              <Link className={styles.profileLink} to="/child">
-                <span className={styles.profileLinkText}>👦 Classic Child View</span>
                 <span className={styles.profileLinkArrow}>→</span>
               </Link>
             </div>
@@ -977,7 +1035,7 @@ export default function ChildPanel() {
       {toasts.map(t => (
         <div
           key={t.id}
-          className={`${styles.toast} ${t.type === 'sos' ? styles.toastSos : ''} ${t.show ? styles.toastShow : ''}`}
+          className={`${styles.toast} ${t.type === 'sos' ? styles.toastSos : t.type === 'error' ? styles.toastError : ''} ${t.show ? styles.toastShow : ''}`}
         >
           {t.message}
         </div>

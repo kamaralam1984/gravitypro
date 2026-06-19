@@ -31,6 +31,8 @@ interface Zone {
   name: string
   address: string
   radius: number
+  center_lat: number
+  center_lng: number
   active: boolean
 }
 
@@ -57,6 +59,17 @@ async function apiPost(path: string, body: unknown) {
   if (!token) return null
   const res = await fetch(API_BASE + path, {
     method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
+
+async function apiPatch(path: string, body: unknown) {
+  const token = getToken()
+  if (!token) return null
+  const res = await fetch(API_BASE + path, {
+    method: 'PATCH',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
@@ -90,13 +103,27 @@ export default function ParentPanel() {
   const [znLat, setZnLat] = useState('')
   const [znLng, setZnLng] = useState('')
   const [znRadius, setZnRadius] = useState('200')
+  const [showEditZoneModal, setShowEditZoneModal] = useState(false)
+  const [editingZone, setEditingZone] = useState<Zone | null>(null)
+  const [ezName, setEzName] = useState('')
+  const [ezLat, setEzLat] = useState('')
+  const [ezLng, setEzLng] = useState('')
+  const [ezRadius, setEzRadius] = useState('')
   const [segmentVal, setSegmentVal] = useState('Exact')
   const [notifCount, setNotifCount] = useState(0)
+  const [showCreateCircleModal, setShowCreateCircleModal] = useState(false)
+  const [newCircleName, setNewCircleName] = useState('')
+  const [inviteCodeInput, setInviteCodeInput] = useState('')
+  const [circleInviteCode, setCircleInviteCode] = useState('')
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteCopied, setInviteCopied] = useState(false)
+  const [circleModalTab, setCircleModalTab] = useState<'create' | 'join'>('create')
+  const [circleModalLoading, setCircleModalLoading] = useState(false)
 
   // ── AUTH GUARD ──
   useEffect(() => {
     if (!getToken()) {
-      localStorage.setItem('gravity_redirect', 'parent-panel')
+      localStorage.setItem('gravity_redirect', '/parent/panel')
       navigate('/login')
     }
   }, [navigate])
@@ -236,6 +263,7 @@ export default function ParentPanel() {
       if (!data?.circles?.length) { setFamilyCount('No circle yet'); return }
       const cid = data.circles[0].id
       setCircleId(cid)
+      setCircleInviteCode(data.circles[0].invite_code || '')
       await Promise.all([loadMembers(cid), loadAlerts(cid), loadGeofences(cid)])
       connectSSE(cid)
     } catch (e) { console.error('loadRealData error', e) }
@@ -294,6 +322,8 @@ export default function ParentPanel() {
       name: z.name as string,
       address: 'Radius: ' + z.radius_meters + 'm',
       radius: z.radius_meters as number,
+      center_lat: z.center_lat as number,
+      center_lng: z.center_lng as number,
       active: true,
     }))
     setZones(loaded)
@@ -391,6 +421,37 @@ export default function ParentPanel() {
     } catch { showToast('Network error', 'error') }
   }
 
+  function openEditZone(z: Zone) {
+    setEditingZone(z)
+    setEzName(z.name)
+    setEzLat(z.center_lat?.toString() || '')
+    setEzLng(z.center_lng?.toString() || '')
+    setEzRadius(z.radius.toString())
+    setShowEditZoneModal(true)
+  }
+
+  async function updateZone() {
+    if (!editingZone) return
+    const name = ezName.trim()
+    const lat = parseFloat(ezLat)
+    const lng = parseFloat(ezLng)
+    const radius = parseInt(ezRadius)
+    if (!name) { showToast('Zone name required', 'error'); return }
+    if (isNaN(lat) || isNaN(lng)) { showToast('Valid coordinates required', 'error'); return }
+    if (!radius || radius < 50) { showToast('Radius must be at least 50m', 'error'); return }
+    try {
+      const res = await apiPatch('/geofences/' + editingZone.id, { name, center_lat: lat, center_lng: lng, radius_meters: radius })
+      if (res?.safe_zone) {
+        showToast('Zone updated!', 'success')
+        setShowEditZoneModal(false)
+        setEditingZone(null)
+        if (circleId) await loadGeofences(circleId)
+      } else {
+        showToast(res?.error || 'Failed to update zone', 'error')
+      }
+    } catch { showToast('Network error', 'error') }
+  }
+
   async function deleteZone(zoneId: string) {
     if (!confirm('Delete this safe zone?')) return
     try {
@@ -399,6 +460,46 @@ export default function ParentPanel() {
       if (res.ok) { showToast('Zone deleted', 'success'); if (circleId) await loadGeofences(circleId) }
       else showToast('Failed to delete zone', 'error')
     } catch { showToast('Network error', 'error') }
+  }
+
+  async function loadFamily() {
+    await loadRealData()
+  }
+
+  async function createCircle() {
+    const name = newCircleName.trim()
+    if (!name) { showToast('Circle name required', 'error'); return }
+    setCircleModalLoading(true)
+    try {
+      const res = await apiPost('/circles', { name })
+      if (res?.circle) {
+        showToast('Circle created! ✓', 'success')
+        setShowCreateCircleModal(false)
+        setNewCircleName('')
+        await loadFamily()
+      } else {
+        showToast(res?.error || 'Failed to create circle', 'error')
+      }
+    } catch { showToast('Network error', 'error') }
+    finally { setCircleModalLoading(false) }
+  }
+
+  async function joinCircle() {
+    const code = inviteCodeInput.trim().toUpperCase()
+    if (!code) { showToast('Invite code required', 'error'); return }
+    setCircleModalLoading(true)
+    try {
+      const res = await apiPost('/circles/join', { invite_code: code })
+      if (res?.circle) {
+        showToast('Joined circle! ✓', 'success')
+        setShowCreateCircleModal(false)
+        setInviteCodeInput('')
+        await loadFamily()
+      } else {
+        showToast(res?.error || 'Invalid invite code', 'error')
+      }
+    } catch { showToast('Network error', 'error') }
+    finally { setCircleModalLoading(false) }
   }
 
   // ── SETTINGS ACTIONS ──
@@ -593,8 +694,74 @@ export default function ParentPanel() {
           {/* TAB 2: FAMILY */}
           <div className={`${styles.tabSection} ${activeTab === 'family' ? styles.tabSectionActive : ''}`}>
             <div style={{ padding: '16px 16px 8px' }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 4 }}>Family Circle</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                Family Circle
+                {circleId && (
+                  <button onClick={() => { setInviteCopied(false); setShowInviteModal(true) }}
+                    style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', borderRadius: 8, color: '#00E676', fontSize: 11, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    + Invite
+                  </button>
+                )}
+              </div>
               <div style={{ fontSize: 12, color: '#5E8B6E', lineHeight: 1.5 }}>{familyCount}</div>
+
+              {/* Invite code always visible when circle exists */}
+              {circleId && circleInviteCode && (
+                <div style={{
+                  background: '#0D1F13',
+                  border: '1.5px solid rgba(0,230,118,0.25)',
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  marginTop: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10
+                }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#5E8B6E', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+                      Invite Code — Share with child
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: '#00E676', letterSpacing: 5, fontFamily: 'monospace' }}>
+                      {circleInviteCode}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      try {
+                        if (navigator.clipboard) {
+                          navigator.clipboard.writeText(circleInviteCode).then(() => setInviteCopied(true))
+                        } else {
+                          const ta = document.createElement('textarea')
+                          ta.value = circleInviteCode
+                          ta.style.position = 'fixed'; ta.style.opacity = '0'
+                          document.body.appendChild(ta); ta.focus(); ta.select()
+                          document.execCommand('copy')
+                          document.body.removeChild(ta)
+                          setInviteCopied(true)
+                        }
+                        setTimeout(() => setInviteCopied(false), 2000)
+                      } catch { setInviteCopied(true) }
+                    }}
+                    style={{
+                      background: inviteCopied ? '#0D7A45' : 'rgba(0,230,118,0.15)',
+                      border: '1px solid rgba(0,230,118,0.3)',
+                      borderRadius: 10,
+                      color: '#00E676',
+                      fontFamily: 'inherit',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: '8px 14px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'background 0.2s',
+                      flexShrink: 0
+                    }}
+                  >
+                    {inviteCopied ? '✓ Copied' : '📋 Copy'}
+                  </button>
+                </div>
+              )}
             </div>
             <div className={styles.familyList}>
               {members.map((m, idx) => {
@@ -648,7 +815,25 @@ export default function ParentPanel() {
                   </div>
                 )
               })}
-              {!members.length && <p style={{ color: '#5E8B6E', textAlign: 'center', padding: 24, fontSize: 13 }}>No family members yet</p>}
+              {!members.length && (
+                <div style={{ padding: 24, textAlign: 'center' }}>
+                  <p style={{ color: '#5E8B6E', fontSize: 13, marginBottom: 16 }}>
+                    {circleId ? 'No family members yet. Share your invite code!' : 'No family circle yet. Create or join one.'}
+                  </p>
+                  <button
+                    onClick={() => { setCircleModalTab('create'); setShowCreateCircleModal(true) }}
+                    style={{ background: '#00E676', color: '#020C05', border: 'none', borderRadius: 12, padding: '10px 20px', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginRight: 8, fontFamily: 'inherit' }}
+                  >
+                    + Create Circle
+                  </button>
+                  <button
+                    onClick={() => { setCircleModalTab('join'); setShowCreateCircleModal(true) }}
+                    style={{ background: 'transparent', color: '#00E676', border: '1px solid rgba(0,230,118,0.3)', borderRadius: 12, padding: '10px 20px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    Join with Code
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -688,10 +873,25 @@ export default function ParentPanel() {
                 <div className={styles.geofenceTitle}>Safe Zones</div>
                 <div className={styles.geofenceSubtitle}>{zoneSubtitle}</div>
               </div>
-              <button className={styles.geoAddBtn} onClick={openZoneModal}>+ Add Zone</button>
+              <button
+                className={styles.geoAddBtn}
+                onClick={circleId ? openZoneModal : () => showToast('Create a family circle first (Family tab)', 'error')}
+                style={{ opacity: circleId ? 1 : 0.5, cursor: circleId ? 'pointer' : 'not-allowed' }}
+              >+ Add Zone</button>
             </div>
             <div className={styles.zoneList}>
-              {!zones.length && !zoneSubtitle.startsWith('Loading') && (
+              {!circleId && (
+                <div style={{ padding: 24, textAlign: 'center' }}>
+                  <p style={{ color: '#5E8B6E', fontSize: 13, marginBottom: 12 }}>No family circle yet.</p>
+                  <button
+                    onClick={() => setActiveTab('family')}
+                    style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', borderRadius: 10, color: '#00E676', fontSize: 13, fontWeight: 700, padding: '10px 20px', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    Go to Family tab to create one
+                  </button>
+                </div>
+              )}
+              {circleId && !zones.length && !zoneSubtitle.startsWith('Loading') && (
                 <div style={{ textAlign: 'center', color: '#5E8B6E', padding: '40px 20px', fontSize: 13 }}>No safe zones yet — tap + Add Zone</div>
               )}
               {zones.map((z, i) => (
@@ -715,12 +915,19 @@ export default function ParentPanel() {
                       {z.radius}m radius
                     </div>
                     <div className={styles.zoneActions}>
+                      <button className={styles.zoneActionBtn} title="Edit" onClick={() => openEditZone(z)}
+                        style={{ marginRight: 4 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </button>
                       <button className={styles.zoneActionBtn} title="Delete" onClick={() => deleteZone(z.id)}>🗑️</button>
                     </div>
                   </div>
                 </div>
               ))}
-              <div className={`${styles.addZoneCard} ${styles.reveal}`} style={{ transitionDelay: zones.length * 0.08 + 's' }} onClick={openZoneModal}>
+              <div className={`${styles.addZoneCard} ${styles.reveal}`} style={{ transitionDelay: zones.length * 0.08 + 's', opacity: circleId ? 1 : 0.5, cursor: circleId ? 'pointer' : 'not-allowed' }} onClick={circleId ? openZoneModal : () => showToast('Create a family circle first (Family tab)', 'error')}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
@@ -728,39 +935,6 @@ export default function ParentPanel() {
               </div>
             </div>
 
-            {/* Add Zone Modal */}
-            {showZoneModal && (
-              <div className={styles.modalOverlay}>
-                <div className={styles.modalBox}>
-                  <div className={styles.modalTitle}>New Safe Zone</div>
-                  <div className={styles.modalFields}>
-                    <div>
-                      <div className={styles.modalFieldLabel}>Zone Name</div>
-                      <input className={styles.modalInput} type="text" placeholder="e.g. Home, School" value={znName} onChange={(e) => setZnName(e.target.value)} />
-                    </div>
-                    <div className={styles.modalRow}>
-                      <div className={styles.modalHalf}>
-                        <div className={styles.modalFieldLabel}>Latitude</div>
-                        <input className={styles.modalInput} type="number" step="any" placeholder="28.6139" value={znLat} onChange={(e) => setZnLat(e.target.value)} />
-                      </div>
-                      <div className={styles.modalHalf}>
-                        <div className={styles.modalFieldLabel}>Longitude</div>
-                        <input className={styles.modalInput} type="number" step="any" placeholder="77.2090" value={znLng} onChange={(e) => setZnLng(e.target.value)} />
-                      </div>
-                    </div>
-                    <div>
-                      <div className={styles.modalFieldLabel}>Radius (meters)</div>
-                      <input className={styles.modalInput} type="number" placeholder="200" min="50" max="5000" value={znRadius} onChange={(e) => setZnRadius(e.target.value)} />
-                    </div>
-                    <div className={styles.modalTip}>Tip: Open Google Maps, long-press a location and copy the coordinates.</div>
-                  </div>
-                  <div className={styles.modalActions}>
-                    <button className={styles.modalCancelBtn} onClick={() => setShowZoneModal(false)}>Cancel</button>
-                    <button className={styles.modalCreateBtn} onClick={submitNewZone}>Create Zone</button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* TAB 5: SETTINGS */}
@@ -948,6 +1122,185 @@ export default function ParentPanel() {
         </nav>
 
       </div>
+
+      {/* Share Invite Code Modal */}
+      {showInviteModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#0D1F13', border: '1px solid rgba(0,230,118,0.15)', borderRadius: 18, padding: 24, width: 'calc(100% - 48px)', maxWidth: 320 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 4 }}>Invite Family Member</div>
+            <div style={{ fontSize: 12, color: '#5E8B6E', marginBottom: 20 }}>Share this code with your family member to join your circle.</div>
+            <div style={{ background: '#050C08', border: '1px solid rgba(0,230,118,0.2)', borderRadius: 12, padding: '16px 20px', textAlign: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Invite Code</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#00E676', letterSpacing: 6, fontFamily: 'monospace' }}>{circleInviteCode}</div>
+            </div>
+            <button
+              onClick={() => {
+                try {
+                  if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(circleInviteCode).then(() => setInviteCopied(true))
+                  } else {
+                    const ta = document.createElement('textarea')
+                    ta.value = circleInviteCode
+                    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0'
+                    document.body.appendChild(ta)
+                    ta.focus(); ta.select()
+                    document.execCommand('copy')
+                    document.body.removeChild(ta)
+                    setInviteCopied(true)
+                  }
+                } catch { setInviteCopied(true) }
+              }}
+              style={{ width: '100%', padding: '12px 0', borderRadius: 12, border: 'none', background: inviteCopied ? '#0D7A45' : '#00E676', color: '#020C05', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 10, transition: 'background 0.2s' }}
+            >
+              {inviteCopied ? '✓ Copied!' : 'Copy Code'}
+            </button>
+            <button
+              onClick={() => setShowInviteModal(false)}
+              style={{ width: '100%', padding: '12px 0', borderRadius: 12, border: '1px solid rgba(0,230,118,0.15)', background: 'transparent', color: '#5E8B6E', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Join Circle Modal */}
+      {showCreateCircleModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#0D1F13', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 18, padding: 24, width: 'calc(100% - 48px)', maxWidth: 340 }}>
+            <div style={{ display: 'flex', marginBottom: 20, background: '#050C08', borderRadius: 10, padding: 4 }}>
+              {(['create', 'join'] as const).map(t => (
+                <button key={t} onClick={() => setCircleModalTab(t)}
+                  style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: 'none', background: circleModalTab === t ? 'rgba(0,230,118,0.15)' : 'transparent', color: circleModalTab === t ? '#00E676' : '#5E8B6E', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {t === 'create' ? 'Create New' : 'Join with Code'}
+                </button>
+              ))}
+            </div>
+            {circleModalTab === 'create' ? (
+              <>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Circle Name</div>
+                <input
+                  style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 16 }}
+                  placeholder="e.g. Family, My Home"
+                  value={newCircleName}
+                  onChange={e => setNewCircleName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && createCircle()}
+                />
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setShowCreateCircleModal(false)}
+                    style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid rgba(0,230,118,0.12)', background: 'transparent', color: '#5E8B6E', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Cancel
+                  </button>
+                  <button onClick={createCircle} disabled={circleModalLoading}
+                    style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: circleModalLoading ? '#0D7A45' : '#00E676', color: '#020C05', fontSize: 13, fontWeight: 700, cursor: circleModalLoading ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                    {circleModalLoading ? 'Creating...' : 'Create Circle'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Invite Code</div>
+                <input
+                  style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 2 }}
+                  placeholder="e.g. A1B2C3"
+                  value={inviteCodeInput}
+                  onChange={e => setInviteCodeInput(e.target.value.toUpperCase())}
+                  onKeyDown={e => e.key === 'Enter' && joinCircle()}
+                  maxLength={12}
+                />
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 16 }}>Ask the circle admin for their invite code.</div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setShowCreateCircleModal(false)}
+                    style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid rgba(0,230,118,0.12)', background: 'transparent', color: '#5E8B6E', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Cancel
+                  </button>
+                  <button onClick={joinCircle} disabled={circleModalLoading}
+                    style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: circleModalLoading ? '#0D7A45' : '#00E676', color: '#020C05', fontSize: 13, fontWeight: 700, cursor: circleModalLoading ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                    {circleModalLoading ? 'Joining...' : 'Join Circle'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Zone Modal */}
+      {showEditZoneModal && editingZone && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#0D1F13', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 18, padding: 24, width: 'calc(100% - 48px)', maxWidth: 360, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 16 }}>Edit Safe Zone</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Zone Name</div>
+                <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  type="text" placeholder="e.g. Home, School" value={ezName} onChange={e => setEzName(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Latitude</div>
+                  <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                    type="number" step="any" value={ezLat} onChange={e => setEzLat(e.target.value)} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Longitude</div>
+                  <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                    type="number" step="any" value={ezLng} onChange={e => setEzLng(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Radius (meters)</div>
+                <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  type="number" min="50" max="5000" value={ezRadius} onChange={e => setEzRadius(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => { setShowEditZoneModal(false); setEditingZone(null) }}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid rgba(0,230,118,0.12)', background: 'transparent', color: '#5E8B6E', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+              <button onClick={updateZone}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#00E676', color: '#020C05', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Zone Modal — outside appFrame to avoid overflow:hidden clipping */}
+      {showZoneModal && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalBox}>
+            <div className={styles.modalTitle}>New Safe Zone</div>
+            <div className={styles.modalFields}>
+              <div>
+                <div className={styles.modalFieldLabel}>Zone Name</div>
+                <input className={styles.modalInput} type="text" placeholder="e.g. Home, School" value={znName} onChange={(e) => setZnName(e.target.value)} />
+              </div>
+              <div className={styles.modalRow}>
+                <div className={styles.modalHalf}>
+                  <div className={styles.modalFieldLabel}>Latitude</div>
+                  <input className={styles.modalInput} type="number" step="any" placeholder="28.6139" value={znLat} onChange={(e) => setZnLat(e.target.value)} />
+                </div>
+                <div className={styles.modalHalf}>
+                  <div className={styles.modalFieldLabel}>Longitude</div>
+                  <input className={styles.modalInput} type="number" step="any" placeholder="77.2090" value={znLng} onChange={(e) => setZnLng(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <div className={styles.modalFieldLabel}>Radius (meters)</div>
+                <input className={styles.modalInput} type="number" placeholder="200" min="50" max="5000" value={znRadius} onChange={(e) => setZnRadius(e.target.value)} />
+              </div>
+              <div className={styles.modalTip}>Tip: Open Google Maps, long-press a location and copy the coordinates.</div>
+            </div>
+            <div className={styles.modalActions}>
+              <button className={styles.modalCancelBtn} onClick={() => setShowZoneModal(false)}>Cancel</button>
+              <button className={styles.modalCreateBtn} onClick={submitNewZone}>Create Zone</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

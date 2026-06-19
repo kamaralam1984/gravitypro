@@ -529,3 +529,46 @@
   .formPanel { padding: 24px 20px; }
   .logoArea { margin-bottom: 24px; }
 }
+
+/* ===== ROLE SELECTOR ===== */
+.roleSelector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.roleBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 10px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(0,230,118,0.18);
+  background: rgba(0,230,118,0.04);
+  color: #5E8B6E;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.roleBtn:hover {
+  border-color: rgba(0,230,118,0.4);
+  color: #a0d4a0;
+  background: rgba(0,230,118,0.08);
+}
+
+.roleBtn.roleActive {
+  border-color: #00E676;
+  background: rgba(0,230,118,0.14);
+  color: #00E676;
+  box-shadow: 0 0 12px rgba(0,230,118,0.15);
+}
+
+.roleIcon {
+  font-size: 18px;
+  line-height: 1;
+}
