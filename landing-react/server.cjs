@@ -91,14 +91,14 @@ const server = http.createServer((req, res) => {
       const index = path.join(DIST, 'index.html')
       fs.readFile(index, (err2, indexData) => {
         if (err2) { res.writeHead(404); res.end('Not Found'); return }
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' })
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' })
         res.end(indexData)
       })
       return
     }
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=86400',
+      'Cache-Control': ext === '.html' ? 'no-store, no-cache, must-revalidate' : 'public, max-age=86400',
     })
     res.end(data)
   })

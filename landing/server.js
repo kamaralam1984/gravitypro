@@ -39,8 +39,13 @@ const server = http.createServer((req, res) => {
   fs.readFile(filePath, (err, data) => {
     if (err) {
       if (err.code === 'ENOENT') {
-        res.writeHead(404, { 'Content-Type': 'text/html' })
-        res.end('<h1>404 Not Found</h1>')
+        // SPA fallback: serve index.html for all unknown routes
+        const indexPath = path.join(ROOT, 'index.html')
+        fs.readFile(indexPath, (err2, indexData) => {
+          if (err2) { res.writeHead(404, { 'Content-Type': 'text/html' }); res.end('<h1>404 Not Found</h1>'); return }
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' })
+          res.end(indexData)
+        })
       } else {
         res.writeHead(500)
         res.end('Server Error')

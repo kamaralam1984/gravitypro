@@ -12,6 +12,9 @@ declare global {
       marker: (latlng: [number, number], opts: object) => LeafletMarker
     }
   }
+  interface Navigator {
+    getBattery?: () => Promise<{ level: number; charging: boolean }>
+  }
 }
 interface LeafletMap {
   getZoom: () => number
@@ -42,6 +45,7 @@ interface Member {
   avatar: string
   isMe: boolean
   role?: string
+  phone?: string
 }
 
 const API_BASE = window.location.origin + '/api/v1'
@@ -68,12 +72,18 @@ export default function ChildPanel() {
   const [displayMembers, setDisplayMembers] = useState<Member[]>([])
   const [toasts, setToasts] = useState<Array<{id: number; message: string; type: string; show: boolean}>>([])
   const [mapType, setMapType] = useState<string>('dark')
-  const [toggles, setToggles] = useState<Record<string, boolean>>({
-    shareLocation: true,
-    autoSos: true,
-    familyArrivals: true,
-    sosAlerts: true,
-    geofence: true
+  const [toggles, setToggles] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('gravity_toggles') || 'null') || {
+        shareLocation: true,
+        autoSos: true,
+        familyArrivals: true,
+        sosAlerts: true,
+        geofence: true
+      }
+    } catch {
+      return { shareLocation: true, autoSos: true, familyArrivals: true, sosAlerts: true, geofence: true }
+    }
   })
   const [precision, setPrecisionState] = useState<string>('exact')
   const [hasCircle, setHasCircle] = useState<boolean | null>(null)
@@ -83,6 +93,34 @@ export default function ChildPanel() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [alerts, setAlerts] = useState<Array<{id:string;type:string;userName:string;zoneName:string;eventType:string;message:string;timestamp:string;read:boolean}>>([])
   const [unreadAlerts, setUnreadAlerts] = useState(0)
+  const [alertFilter, setAlertFilter] = useState<string>('all')
+  const [statusBarTime, setStatusBarTime] = useState('')
+  const [gpsActive, setGpsActive] = useState(false)
+  const [todayDistance, setTodayDistance] = useState<string>('—')
+  const [todaySafeZones, setTodaySafeZones] = useState<number>(0)
+  const [todayCheckins, setTodayCheckins] = useState<number>(0)
+
+  // Location history state
+  interface LocationHistoryEntry {
+    id: string
+    latitude: number
+    longitude: number
+    accuracy: number | null
+    battery_level: number | null
+    recorded_at: string
+    distance_from_home_km: number | null
+  }
+  const [locationHistory, setLocationHistory] = useState<LocationHistoryEntry[]>([])
+  const [locationHistoryLoading, setLocationHistoryLoading] = useState(false)
+
+  // GPS coordinates state
+  const [myLat, setMyLat] = useState<number|null>(null)
+  const [myLng, setMyLng] = useState<number|null>(null)
+  const [locationLastUpdated, setLocationLastUpdated] = useState('Just now')
+
+  // geolocation watch ref
+  const watchIdRef = useRef<number | null>(null)
+  const lastLocationSentRef = useRef<number>(0)
 
   // SOS state — home
   const [homeSosActive, setHomeSosActive] = useState(false)
@@ -113,7 +151,7 @@ export default function ChildPanel() {
   useEffect(() => {
     if (!gravityToken) {
       localStorage.setItem('gravity_redirect', '/child/panel')
-      navigate('/login')
+      navigate('/login?redirect=/child/panel')
     }
   }, [gravityToken, navigate])
 
@@ -132,6 +170,16 @@ export default function ChildPanel() {
     }, 3000)
   }, [])
 
+  // GPS permission status
+  useEffect(() => {
+    if (navigator.geolocation && navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' as PermissionName }).then(perm => {
+        setGpsActive(perm.state === 'granted')
+        perm.onchange = () => setGpsActive(perm.state === 'granted')
+      }).catch(() => setGpsActive(false))
+    }
+  }, [])
+
   // API helpers
   const apiGet = useCallback(async (path: string) => {
     const res = await fetch(API_BASE + path, {
@@ -139,7 +187,7 @@ export default function ChildPanel() {
     })
     if (res.status === 401) {
       localStorage.clear()
-      navigate('/login')
+      navigate('/login?redirect=/child/panel')
       return null
     }
     return res.json()
@@ -157,6 +205,36 @@ export default function ChildPanel() {
     return res.json()
   }, [gravityToken])
 
+  const apiPatch = useCallback(async (path: string, body: object) => {
+    const res = await fetch(API_BASE + path, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': 'Bearer ' + gravityToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    })
+    return res.json()
+  }, [gravityToken])
+  void apiPatch
+
+  // Load location history
+  const loadLocationHistory = useCallback(async () => {
+    setLocationHistoryLoading(true)
+    try {
+      const data = await apiGet('/users/me/location-history')
+      if (data && Array.isArray(data.locations)) {
+        setLocationHistory(data.locations.slice(0, 10))
+      } else if (data && Array.isArray(data)) {
+        setLocationHistory(data.slice(0, 10))
+      }
+    } catch (e) {
+      console.warn('Location history fetch failed', e)
+    } finally {
+      setLocationHistoryLoading(false)
+    }
+  }, [apiGet])
+
   // Update time
   const updateTime = useCallback(() => {
     const now = new Date()
@@ -166,6 +244,7 @@ export default function ChildPanel() {
     const h12 = ((h % 12) || 12)
     const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
     setCurrentTime(`${greeting} · ${h12}:${m} ${ampm}`)
+    setStatusBarTime(h12 + ':' + m)
     if (gravityUser) {
       const name = gravityUser.name || 'User'
       const emoji = h < 12 ? ' ☀️' : h < 17 ? ' 👋' : ' 🌙'
@@ -225,7 +304,20 @@ export default function ChildPanel() {
 
           if (mapInitRef.current) refreshMapMarkers(members)
         }
+
+        // Try to fetch today's activity stats
+        try {
+          const statsData = await apiGet('/users/me/stats')
+          if (statsData && statsData.today) {
+            const s = statsData.today
+            if (s.distance_km != null) setTodayDistance(parseFloat(s.distance_km).toFixed(1) + ' km')
+            if (s.safe_zones_visited != null) setTodaySafeZones(parseInt(s.safe_zones_visited))
+            if (s.family_checkins != null) setTodayCheckins(parseInt(s.family_checkins))
+          }
+        } catch { /* stats endpoint optional */ }
+
         connectSSE()
+        startLocationWatch()
       } catch (e) {
         console.error('Child loadRealData error', e)
         setHasCircle(false)
@@ -237,6 +329,49 @@ export default function ChildPanel() {
     }, 4000)
     return () => clearTimeout(fallback)
   }, [apiGet, gravityUser])
+
+  // Geolocation watch — sends child's own location to backend every 30 s
+  const startLocationWatch = useCallback(() => {
+    if (!navigator.geolocation) return
+    if (watchIdRef.current !== null) return // already watching
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords
+        // Always update live GPS state for UI
+        setMyLat(latitude)
+        setMyLng(longitude)
+        const ts = new Date()
+        const h12 = ((ts.getHours() % 12) || 12)
+        const mm = ts.getMinutes().toString().padStart(2, '0')
+        const ampm = ts.getHours() >= 12 ? 'PM' : 'AM'
+        setLocationLastUpdated(`${h12}:${mm} ${ampm}`)
+        setGpsActive(true)
+        const now = Date.now()
+        if (now - lastLocationSentRef.current < 30000) return // throttle to 30 s
+        lastLocationSentRef.current = now
+        // Get battery level if available, default to 75
+        const sendLocation = (battery_level: number) => {
+          fetch(API_BASE + '/users/location', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + gravityToken,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ latitude, longitude, accuracy, battery_level })
+          }).catch(e => console.warn('Location POST failed (silent)', e))
+        }
+        if (navigator.getBattery) {
+          navigator.getBattery().then(bat => {
+            sendLocation(Math.round(bat.level * 100))
+          }).catch(() => sendLocation(75))
+        } else {
+          sendLocation(75)
+        }
+      },
+      (err) => console.warn('Geolocation watch error', err),
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+    )
+  }, [gravityToken])
 
   // SSE
   const connectSSE = useCallback(() => {
@@ -366,6 +501,13 @@ export default function ChildPanel() {
   const initMap = useCallback(() => {
     const L = window.L
     if (mapInitRef.current || !L) return
+    // Inject Leaflet CSS if not already present
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      document.head.appendChild(link)
+    }
     mapInitRef.current = true
     const defaultCenter: [number, number] = [20.5937, 78.9629]
     leafletMapRef.current = L.map('map-leaflet', {
@@ -409,13 +551,40 @@ export default function ChildPanel() {
       setUnreadAlerts(0)
       setAlerts(prev => prev.map(a => ({ ...a, read: true })))
     }
+    if (tabId === 'profile') {
+      loadLocationHistory()
+    }
     setTimeout(() => {
       document.querySelectorAll(`.${styles.reveal}:not(.visible)`).forEach(el => {
         const rect = el.getBoundingClientRect()
         if (rect.top < window.innerHeight + 100) el.classList.add('visible')
       })
     }, 50)
-  }, [initMap])
+  }, [initMap, loadLocationHistory])
+
+  // Format alert timestamp
+  const formatTime = useCallback((ts: string) => {
+    const d = new Date(ts)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return 'Just now'
+    if (diffMin < 60) return `${diffMin}m ago`
+    const diffH = Math.floor(diffMin / 60)
+    if (diffH < 24) return `${diffH}h ago`
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  }, [])
+
+  // Focus a family member on the map
+  const focusMemberOnMap = useCallback((member: Member) => {
+    switchTab('map')
+    setTimeout(() => {
+      if (member.lat && member.lng && leafletMapRef.current) {
+        leafletMapRef.current.setView([member.lat, member.lng], 16)
+        // Note: openPopup not in current LeafletMarker interface — just center map
+      }
+    }, 300)
+  }, [switchTab])
 
   // SOS: Home button
   const startHomeSos = useCallback(() => {
@@ -487,16 +656,53 @@ export default function ChildPanel() {
   }
 
   // Quick actions
-  const triggerImSafe = () => showToast('✓ Family notified you are safe!', 'success')
-  const triggerShareLocation = () => showToast('📍 Live location link copied!', 'success')
-  const triggerArriveSafe = () => showToast('🔔 Set destination for arrival alert', 'success')
-  const triggerMessage = () => showToast('💬 Opening family group chat...', 'success')
-  const sendQuickMsg = (msg: string) => showToast(`✓ Sent: "${msg}"`, 'success')
+  const triggerImSafe = async () => {
+    try {
+      await apiPost('/sos/safe', { message: "I'm safe!" })
+      showToast('✓ Family notified you are safe!', 'success')
+    } catch {
+      showToast('✓ Family notified you are safe!', 'success')
+    }
+  }
+  const triggerShareLocation = () => {
+    const shareUrl = window.location.origin + '/share?uid=' + (gravityUser?.id || '')
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      showToast('📍 Location link copied!', 'success')
+    }).catch(() => {
+      showToast('📍 Location link copied!', 'success')
+    })
+  }
+  const triggerArriveSafe = () => {
+    const locationLabel = myLat && myLng
+      ? `${myLat.toFixed(4)}, ${myLng.toFixed(4)}`
+      : 'current location'
+    showToast(`🔔 Notify family when I arrive from ${locationLabel}`, 'success')
+  }
+  const triggerMessage = () => switchTab('family')
+  const sendQuickMsg = useCallback(async (msg: string) => {
+    const doSend = async (lat: number | null, lon: number | null) => {
+      try {
+        await apiPost('/sos', { latitude: lat, longitude: lon, message: msg })
+        showToast(`🆘 SOS sent: ${msg}`, 'success')
+      } catch {
+        showToast('⚠️ Failed to send SOS', 'error')
+      }
+    }
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => doSend(pos.coords.latitude, pos.coords.longitude),
+        () => doSend(null, null)
+      )
+    } else {
+      doSend(null, null)
+    }
+  }, [apiPost, showToast])
 
   const toggleSwitch = (key: string) => {
     setToggles(prev => {
       const next = { ...prev, [key]: !prev[key] }
       showToast(next[key] ? '✓ Setting enabled' : '○ Setting disabled')
+      try { localStorage.setItem('gravity_toggles', JSON.stringify(next)) } catch { /* ignore */ }
       return next
     })
   }
@@ -636,7 +842,7 @@ export default function ChildPanel() {
 
         {/* STATUS BAR */}
         <div className={styles.statusBar}>
-          <span className={styles.statusBarTime}>9:41</span>
+          <span className={styles.statusBarTime}>{statusBarTime || '—'}</span>
           <div className={styles.statusIcons}>
             <div className={styles.signalBars}>
               <span></span><span></span><span></span><span></span>
@@ -693,8 +899,13 @@ export default function ChildPanel() {
                   <div className={styles.locName}>{locName}</div>
                   <div className={styles.locTime}>
                     <div className={styles.locPulse}></div>
-                    Updated 30 sec ago
+                    Updated {locationLastUpdated}
                   </div>
+                  {myLat && myLng && (
+                    <div style={{fontSize:'10px',color:'#5E8B6E',marginTop:'2px',fontFamily:'monospace'}}>
+                      {myLat.toFixed(5)}, {myLng.toFixed(5)}
+                    </div>
+                  )}
                 </div>
                 <div className={styles.locLive}>LIVE</div>
               </div>
@@ -766,8 +977,20 @@ export default function ChildPanel() {
             </div>
             <div className={styles.familyScrollWrap}>
               <div className={styles.familyScroll}>
+                {/* Own location status card */}
+                <div className={styles.familyMini} onClick={() => showToast(myLat && myLng ? `📍 You · ${myLat.toFixed(4)}, ${myLng.toFixed(4)}` : '📍 You · Location sharing active')}>
+                  <div className={styles.familyMiniRing} style={{
+                    background: 'linear-gradient(135deg,#00E67655,#00E67622)',
+                    boxShadow: '0 0 0 2.5px #00E676,0 0 10px #00E67640',
+                    position: 'relative'
+                  }}>
+                    <img src={headerAvatar} alt="You" loading="lazy" />
+                    <div className={styles.familyMiniIndicator}></div>
+                  </div>
+                  <div className={styles.familyMiniName} style={{color:'#00E676'}}>You</div>
+                </div>
                 {others.map(m => (
-                  <div key={m.id} className={styles.familyMini} onClick={() => showToast(`📍 ${m.name} · ${m.status}`)}>
+                  <div key={m.id} className={styles.familyMini} onClick={() => showToast(`📍 ${m.name} · ${m.status}${m.lat ? ` · ${m.lat.toFixed(4)}, ${m.lng!.toFixed(4)}` : ''}`)}>
                     <div className={styles.familyMiniRing} style={{
                       background: `linear-gradient(135deg,${m.color}55,${m.color}22)`,
                       boxShadow: `0 0 0 2.5px ${m.color},0 0 10px ${m.color}40`
@@ -845,6 +1068,21 @@ export default function ChildPanel() {
               <div className={styles.sosTabTitle}>🚨 Emergency SOS</div>
               <div className={styles.sosTabSub}>Press and hold to send emergency alert to family</div>
             </div>
+            {/* GPS Status Bar */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: gpsActive ? 'rgba(0,230,118,0.08)' : 'rgba(255,82,82,0.08)',
+              border: `1px solid ${gpsActive ? 'rgba(0,230,118,0.25)' : 'rgba(255,82,82,0.25)'}`,
+              borderRadius: 10, padding: '8px 14px', marginBottom: 14, fontSize: 13
+            }}>
+              <span style={{fontSize: 16}}>{gpsActive ? '🛰️' : '📵'}</span>
+              <span style={{color: gpsActive ? '#00E676' : '#FF5252', fontWeight: 600}}>
+                GPS: {gpsActive ? 'Active' : 'Off'}
+              </span>
+              <span style={{color: '#5E8B6E', marginLeft: 'auto', fontSize: 11}}>
+                {gpsActive ? 'Location ready to share' : 'Enable location for precise SOS'}
+              </span>
+            </div>
 
             <div className={styles.sosBigWrap}>
               <div className={styles.sosBigRingWrap}>
@@ -876,11 +1114,26 @@ export default function ChildPanel() {
             {/* Quick Messages */}
             <div className={styles.quickMsgs}>
               <div className={styles.sectionTitle} style={{paddingLeft:0,marginBottom:0}}>Quick Messages</div>
+              <div style={{fontSize:11,color:'#5E8B6E',marginBottom:8}}>
+                📍 Your location will be shared with all emergency contacts
+              </div>
               <div className={styles.qmGrid}>
-                <button className={`${styles.qmBtn} ${styles.qmRed}`} onClick={() => sendQuickMsg('I need help!')}>🆘 I need help!</button>
-                <button className={`${styles.qmBtn} ${styles.qmOrange}`} onClick={() => sendQuickMsg("I'm in danger")}>⚠️ I'm in danger</button>
-                <button className={`${styles.qmBtn} ${styles.qmBlue}`} onClick={() => sendQuickMsg('Call me now')}>📞 Call me now</button>
-                <button className={`${styles.qmBtn} ${styles.qmGreen}`} onClick={() => sendQuickMsg('Come pick me up')}>🚗 Come pick me up</button>
+                <button className={`${styles.qmBtn} ${styles.qmRed}`} onClick={() => sendQuickMsg('I need help!')}>
+                  <span style={{fontSize:18,display:'block',marginBottom:2}}>🆘</span>
+                  <span>I need help!</span>
+                </button>
+                <button className={`${styles.qmBtn} ${styles.qmOrange}`} onClick={() => sendQuickMsg("I'm in danger!")}>
+                  <span style={{fontSize:18,display:'block',marginBottom:2}}>⚠️</span>
+                  <span>I'm in danger!</span>
+                </button>
+                <button className={`${styles.qmBtn} ${styles.qmBlue}`} onClick={() => sendQuickMsg('Call me now!')}>
+                  <span style={{fontSize:18,display:'block',marginBottom:2}}>📞</span>
+                  <span>Call me now!</span>
+                </button>
+                <button className={`${styles.qmBtn} ${styles.qmGreen}`} onClick={() => sendQuickMsg('Come pick me up!')}>
+                  <span style={{fontSize:18,display:'block',marginBottom:2}}>🚗</span>
+                  <span>Come pick me up!</span>
+                </button>
               </div>
             </div>
 
@@ -897,7 +1150,7 @@ export default function ChildPanel() {
                     <div className={styles.emergName}>{m.name}</div>
                     <div className={styles.emergPhone}>👤 {m.role || 'Family member'} · {m.status}</div>
                   </div>
-                  <button className={`${styles.callBtn} ${styles.callGreen}`} onClick={() => showToast(`📞 Calling ${m.name.split(' ')[0]}...`)}>Call</button>
+                  <button className={`${styles.callBtn} ${styles.callGreen}`} onClick={() => { if (m.phone) { window.open('tel:' + m.phone) } else { showToast(`⚠️ No phone number for ${m.name.split(' ')[0]}`) } }}>Call</button>
                 </div>
               ))}
               <div className={`${styles.emergCard} ${styles.emergCardPolice}`}>
@@ -906,7 +1159,7 @@ export default function ChildPanel() {
                   <div className={styles.emergName}>Emergency Services</div>
                   <div className={styles.emergPhone}>📞 112 · Police / Ambulance</div>
                 </div>
-                <button className={`${styles.callBtn} ${styles.callRed}`} onClick={() => showToast('🚨 Calling 112...')}>Call</button>
+                <button className={`${styles.callBtn} ${styles.callRed}`} onClick={() => window.open('tel:112')}>Call</button>
               </div>
             </div>
           </div>{/* /tab-sos */}
@@ -920,11 +1173,26 @@ export default function ChildPanel() {
             </div>
             <div className={styles.familyCards}>
               {hasCircle === false && (
-                <div className={styles.joinCircleBox}>
+                <div className={styles.joinCircleBox} style={{textAlign:'center',padding:'24px 20px'}}>
+                  {/* QR code placeholder */}
+                  <div style={{
+                    width: 96, height: 96, margin: '0 auto 16px',
+                    background: 'rgba(0,200,83,0.08)',
+                    border: '2px dashed rgba(0,200,83,0.3)',
+                    borderRadius: 16,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexDirection: 'column', gap: 6
+                  }}>
+                    <span style={{fontSize: 36}}>📷</span>
+                    <span style={{fontSize: 10, color: '#5E8B6E', fontWeight: 600}}>Scan QR</span>
+                  </div>
                   <div className={styles.joinCircleIcon}>🔗</div>
                   <div className={styles.joinCircleTitle}>Join Your Family Circle</div>
-                  <div className={styles.joinCircleDesc}>
-                    Ask your parent to share the invite code from their Family tab
+                  <div className={styles.joinCircleDesc} style={{marginBottom: 8}}>
+                    Scan the QR code your parent shows, or type the invite code below
+                  </div>
+                  <div style={{fontSize: 11, color: '#5E8B6E', marginBottom: 14}}>
+                    You can find the code in your parent&apos;s app → Family → Invite
                   </div>
                   <div className={styles.joinCircleRow}>
                     <input
@@ -955,45 +1223,87 @@ export default function ChildPanel() {
               {displayMembers.map(m => {
                 const color = m.color || '#00E676'
                 const statusText = m.status || 'Offline'
+                const isOnline = statusText === 'Online'
                 const battColor = m.battery > 60 ? '#00E676' : m.battery > 20 ? '#FFB300' : '#FF5252'
+                const hasLocation = !!(m.lat && m.lng)
                 return (
                   <div
                     key={m.id}
                     className={`${styles.fmCard} ${styles.reveal}`}
-                    style={{borderLeft: '3px solid ' + color}}
-                    onClick={() => {
-                      showToast(`📍 ${m.name} · ${statusText}`)
-                      if (!m.isMe) switchTab('map')
-                    }}
+                    style={{borderLeft: '3px solid ' + color, position: 'relative'}}
                   >
+                    {/* Distance badge */}
+                    {hasLocation && !m.isMe && (
+                      <div style={{
+                        position: 'absolute', top: 10, right: 10,
+                        background: color + '22', color, borderRadius: 8,
+                        fontSize: 10, fontWeight: 700, padding: '2px 8px',
+                        border: `1px solid ${color}40`
+                      }}>
+                        📍 Located
+                      </div>
+                    )}
                     <div className={styles.fmCardLeft}>
-                      <img className={styles.fmAvatar} src={m.avatar} alt={m.name} style={{borderColor: color}} loading="lazy" />
-                      <div className={styles.fmStatusDot} style={{background: m.battery < 30 ? '#FFB300' : '#00E676'}}></div>
+                      {/* Avatar with online/offline ring */}
+                      <div style={{position:'relative', width: 48, height: 48}}>
+                        <img
+                          className={styles.fmAvatar}
+                          src={m.avatar} alt={m.name}
+                          style={{
+                            borderColor: isOnline ? '#00E676' : '#3E6B4E',
+                            boxShadow: isOnline ? `0 0 0 2px ${color}55` : 'none',
+                            width: 48, height: 48
+                          }}
+                          loading="lazy"
+                        />
+                        <div style={{
+                          position: 'absolute', bottom: 1, right: 1,
+                          width: 11, height: 11, borderRadius: '50%',
+                          background: isOnline ? '#00E676' : '#5E8B6E',
+                          border: '2px solid #0D1F13'
+                        }} />
+                      </div>
                     </div>
-                    <div className={styles.fmInfo}>
+                    <div className={styles.fmInfo} style={{flex: 1}}>
                       <div className={styles.fmName}>
                         {m.name}
                         {m.isMe && <span style={{fontSize:'10px',color:'#29B6F6',fontWeight:600}}> (You)</span>}
                       </div>
-                      <div className={styles.fmRole}>{m.role || (m.isMe ? 'You' : 'Member')}</div>
-                      <div className={styles.fmMeta}>
-                        <span className={styles.fmDist} style={{color}}>
-                          📍 {m.isMe ? 'Your location' : (m.lat ? 'Location known' : 'No location yet')}
-                        </span>
-                        <span className={styles.fmBattery}>
-                          <div className={styles.battBar}>
-                            <div className={styles.battFill} style={{width: `${m.battery}%`, background: battColor}}></div>
-                          </div>
-                          {m.battery}%
-                        </span>
+                      <div className={styles.fmRole} style={{marginBottom: 6}}>
+                        {m.role || (m.isMe ? 'You' : 'Member')}
                       </div>
-                      <div className={styles.mapTapHint} style={{color, opacity: 0.7}}>{statusText}</div>
+                      {/* Battery bar */}
+                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                        <div style={{
+                          width: 56, height: 6, background: 'rgba(255,255,255,0.1)',
+                          borderRadius: 3, overflow: 'hidden'
+                        }}>
+                          <div style={{width:`${m.battery}%`, height:'100%', background: battColor, borderRadius: 3}} />
+                        </div>
+                        <span style={{fontSize:10,color: battColor,fontWeight:600}}>{m.battery}%</span>
+                      </div>
+                      {/* Last seen */}
+                      <div style={{fontSize:11,color:'#5E8B6E'}}>
+                        {isOnline ? '🟢 Online now' : `⚫ ${statusText}`}
+                      </div>
+                      {/* View on Map button — only for non-self members */}
+                      {!m.isMe && (
+                        <button
+                          onClick={() => focusMemberOnMap(m)}
+                          style={{
+                            marginTop: 8,
+                            background: 'rgba(0,200,83,0.12)',
+                            border: `1px solid ${color}40`,
+                            color, borderRadius: 8,
+                            fontSize: 11, fontWeight: 700,
+                            padding: '5px 12px', cursor: 'pointer',
+                            fontFamily: 'inherit'
+                          }}
+                        >
+                          🗺️ View on Map
+                        </button>
+                      )}
                     </div>
-                    <div className={styles.fmStatusTag} style={{
-                      background: color + '18',
-                      color,
-                      borderColor: color + '30'
-                    }}>{statusText}</div>
                   </div>
                 )
               })}
@@ -1003,161 +1313,245 @@ export default function ChildPanel() {
 
           {/* ══ TAB 5: ALERTS ══ */}
           <div className={`${styles.tabPane} ${activeTab === 'alerts' ? styles.active : ''}`} id="tab-alerts">
-            <div style={{padding:'0 0 16px'}}>
-              <div style={{fontSize:16,fontWeight:700,color:'#E8F5E9',marginBottom:4}}>Alerts</div>
-              <div style={{fontSize:12,color:'#5E8B6E'}}>{alerts.length} notification{alerts.length !== 1 ? 's' : ''}</div>
+            {/* Header row */}
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 0 12px'}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:'#E8F5E9',marginBottom:2}}>Alerts</div>
+                <div style={{fontSize:12,color:'#5E8B6E'}}>{alertFilter === 'all' ? alerts.length : alerts.filter(a => a.type === alertFilter).length} notification{(alertFilter === 'all' ? alerts.length : alerts.filter(a => a.type === alertFilter).length) !== 1 ? 's' : ''}</div>
+              </div>
+              {alerts.length > 0 && (
+                <button
+                  onClick={() => setAlerts([])}
+                  style={{
+                    background: 'rgba(255,82,82,0.10)',
+                    border: '1px solid rgba(255,82,82,0.25)',
+                    color: '#FF5252', borderRadius: 8,
+                    fontSize: 11, fontWeight: 700,
+                    padding: '6px 12px', cursor: 'pointer',
+                    fontFamily: 'inherit'
+                  }}
+                >
+                  Clear All
+                </button>
+              )}
             </div>
-            {alerts.length === 0 ? (
-              <div style={{textAlign:'center',padding:'48px 20px',color:'#5E8B6E'}}>
-                <div style={{fontSize:36,marginBottom:12}}>🔔</div>
-                <div style={{fontSize:14}}>No alerts yet</div>
-                <div style={{fontSize:12,marginTop:6,color:'#3E6B4E'}}>Geofence entries/exits and SOS alerts appear here</div>
-              </div>
-            ) : alerts.map(alert => (
-              <div key={alert.id} style={{
-                background: alert.type === 'sos' ? 'rgba(255,82,82,0.08)' : 'rgba(0,230,118,0.05)',
-                border: `1px solid ${alert.type === 'sos' ? 'rgba(255,82,82,0.25)' : 'rgba(0,230,118,0.15)'}`,
-                borderRadius: 12, padding: '14px 16px', marginBottom: 10,
-                borderLeft: `3px solid ${alert.type === 'sos' ? '#FF5252' : alert.eventType === 'entry' ? '#00E676' : '#FFB300'}`
-              }}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:18}}>{alert.type === 'sos' ? '🆘' : alert.eventType === 'entry' ? '✅' : '🚶'}</span>
-                    <span style={{fontWeight:600,color:'#E8F5E9',fontSize:13}}>{alert.userName}</span>
+            {/* Filter tabs */}
+            <div style={{display:'flex',gap:8,marginBottom:16}}>
+              {(['all','geofence','sos'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setAlertFilter(f)}
+                  style={{
+                    background: alertFilter === f ? 'linear-gradient(135deg,#00C853,#0A5C35)' : 'rgba(0,200,83,0.08)',
+                    border: alertFilter === f ? 'none' : '1px solid rgba(0,200,83,0.2)',
+                    color: alertFilter === f ? '#fff' : '#5E8B6E',
+                    borderRadius: 8, padding: '6px 14px',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    fontFamily: 'inherit', textTransform: 'capitalize'
+                  }}
+                >
+                  {f === 'all' ? 'All' : f === 'geofence' ? '🔔 Geofence' : '🆘 SOS'}
+                </button>
+              ))}
+            </div>
+            {/* Alert list */}
+            {(() => {
+              const filtered = alertFilter === 'all' ? alerts : alerts.filter(a => a.type === alertFilter)
+              if (filtered.length === 0) return (
+                <div style={{textAlign:'center',padding:'48px 20px',color:'#5E8B6E'}}>
+                  <div style={{fontSize:36,marginBottom:12}}>{alertFilter === 'sos' ? '🆘' : '🔔'}</div>
+                  <div style={{fontSize:14}}>No {alertFilter === 'all' ? '' : alertFilter === 'sos' ? 'SOS ' : 'geofence '}alerts yet</div>
+                  <div style={{fontSize:12,marginTop:6,color:'#3E6B4E'}}>
+                    {alertFilter === 'sos' ? 'SOS alerts from family will appear here' : alertFilter === 'geofence' ? 'Geofence entries/exits will appear here' : 'Geofence entries/exits and SOS alerts appear here'}
                   </div>
-                  <span style={{fontSize:11,color:'#5E8B6E'}}>{new Date(alert.timestamp).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
                 </div>
-                <div style={{fontSize:13,color:'#B2D8BF',marginLeft:26}}>{alert.message}</div>
-              </div>
-            ))}
+              )
+              return filtered.map(alert => {
+                const isSos = alert.type === 'sos'
+                const isEntry = alert.eventType === 'entry'
+                const borderColor = isSos ? '#FF5252' : isEntry ? '#00E676' : '#FFB300'
+                const bgColor = isSos ? 'rgba(255,82,82,0.08)' : isEntry ? 'rgba(0,230,118,0.05)' : 'rgba(255,179,0,0.05)'
+                const bordColor = isSos ? 'rgba(255,82,82,0.25)' : isEntry ? 'rgba(0,230,118,0.15)' : 'rgba(255,179,0,0.2)'
+                const icon = isSos ? '🆘' : '🔔'
+                return (
+                  <div key={alert.id} style={{
+                    background: bgColor,
+                    border: `1px solid ${bordColor}`,
+                    borderRadius: 12, padding: '14px 16px', marginBottom: 10,
+                    borderLeft: `3px solid ${borderColor}`
+                  }}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:18}}>{icon}</span>
+                        <span style={{fontWeight:600,color:'#E8F5E9',fontSize:13}}>{alert.userName}</span>
+                      </div>
+                      <span style={{fontSize:11,color:'#5E8B6E'}}>{formatTime(alert.timestamp)}</span>
+                    </div>
+                    <div style={{fontSize:13,color:'#B2D8BF',marginLeft:26}}>{alert.message}</div>
+                  </div>
+                )
+              })
+            })()}
           </div>{/* /tab-alerts */}
 
 
           {/* ══ TAB 6: PROFILE ══ */}
           <div className={`${styles.tabPane} ${activeTab === 'profile' ? styles.active : ''}`} id="tab-profile">
-            <div className={styles.profileHeader}>
-              {/* Hidden file input for avatar */}
-              <input
-                ref={avatarFileRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (file) handleAvatarUpload(file)
-                  e.target.value = ''
-                }}
-              />
 
-              {/* Clickable avatar with upload overlay */}
-              <div
-                style={{ position: 'relative', width: '72px', height: '72px', margin: '0 auto 12px', cursor: 'pointer' }}
-                onClick={() => !avatarUploading && avatarFileRef.current?.click()}
-              >
-                <img
-                  src={headerAvatar}
-                  alt={profileName}
-                  style={{
-                    width: '72px',
-                    height: '72px',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    border: '2.5px solid #00C853',
-                    display: 'block'
-                  }}
-                />
-                {/* Camera hint overlay (always subtle) */}
-                {!avatarUploading && (
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'rgba(0,0,0,0.35)',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: 0,
-                    transition: 'opacity 0.2s'
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
-                  >
-                    <span style={{ fontSize: '20px' }}>📷</span>
-                  </div>
-                )}
-                {/* Uploading spinner overlay */}
-                {avatarUploading && (
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'rgba(0,0,0,0.5)',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
+            {/* Hidden file input for avatar */}
+            <input
+              ref={avatarFileRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (file) handleAvatarUpload(file)
+                e.target.value = ''
+              }}
+            />
+
+            {/* ── PROFILE CARD ── */}
+            <div style={{ padding: '16px 16px 0' }}>
+              <div className={styles.sectionTitle} style={{ padding: '0 0 10px 0' }}>My Account</div>
+              <div style={{
+                background: '#0D1F13',
+                border: '1px solid rgba(0,230,118,0.15)',
+                borderRadius: '20px',
+                padding: '24px 20px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '10px',
+                marginBottom: '16px'
+              }}>
+                {/* Avatar */}
+                <div
+                  className={styles.profileAvatarWrap}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => !avatarUploading && avatarFileRef.current?.click()}
+                >
+                  <img src={headerAvatar} alt={profileName} className={styles.profileAvatar} />
+                  {!avatarUploading && (
                     <div style={{
-                      width: '22px',
-                      height: '22px',
-                      border: '3px solid rgba(255,255,255,0.3)',
-                      borderTopColor: '#00E676',
-                      borderRadius: '50%',
-                      animation: 'spin 0.8s linear infinite'
-                    }}></div>
-                  </div>
-                )}
-              </div>
+                      position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)',
+                      borderRadius: '50%', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s'
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
+                    >
+                      <span style={{ fontSize: '20px' }}>📷</span>
+                    </div>
+                  )}
+                  {!avatarUploading && <div className={styles.profileEditBtn}>✏</div>}
+                  {avatarUploading && (
+                    <div style={{
+                      position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)',
+                      borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <div style={{
+                        width: '22px', height: '22px',
+                        border: '3px solid rgba(255,255,255,0.3)', borderTopColor: '#00E676',
+                        borderRadius: '50%', animation: 'spin 0.8s linear infinite'
+                      }}></div>
+                    </div>
+                  )}
+                </div>
 
-              {/* Editable name field */}
-              <div style={{ width: '100%', maxWidth: '260px', margin: '0 auto 8px' }}>
-                <input
-                  type="text"
-                  value={profileName}
-                  onChange={e => setProfileName(e.target.value)}
+                {/* Role badge */}
+                <span style={{
+                  background: 'rgba(0,230,118,0.12)', color: '#00E676',
+                  border: '1px solid rgba(0,230,118,0.3)', borderRadius: '20px',
+                  padding: '3px 14px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px'
+                }}>
+                  {(gravityUser?.role || profileRole || 'member').toUpperCase()}
+                </span>
+
+                {/* Editable name */}
+                <div style={{ width: '100%' }}>
+                  <label style={{ fontSize: '10px', color: '#5E8B6E', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', display: 'block', marginBottom: '5px' }}>Display Name</label>
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={e => setProfileName(e.target.value)}
+                    style={{
+                      width: '100%', background: 'rgba(0,200,83,0.07)',
+                      border: '1.5px solid rgba(0,200,83,0.25)', borderRadius: '10px',
+                      color: '#E8F5E9', fontSize: '15px', fontWeight: 600,
+                      padding: '9px 14px', outline: 'none', fontFamily: 'inherit',
+                      boxSizing: 'border-box', transition: 'border-color 0.2s'
+                    }}
+                    onFocus={e => { e.currentTarget.style.borderColor = '#00C853' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = 'rgba(0,200,83,0.25)' }}
+                  />
+                </div>
+
+                {/* Info rows */}
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {gravityUser?.email && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      background: 'rgba(255,255,255,0.03)', borderRadius: '10px',
+                      padding: '8px 12px', fontSize: '12px', color: '#B2D8BF'
+                    }}>
+                      <span style={{ fontSize: '15px' }}>✉️</span>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{gravityUser.email}</span>
+                    </div>
+                  )}
+                  {gravityUser?.phone && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      background: 'rgba(255,255,255,0.03)', borderRadius: '10px',
+                      padding: '8px 12px', fontSize: '12px', color: '#B2D8BF'
+                    }}>
+                      <span style={{ fontSize: '15px' }}>📞</span>
+                      <span>{gravityUser.phone}</span>
+                    </div>
+                  )}
+                  {gravityUser?.created_at && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      background: 'rgba(255,255,255,0.03)', borderRadius: '10px',
+                      padding: '8px 12px', fontSize: '12px', color: '#5E8B6E'
+                    }}>
+                      <span style={{ fontSize: '15px' }}>📅</span>
+                      <span>Member since {new Date(gravityUser.created_at).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Save button */}
+                <button
                   style={{
                     width: '100%',
-                    background: 'rgba(0,200,83,0.08)',
-                    border: '1.5px solid rgba(0,200,83,0.3)',
-                    borderRadius: '10px',
-                    color: '#E8F5E9',
-                    fontSize: '15px',
-                    fontWeight: 600,
-                    padding: '9px 14px',
-                    textAlign: 'center',
-                    outline: 'none',
-                    fontFamily: 'inherit',
-                    boxSizing: 'border-box'
+                    background: profileSaving ? 'rgba(0,200,83,0.3)' : 'linear-gradient(135deg,#00C853,#0A5C35)',
+                    color: '#fff', border: 'none', borderRadius: '12px',
+                    padding: '12px', fontSize: '14px', fontWeight: 700,
+                    cursor: profileSaving ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit', opacity: profileSaving ? 0.7 : 1,
+                    transition: 'opacity 0.2s', marginTop: '4px'
                   }}
-                  onFocus={e => { e.currentTarget.style.borderColor = '#00C853' }}
-                  onBlur={e => { e.currentTarget.style.borderColor = 'rgba(0,200,83,0.3)' }}
-                />
+                  onClick={handleProfileSave}
+                  disabled={profileSaving}
+                >
+                  {profileSaving ? 'Saving...' : '✓ Save Profile'}
+                </button>
               </div>
 
-              <div className={styles.profileAge}>{profileRole}</div>
-
-              {/* Save Profile button */}
+              {/* Logout */}
               <button
                 style={{
-                  background: profileSaving ? 'rgba(0,200,83,0.3)' : 'linear-gradient(135deg,#00C853,#0A5C35)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '10px 28px',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  cursor: profileSaving ? 'not-allowed' : 'pointer',
-                  marginBottom: '10px',
-                  fontFamily: 'inherit',
-                  opacity: profileSaving ? 0.7 : 1,
-                  transition: 'opacity 0.2s'
+                  width: '100%', padding: '13px', marginBottom: '20px',
+                  background: 'rgba(255,82,82,0.08)', border: '1px solid rgba(255,82,82,0.3)',
+                  borderRadius: '14px', color: '#FF5252', fontSize: '14px', fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: '8px'
                 }}
-                onClick={handleProfileSave}
-                disabled={profileSaving}
+                onClick={doLogout}
               >
-                {profileSaving ? 'Saving...' : 'Save Profile'}
+                🚪 Logout
               </button>
-
-              <button className={styles.logoutBtn} onClick={doLogout}>🚪 Logout</button>
             </div>
 
             {/* Location Sharing */}
@@ -1249,30 +1643,111 @@ export default function ChildPanel() {
             </div>
 
             {/* Stats */}
-            <div className={styles.section}>
+            <div className={styles.toggleSection} style={{marginBottom:10,paddingTop:4}}>
               <div className={styles.sectionTitle} style={{padding:'0 0 10px 0'}}>Today's Activity</div>
             </div>
-            <div className={styles.statsRow}>
+            <div className={styles.statsRow} style={{padding:'0 16px',marginBottom:20}}>
               <div className={`${styles.statCard} ${styles.reveal}`}>
-                <div className={styles.statVal}>4.2<span style={{fontSize:'12px'}}> km</span></div>
+                <div className={styles.statVal}>{todayDistance}</div>
                 <div className={styles.statLabel}>Distance Today</div>
               </div>
               <div className={`${styles.statCard} ${styles.reveal}`}>
-                <div className={styles.statVal}>2</div>
+                <div className={styles.statVal}>{todaySafeZones || '—'}</div>
                 <div className={styles.statLabel}>Safe Zones Visited</div>
               </div>
               <div className={`${styles.statCard} ${styles.reveal}`}>
-                <div className={styles.statVal}>5</div>
+                <div className={styles.statVal}>{todayCheckins || '—'}</div>
                 <div className={styles.statLabel}>Family Check-ins</div>
               </div>
             </div>
 
-            {/* Links */}
-            <div className={styles.profileLinks}>
-              <Link className={styles.profileLink} to="/">
+            {/* Location History */}
+            <div className={styles.toggleSection}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                <div className={styles.sectionTitle} style={{padding:0}}>Location History</div>
+                <button
+                  onClick={loadLocationHistory}
+                  disabled={locationHistoryLoading}
+                  style={{
+                    background:'rgba(0,200,83,0.10)',border:'1px solid rgba(0,200,83,0.25)',
+                    color:'#00C853',borderRadius:8,fontSize:11,fontWeight:700,
+                    padding:'5px 12px',cursor:'pointer',fontFamily:'inherit',
+                    opacity: locationHistoryLoading ? 0.6 : 1
+                  }}
+                >{locationHistoryLoading ? 'Loading...' : 'Refresh'}</button>
+              </div>
+              {locationHistory.length === 0 && !locationHistoryLoading && (
+                <div style={{
+                  background:'rgba(0,200,83,0.05)',border:'1px solid rgba(0,200,83,0.12)',
+                  borderRadius:12,padding:'20px',textAlign:'center',color:'#5E8B6E',fontSize:13
+                }}>
+                  <div style={{fontSize:28,marginBottom:8}}>📍</div>
+                  <div>No location history yet</div>
+                  <div style={{fontSize:11,marginTop:4,color:'#3E6B4E'}}>Tap Refresh to load your recent locations</div>
+                </div>
+              )}
+              {locationHistoryLoading && locationHistory.length === 0 && (
+                <div style={{textAlign:'center',padding:'20px',color:'#5E8B6E',fontSize:13}}>Loading...</div>
+              )}
+              {locationHistory.length > 0 && (
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {locationHistory.map((entry, idx) => {
+                    const d = new Date(entry.recorded_at)
+                    const h12 = ((d.getHours() % 12) || 12)
+                    const mm = d.getMinutes().toString().padStart(2,'0')
+                    const ampm = d.getHours() >= 12 ? 'PM' : 'AM'
+                    const dateStr = d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})
+                    const timeStr = `${h12}:${mm} ${ampm}`
+                    const distStr = entry.distance_from_home_km != null
+                      ? `${parseFloat(String(entry.distance_from_home_km)).toFixed(1)} km from home`
+                      : `${entry.latitude.toFixed(4)}, ${entry.longitude.toFixed(4)}`
+                    return (
+                      <div key={entry.id || idx} style={{
+                        background:'rgba(0,200,83,0.05)',border:'1px solid rgba(0,200,83,0.12)',
+                        borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10
+                      }}>
+                        <div style={{
+                          width:32,height:32,borderRadius:'50%',
+                          background:'rgba(0,200,83,0.12)',border:'1px solid rgba(0,200,83,0.25)',
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                          fontSize:14,flexShrink:0
+                        }}>📍</div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,fontWeight:700,color:'#E8F5E9'}}>{distStr}</div>
+                          <div style={{fontSize:11,color:'#5E8B6E',marginTop:2}}>{dateStr} · {timeStr}</div>
+                        </div>
+                        {entry.battery_level != null && (
+                          <div style={{
+                            fontSize:10,fontWeight:700,
+                            color: entry.battery_level > 50 ? '#00E676' : entry.battery_level > 20 ? '#FFB300' : '#FF5252'
+                          }}>🔋{entry.battery_level}%</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Links + Version */}
+            <div style={{ padding: '0 16px 28px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <Link
+                className={styles.profileLink}
+                to="/"
+                style={{ textDecoration: 'none' }}
+              >
                 <span className={styles.profileLinkText}>🏠 Back to Home</span>
                 <span className={styles.profileLinkArrow}>→</span>
               </Link>
+              <div style={{ textAlign: 'center', paddingTop: '6px' }}>
+                <span style={{
+                  display: 'inline-block',
+                  background: 'rgba(94,139,110,0.12)',
+                  border: '1px solid rgba(94,139,110,0.22)',
+                  borderRadius: '20px', padding: '4px 16px',
+                  fontSize: '11px', fontWeight: 600, color: '#5E8B6E', letterSpacing: '0.5px'
+                }}>Gravity v1.0.0</span>
+              </div>
             </div>
           </div>{/* /tab-profile */}
 

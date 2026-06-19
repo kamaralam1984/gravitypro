@@ -123,6 +123,16 @@ export default function ParentPanel() {
   const [profileName, setProfileName] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
   const avatarFileInputRef = useRef<HTMLInputElement>(null)
+  const sseRef = useRef<EventSource | null>(null)
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ── CLEANUP ON UNMOUNT ──
+  useEffect(() => {
+    return () => {
+      sseRef.current?.close()
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current)
+    }
+  }, [])
 
   // ── AUTH GUARD ──
   useEffect(() => {
@@ -271,6 +281,9 @@ export default function ParentPanel() {
       setCircleInviteCode(data.circles[0].invite_code || '')
       await Promise.all([loadMembers(cid), loadAlerts(cid), loadGeofences(cid)])
       connectSSE(cid)
+      // Auto-refresh member locations every 30 seconds as fallback
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current)
+      autoRefreshRef.current = setInterval(() => { loadMembers(cid) }, 30000)
     } catch (e) { console.error('loadRealData error', e) }
   }
 
@@ -296,8 +309,6 @@ export default function ParentPanel() {
   }
 
   async function loadAlerts(cid: string) {
-    const data = await apiGet('/geofences/events/' + cid)
-    if (!data?.events?.length) return
     const icons: Record<string, string> = { exit: '🚨', entry: '📍', sos: '🆘' }
     const labels: Record<string, (z: string) => string> = {
       exit: (z) => 'Left ' + z,
@@ -305,17 +316,35 @@ export default function ParentPanel() {
       sos: () => 'SOS Alert',
     }
     const typeMap: Record<string, AlertItem['type']> = { exit: 'geo', entry: 'geo', sos: 'sos' }
-    const loaded: AlertItem[] = data.events.slice(0, 10).map((e: Record<string, unknown>) => ({
-      id: 'alert-' + e.id,
+
+    // Load geofence events
+    const geoData = await apiGet('/geofences/events/' + cid)
+    const geoAlerts: AlertItem[] = (geoData?.events || []).slice(0, 10).map((e: Record<string, unknown>) => ({
+      id: 'geo-' + e.id,
       type: typeMap[e.event_type as string] || 'geo',
       icon: icons[e.event_type as string] || '📍',
-      title: (e.user_name || 'Member') + ' — ' + (labels[e.event_type as string] || (() => e.event_type))( e.zone_name as string || ''),
+      title: (e.user_name || 'Member') + ' — ' + (labels[e.event_type as string] || (() => e.event_type))(e.zone_name as string || ''),
       subtitle: '',
       time: new Date(e.created_at as string).toLocaleString(),
       dismissed: false,
     }))
-    setAlerts(loaded)
-    setNotifCount(loaded.length)
+
+    // Load SOS history
+    const sosData = await apiGet('/sos/history')
+    const sosAlerts: AlertItem[] = (sosData?.sos_events || sosData?.events || []).slice(0, 5).map((e: Record<string, unknown>) => ({
+      id: 'sos-' + e.id,
+      type: 'sos' as AlertItem['type'],
+      icon: '🆘',
+      title: (e.user_name || e.userName || 'Member') + ' sent SOS alert',
+      subtitle: e.latitude ? (e.latitude as number).toFixed(4) + ', ' + (e.longitude as number).toFixed(4) : '',
+      time: new Date((e.created_at || e.timestamp) as string).toLocaleString(),
+      dismissed: false,
+    }))
+
+    // Merge: SOS first, then geofence events, deduplicate by id
+    const merged = [...sosAlerts, ...geoAlerts].slice(0, 15)
+    setAlerts(merged)
+    setNotifCount(merged.length)
   }
 
   async function loadGeofences(cid: string) {
@@ -338,14 +367,23 @@ export default function ParentPanel() {
   function connectSSE(cid: string) {
     const token = getToken()
     if (!token || !cid) return
+    // Close any existing SSE connection before opening a new one
+    if (sseRef.current) {
+      sseRef.current.close()
+      sseRef.current = null
+    }
     const evtSource = new EventSource(API_BASE + '/sse/stream?token=' + token)
+    sseRef.current = evtSource
     evtSource.addEventListener('location_update', (e) => {
       const d = JSON.parse((e as MessageEvent).data)
       setMembers((prev) =>
         prev.map((m) =>
-          m.id === d.userId ? { ...m, lat: d.latitude, lng: d.longitude, battery: d.battery_level || m.battery } : m
+          m.id === d.userId
+            ? { ...m, lat: d.latitude, lng: d.longitude, battery: d.battery_level != null ? Math.round(d.battery_level) : m.battery, lastSeen: new Date().toLocaleTimeString(), status: 'active' as const }
+            : m
         )
       )
+      // Update existing marker position in-place (no full re-render needed)
       if (memberMarkersRef.current[d.userId]) {
         memberMarkersRef.current[d.userId].setLatLng([d.latitude, d.longitude])
       }
@@ -354,7 +392,7 @@ export default function ParentPanel() {
       const d = JSON.parse((e as MessageEvent).data)
       showToast('🆘 SOS from ' + (d.userName || 'Member') + '!', 'error')
       const newAlert: AlertItem = {
-        id: 'alert-sos-' + Date.now(),
+        id: 'sos-live-' + Date.now(),
         type: 'sos',
         icon: '🆘',
         title: (d.userName || 'Member') + ' sent SOS alert',
@@ -366,7 +404,10 @@ export default function ParentPanel() {
       setNotifCount((c) => c + 1)
       setActiveTab('alerts')
     })
-    evtSource.onerror = () => evtSource.close()
+    evtSource.onerror = () => {
+      evtSource.close()
+      sseRef.current = null
+    }
   }
 
   // ── TOAST ──

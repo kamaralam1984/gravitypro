@@ -36,7 +36,7 @@
       0 0 0 13px #1A3A24,
       0 40px 100px rgba(0,0,0,.95),
       0 0 80px rgba(0,230,118,0.12);
-    overflow: hidden;
+    overflow: visible;
     min-height: 860px;
   }
 }
@@ -379,7 +379,7 @@
 .familyMiniName { font-size: 10px; font-weight: 600; color: #FFFFFF; }
 
 /* ── MAP TAB ── */
-.mapLeaflet { height: 380px; width: 100%; border-radius: 0; }
+.mapLeaflet { height: 100%; min-height: 380px; width: 100%; border-radius: 0; }
 .mapTypeSwitcher {
   position: absolute; bottom: 14px; right: 12px; z-index: 1000;
   display: flex; gap: 3px;
@@ -444,7 +444,7 @@
   display: flex; align-items: center; gap: 5px;
 }
 .distDot { width: 8px; height: 8px; border-radius: 50%; }
-.mapContainer { position: relative; overflow: hidden; }
+.mapContainer { position: relative; overflow: hidden; height: 380px; }
 
 /* ── SOS TAB ── */
 .sosTabHeader { padding: 24px 16px 8px; text-align: center; }
@@ -548,8 +548,14 @@
   padding: 16px;
   display: flex; align-items: center; gap: 14px;
   cursor: pointer;
-  transition: all .25s;
+  transition: background .25s, border-color .25s, transform .18s, box-shadow .25s;
   position: relative; overflow: hidden;
+}
+.fmCard:hover {
+  background: #112318;
+  border-color: rgba(0,230,118,0.28);
+  box-shadow: 0 4px 20px rgba(0,230,118,0.08);
+  transform: translateY(-1px);
 }
 .fmCard:active { transform: scale(.98); }
 .fmCardLeft { position: relative; }
@@ -668,9 +674,30 @@
 .statCard {
   flex: 1; background: #0D1F13; border: 1px solid rgba(0,230,118,0.12);
   border-radius: 16px; padding: 14px 12px; text-align: center;
+  transition: background .25s, border-color .25s, transform .18s, box-shadow .25s;
+}
+.statCard:hover {
+  background: #112318;
+  border-color: rgba(0,230,118,0.3);
+  box-shadow: 0 4px 16px rgba(0,230,118,0.08);
+  transform: translateY(-2px);
 }
 .statVal { font-size: 18px; font-weight: 800; color: #00E676; }
 .statLabel { font-size: 9px; color: #5E8B6E; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; margin-top: 3px; line-height: 1.3; }
+
+/* Alert card variants (colorful left borders) */
+.alertCardSos {
+  border-left: 3px solid #FF5252 !important;
+  background: rgba(255,23,68,0.05) !important;
+}
+.alertCardGeofence {
+  border-left: 3px solid #FFB300 !important;
+  background: rgba(255,179,0,0.05) !important;
+}
+.alertCardInfo {
+  border-left: 3px solid #29B6F6 !important;
+  background: rgba(41,182,246,0.05) !important;
+}
 
 /* Links */
 .profileLinks { padding: 0 16px 24px; display: flex; flex-direction: column; gap: 8px; }
@@ -712,6 +739,7 @@
 /* ── CARD REVEAL ── */
 .reveal { opacity: 0; transform: translateY(16px); transition: all .4s ease; }
 .reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal:global(.visible) { opacity: 1; transform: translateY(0); }
 
 /* ── LEAFLET OVERRIDES ── */
 :global(.leaflet-container) { background: #050C08 !important; }
@@ -778,3 +806,5 @@
   transition: opacity 0.2s;
 }
 .joinCircleBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

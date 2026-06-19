@@ -179,6 +179,7 @@ export default function Child() {
           <div className={styles.heroBtns}>
             <a href="#download" className={styles.btnPrimary}>Join Your Family</a>
             <a href="#features" className={styles.btnGlass}>See Features</a>
+            <Link to="/login?redirect=/child/panel" className={styles.btnGlass}>Open Child Panel</Link>
           </div>
           <div className={styles.socialProof}>
             <p>Already used by families in 5 countries</p>

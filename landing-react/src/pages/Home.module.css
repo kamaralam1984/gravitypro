@@ -819,21 +819,21 @@
 
 .fc2Illus {
   position: absolute; top: 10px; right: 10px;
-  width: 130px; height: 130px;
+  width: 150px; height: 150px;
   pointer-events: none; z-index: 1;
 }
 .fc2Illus svg { width: 100%; height: 100%; overflow: visible; }
 
 /* SVG animations */
-.fc2Trail { stroke-dasharray: 160; animation: fc2TrailDraw 3.5s ease-in-out infinite; }
+.fc2Trail { stroke-dasharray: 190; animation: fc2TrailDraw 3.5s ease-in-out infinite; }
 .fc2MovingDot {
-  offset-path: path('M10,118 C20,80 45,95 65,70 C82,48 88,35 118,16');
+  offset-path: path('M12,135 C25,100 52,110 72,82 C90,58 96,42 134,18');
   offset-rotate: 0deg;
   animation: fc2LocMove 3.5s ease-in-out infinite;
 }
 .fc2Ping1 { animation: fc2LocPing 2.2s ease-out infinite; }
 .fc2Ping2 { animation: fc2LocPing 2.2s ease-out infinite 0.7s; }
-.fc2GeoSpin { animation: fc2GeoSpin 7s linear infinite; }
+.fc2GeoSpin { animation: fc2GeoSpin 3.5s linear infinite; }
 .fc2GeoPulseRing { animation: fc2GeoPulse 2.8s ease-in-out infinite; }
 .fc2FamA { animation: fc2FamFloat 3.2s ease-in-out infinite; }
 .fc2FamB { animation: fc2FamFloat 3.2s ease-in-out infinite 0.65s; }
@@ -844,20 +844,40 @@
 .fc2SosR3 { animation: fc2SosPing 2.4s ease-out infinite 1.6s; }
 .fc2SosWarn { animation: fc2SosWarn 1.6s ease-in-out infinite; }
 .fc2BattFill {
-  transform-origin: 65px 82px;
-  animation: fc2BattFill 2.4s cubic-bezier(0.4,0,0.2,1) infinite alternate;
+  transform-origin: 70px 94px;
+  animation: fc2BattFill 2.8s cubic-bezier(0.4,0,0.2,1) infinite;
 }
 .fc2BattBolt { animation: fc2BattBolt 1.1s ease-in-out infinite; }
 .fc2Leaf1 { animation: fc2BattLeaf 2.6s ease-out infinite; }
 .fc2Leaf2 { animation: fc2BattLeaf 2.6s ease-out infinite 1s; }
+.fc2Leaf3 { animation: fc2BattLeaf 2.6s ease-out infinite 1.7s; }
 .fc2Spark1 { animation: fc2Spark 1.9s ease-out infinite; }
 .fc2Spark2 { animation: fc2Spark 1.9s ease-out infinite 0.63s; }
 .fc2Spark3 { animation: fc2Spark 1.9s ease-out infinite 1.26s; }
-.fc2ShieldGrp { animation: fc2ShieldFloat 4s ease-in-out infinite; transform-origin: 65px 65px; }
+.fc2Spark4 { animation: fc2Spark 1.9s ease-out infinite 0.95s; }
+.fc2ShieldGrp { animation: fc2ShieldFloat 4s ease-in-out infinite; transform-origin: 75px 68px; }
 .fc2Pt1 { animation: fc2ShieldParticle 2.8s ease-out infinite; --px: 8px; }
 .fc2Pt2 { animation: fc2ShieldParticle 2.8s ease-out infinite 0.8s; --px: -10px; }
 .fc2Pt3 { animation: fc2ShieldParticle 2.8s ease-out infinite 1.6s; --px: 14px; }
 .fc2Pt4 { animation: fc2ShieldParticle 2.8s ease-out infinite 0.4s; --px: -5px; }
+.fc2Pt5 { animation: fc2ShieldParticle 2.8s ease-out infinite 1.1s; --px: -12px; }
+/* Map dot floats for location card */
+.fc2FamDot1 { animation: fc2FamFloat 3.8s ease-in-out infinite; }
+.fc2FamDot2 { animation: fc2FamFloat 3.8s ease-in-out infinite 1.2s; }
+/* Live pulse dot */
+.fc2LivePulse { animation: fc2LocPing 1.6s ease-out infinite; }
+/* Geo entry dot moving toward center */
+.fc2GeoEntry { animation: fc2GeoEntry 3s ease-in-out infinite; }
+/* Family connect lines pulse */
+.fc2ConnLine { animation: fc2FamPulse 2s ease-in-out infinite; }
+/* SOS button scale pulse */
+.fc2SosBtn { animation: fc2SosBtn 1.4s ease-in-out infinite; transform-origin: 75px 75px; }
+/* Battery percentage digits */
+.fc2BattPct { animation: fc2BattBolt 1.1s ease-in-out infinite; }
+/* Shield scan line */
+.fc2ScanLine { animation: fc2ScanLine 2.5s linear infinite; }
+/* Lock bounce */
+.fc2LockBounce { animation: fc2ShieldFloat 3s ease-in-out infinite; transform-origin: 75px 75px; }
 
 @media (max-width: 900px) { .featuresGrid { grid-template-columns: repeat(2,1fr); } }
 @media (max-width: 600px) {
@@ -1480,7 +1500,7 @@
   width: 210px;
   text-align: center;
   scroll-snap-align: start;
-  transition: border-color 0.3s cubic-bezier(0.16,1,0.3,1), transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s cubic-bezier(0.16,1,0.3,1);
+  transition: border-color 0.3s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.65s cubic-bezier(0.16,1,0.3,1);
   cursor: default;
 }
 .screenshotCard:hover {

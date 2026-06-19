@@ -176,7 +176,7 @@ router.get('/system', adminAuth, async (req, res) => {
   const { getConnectedCount } = require('../services/sse')
   const connected = getConnectedCount()
   const [tables, dbSize] = await Promise.all([
-    query(`SELECT relname table_name, n_live_tup row_count FROM pg_stat_user_tables ORDER BY n_live_tup DESC`).catch(() => ({ rows: [] })),
+    query(`SELECT relname AS name, n_live_tup AS rows FROM pg_stat_user_tables ORDER BY n_live_tup DESC`).catch(() => ({ rows: [] })),
     query(`SELECT pg_size_pretty(pg_database_size(current_database())) db_size`).catch(() => ({ rows: [{ db_size: 'N/A' }] })),
   ])
   res.json({

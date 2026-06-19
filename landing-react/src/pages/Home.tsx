@@ -292,7 +292,7 @@ export default function Home() {
           revealObs.unobserve(e.target)
         }
       })
-    }, { threshold: 0.12 })
+    }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' })
     revealEls.forEach(el => revealObs.observe(el))
     return () => revealObs.disconnect()
   }, [])
@@ -415,8 +415,8 @@ export default function Home() {
           <li><a href="#download">Download</a></li>
           <li><Link to="/parent">For Parents</Link></li>
           <li><Link to="/child">For Children</Link></li>
-          <li><a href="#">Parent Panel</a></li>
-          <li><a href="#">Child Panel</a></li>
+          <li><Link to="/login?redirect=/parent/panel">Parent Panel</Link></li>
+          <li><Link to="/login?redirect=/child/panel">Child Panel</Link></li>
         </ul>
 
         <a href="#download" className={`${styles.navCta} ${styles.desktopOnly}`}>Get the App</a>
@@ -434,8 +434,8 @@ export default function Home() {
         <a href="#download" onClick={() => setMobileMenuOpen(false)}>Download</a>
         <Link to="/parent" onClick={() => setMobileMenuOpen(false)}>For Parents</Link>
         <Link to="/child" onClick={() => setMobileMenuOpen(false)}>For Children</Link>
-        <a href="#" onClick={() => setMobileMenuOpen(false)}>Parent Panel</a>
-        <a href="#" onClick={() => setMobileMenuOpen(false)}>Child Panel</a>
+        <Link to="/login?redirect=/parent/panel" onClick={() => setMobileMenuOpen(false)}>Parent Panel</Link>
+        <Link to="/login?redirect=/child/panel" onClick={() => setMobileMenuOpen(false)}>Child Panel</Link>
         <a href="#download" className={styles.navCta} onClick={() => setMobileMenuOpen(false)}>Get the App</a>
       </div>
 
@@ -462,8 +462,8 @@ export default function Home() {
           </div>
 
           <div className={styles.panelLinks}>
-            <a href="#" className={styles.panelLink}>Parent Panel →</a>
-            <a href="#" className={styles.panelLink}>Child Panel →</a>
+            <Link to="/login?redirect=/parent/panel" className={styles.panelLink}>Parent Panel →</Link>
+            <Link to="/login?redirect=/child/panel" className={styles.panelLink}>Child Panel →</Link>
           </div>
 
           <div className={styles.familyStrip}>
@@ -667,17 +667,49 @@ export default function Home() {
             {/* 1. Live Location */}
             <div className={`${styles.fc2Card} ${styles.fc2CardLocation}`}>
               <div className={styles.fc2Illus}>
-                <svg viewBox="0 0 130 130" fill="none">
+                <svg viewBox="0 0 150 150" fill="none">
                   <defs>
                     <filter id="locGlowF"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <radialGradient id="famDot1Grad" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#00E676" stopOpacity="0.9"/>
+                      <stop offset="100%" stopColor="#00A040" stopOpacity="0.3"/>
+                    </radialGradient>
+                    <radialGradient id="famDot2Grad" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#FFD740" stopOpacity="0.9"/>
+                      <stop offset="100%" stopColor="#FFA000" stopOpacity="0.3"/>
+                    </radialGradient>
                   </defs>
-                  <path d="M10,118 C20,80 45,95 65,70 C82,48 88,35 118,16" stroke="#00E676" strokeWidth="1.5" fill="none" className={styles.fc2Trail}/>
-                  <circle className={styles.fc2MovingDot} r="5" fill="#00E676" filter="url(#locGlowF)"/>
-                  <path d="M118,16 C115,8 108,4 118,0 C128,-4 131,7 127,13 C124,17 118,16 118,16Z" fill="#00E676" opacity="0.9" filter="url(#locGlowF)"/>
-                  <circle cx="118" cy="16" r="4" fill="none" stroke="#00E676" strokeWidth="1.5" className={styles.fc2Ping1}/>
-                  <circle cx="118" cy="16" r="4" fill="none" stroke="#00E676" strokeWidth="1.5" className={styles.fc2Ping2}/>
-                  <circle cx="35" cy="96" r="3.5" fill="#00E676" opacity="0.35"/>
-                  <circle cx="65" cy="70" r="2.5" fill="#00E676" opacity="0.25"/>
+                  {/* Map grid background */}
+                  <line x1="0" y1="50" x2="150" y2="50" stroke="rgba(0,230,118,0.07)" strokeWidth="1"/>
+                  <line x1="0" y1="100" x2="150" y2="100" stroke="rgba(0,230,118,0.07)" strokeWidth="1"/>
+                  <line x1="50" y1="0" x2="50" y2="150" stroke="rgba(0,230,118,0.07)" strokeWidth="1"/>
+                  <line x1="100" y1="0" x2="100" y2="150" stroke="rgba(0,230,118,0.07)" strokeWidth="1"/>
+                  {/* Trail path — diagonal from bottom-left up to top-right */}
+                  <path d="M12,135 C25,100 52,110 72,82 C90,58 96,42 134,18" stroke="#00E676" strokeWidth="2" fill="none" className={styles.fc2Trail}/>
+                  {/* Start point */}
+                  <circle cx="12" cy="135" r="3.5" fill="rgba(0,200,83,0.3)" stroke="#00E676" strokeWidth="1.2"/>
+                  {/* Moving dot going along trail */}
+                  <circle className={styles.fc2MovingDot} r="5.5" fill="#00E676" filter="url(#locGlowF)"/>
+                  {/* Destination pin at top-right */}
+                  <path d="M134,18 C130,8 122,4 134,-2 C146,-6 149,8 144,15 C140,20 134,18 134,18Z" fill="#00E676" opacity="0.95" filter="url(#locGlowF)"/>
+                  <circle cx="134" cy="18" r="4.5" fill="none" stroke="#00E676" strokeWidth="1.5" className={styles.fc2Ping1}/>
+                  <circle cx="134" cy="18" r="4.5" fill="none" stroke="#00E676" strokeWidth="1.5" className={styles.fc2Ping2}/>
+                  {/* Family dot 1 — green */}
+                  <g className={styles.fc2FamDot1}>
+                    <circle cx="28" cy="110" r="9" fill="url(#famDot1Grad)" filter="url(#locGlowF)"/>
+                    <circle cx="28" cy="107" r="3.5" fill="#fff" opacity="0.9"/>
+                    <path d="M21,118 Q24.5,113 28,113 Q31.5,113 35,118" fill="#fff" opacity="0.7"/>
+                  </g>
+                  {/* Family dot 2 — yellow */}
+                  <g className={styles.fc2FamDot2}>
+                    <circle cx="72" cy="82" r="8" fill="url(#famDot2Grad)" filter="url(#locGlowF)"/>
+                    <circle cx="72" cy="79.5" r="3" fill="#fff" opacity="0.9"/>
+                    <path d="M66,88 Q69,83.5 72,83.5 Q75,83.5 78,88" fill="#fff" opacity="0.7"/>
+                  </g>
+                  {/* LIVE badge */}
+                  <rect x="5" y="5" width="52" height="17" rx="8" fill="rgba(0,0,0,0.55)" stroke="rgba(0,230,118,0.4)" strokeWidth="1"/>
+                  <circle cx="17" cy="13.5" r="3.5" fill="#00E676" className={styles.fc2LivePulse}/>
+                  <text x="25" y="17.5" fill="#00E676" fontSize="8" fontWeight="700" fontFamily="sans-serif" letterSpacing="1">LIVE</text>
                 </svg>
               </div>
               <div className={`${styles.fc2IconBox} ${styles.fc2IconBoxGreen}`}>
@@ -691,19 +723,40 @@ export default function Home() {
             {/* 2. Safe Zones */}
             <div className={`${styles.fc2Card} ${styles.fc2CardGeo}`}>
               <div className={styles.fc2Illus}>
-                <svg viewBox="0 0 130 130" fill="none">
+                <svg viewBox="0 0 150 150" fill="none">
                   <defs>
-                    <filter id="geoGlowF"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <filter id="geoGlowF"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <filter id="geoOrbitGlow"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <radialGradient id="geoHouseGrad" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#93C5FD" stopOpacity="0.4"/>
+                      <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                    </radialGradient>
                   </defs>
-                  <circle cx="65" cy="65" r="52" stroke="rgba(74,158,255,0.12)" strokeWidth="1" className={styles.fc2GeoPulseRing}/>
-                  <g style={{ transformOrigin: '65px 65px' }} className={styles.fc2GeoSpin}>
-                    <circle cx="65" cy="65" r="42" stroke="#4A9EFF" strokeWidth="1.5" strokeDasharray="8 6" fill="none" opacity="0.55"/>
-                    <circle cx="65" cy="23" r="5" fill="#4A9EFF" filter="url(#geoGlowF)"/>
+                  {/* Pulsing background glow ring */}
+                  <circle cx="75" cy="75" r="64" stroke="rgba(147,197,253,0.2)" strokeWidth="1.5" className={styles.fc2GeoPulseRing}/>
+                  {/* Inner ring */}
+                  <circle cx="75" cy="75" r="38" stroke="rgba(147,197,253,0.3)" strokeWidth="1" strokeDasharray="5 8" fill="none"/>
+                  {/* Orbit ring — BRIGHT blue */}
+                  <g style={{ transformOrigin: '75px 75px' }} className={styles.fc2GeoSpin}>
+                    <circle cx="75" cy="75" r="52" stroke="#93C5FD" strokeWidth="2" strokeDasharray="10 6" fill="none" opacity="0.85"/>
+                    {/* Glowing comet dot — VERY BRIGHT white-blue */}
+                    <circle cx="75" cy="23" r="11" fill="#3B82F6" filter="url(#geoOrbitGlow)" opacity="0.7"/>
+                    <circle cx="75" cy="23" r="8" fill="#93C5FD" opacity="0.95"/>
+                    <circle cx="75" cy="20" r="4.5" fill="#fff" opacity="1"/>
+                    <path d="M67,31 Q71,26 75,26 Q79,26 83,31" fill="#fff" opacity="0.9"/>
                   </g>
-                  <g transform="translate(65,65)" fill="#4A9EFF" opacity="0.9">
-                    <path d="M0,-18 L-16,0 L-10,0 L-10,14 L10,14 L10,0 L16,0 Z" opacity="0.9"/>
-                    <rect x="-5" y="4" width="10" height="10" fill="#0C1830" rx="1"/>
+                  {/* Center glow */}
+                  <circle cx="75" cy="75" r="24" fill="url(#geoHouseGrad)" filter="url(#geoGlowF)"/>
+                  {/* House at center — bright */}
+                  <g transform="translate(75,75)" fill="#93C5FD" filter="url(#geoGlowF)">
+                    <path d="M0,-20 L-18,0 L-12,0 L-12,16 L12,16 L12,0 L18,0 Z"/>
+                    <rect x="-6" y="5" width="12" height="11" fill="#060f1e" rx="1"/>
                   </g>
+                  {/* Entry alert dot */}
+                  <circle cx="130" cy="130" r="5" fill="#60A5FA" className={styles.fc2GeoEntry} filter="url(#geoGlowF)"/>
+                  {/* Badge */}
+                  <rect x="104" y="5" width="41" height="17" rx="8" fill="rgba(59,130,246,0.25)" stroke="rgba(147,197,253,0.7)" strokeWidth="1"/>
+                  <text x="125" y="17" fill="#93C5FD" fontSize="9" fontWeight="800" fontFamily="sans-serif" textAnchor="middle">+IN</text>
                 </svg>
               </div>
               <div className={`${styles.fc2IconBox} ${styles.fc2IconBoxBlue}`}>
@@ -717,25 +770,41 @@ export default function Home() {
             {/* 3. Family Circles */}
             <div className={`${styles.fc2Card} ${styles.fc2CardFamily}`}>
               <div className={styles.fc2Illus}>
-                <svg viewBox="0 0 130 130" fill="none">
-                  <line x1="65" y1="52" x2="35" y2="90" stroke="rgba(167,139,250,0.2)" strokeWidth="1" className={styles.fc2FamRing}/>
-                  <line x1="65" y1="52" x2="95" y2="90" stroke="rgba(167,139,250,0.2)" strokeWidth="1" className={styles.fc2FamRing}/>
-                  <line x1="35" y1="90" x2="95" y2="90" stroke="rgba(167,139,250,0.15)" strokeWidth="1"/>
-                  <g className={styles.fc2FamA}>
-                    <circle cx="65" cy="42" r="20" fill="rgba(124,58,237,0.28)"/>
-                    <circle cx="65" cy="38" r="8" fill="#A78BFA" opacity="0.9"/>
-                    <path d="M50,56 Q55,50 65,50 Q75,50 80,56" fill="#A78BFA" opacity="0.7"/>
+                <svg viewBox="0 0 150 150" fill="none">
+                  <defs>
+                    <filter id="famGlowF"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                  </defs>
+                  {/* Connection lines — BRIGHT */}
+                  <line x1="75" y1="48" x2="38" y2="112" stroke="#C4B5FD" strokeWidth="2" opacity="0.75" className={styles.fc2ConnLine}/>
+                  <line x1="75" y1="48" x2="112" y2="112" stroke="#C4B5FD" strokeWidth="2" opacity="0.75" className={styles.fc2ConnLine}/>
+                  <line x1="38" y1="112" x2="112" y2="112" stroke="#C4B5FD" strokeWidth="1.5" opacity="0.5" className={styles.fc2ConnLine}/>
+                  {/* Animated pulse dots on lines */}
+                  <circle cx="57" cy="80" r="3.5" fill="#DDD6FE" opacity="0.9" className={styles.fc2FamDot1}/>
+                  <circle cx="93" cy="80" r="3.5" fill="#DDD6FE" opacity="0.9" className={styles.fc2FamDot2}/>
+                  {/* Avatar A — top (brightest) */}
+                  <g className={styles.fc2FamA} filter="url(#famGlowF)">
+                    <circle cx="75" cy="36" r="22" fill="rgba(139,92,246,0.5)"/>
+                    <circle cx="75" cy="36" r="20" stroke="#DDD6FE" strokeWidth="1.5" fill="none" opacity="0.7"/>
+                    <circle cx="75" cy="32" r="9" fill="#DDD6FE"/>
+                    <path d="M59,50 Q63,44 75,44 Q87,44 91,50" fill="#DDD6FE" opacity="0.9"/>
                   </g>
-                  <g className={styles.fc2FamB}>
-                    <circle cx="32" cy="96" r="16" fill="rgba(124,58,237,0.2)"/>
-                    <circle cx="32" cy="93" r="6.5" fill="#A78BFA" opacity="0.75"/>
-                    <path d="M22,106 Q27,101 32,101 Q37,101 42,106" fill="#A78BFA" opacity="0.6"/>
+                  {/* Avatar B — bottom left */}
+                  <g className={styles.fc2FamB} filter="url(#famGlowF)">
+                    <circle cx="38" cy="110" r="18" fill="rgba(109,40,217,0.45)"/>
+                    <circle cx="38" cy="110" r="16" stroke="#C4B5FD" strokeWidth="1.5" fill="none" opacity="0.65"/>
+                    <circle cx="38" cy="106" r="7.5" fill="#C4B5FD" opacity="0.95"/>
+                    <path d="M26,120 Q31,114 38,114 Q45,114 50,120" fill="#C4B5FD" opacity="0.85"/>
                   </g>
-                  <g className={styles.fc2FamC}>
-                    <circle cx="98" cy="96" r="16" fill="rgba(124,58,237,0.2)"/>
-                    <circle cx="98" cy="93" r="6.5" fill="#A78BFA" opacity="0.75"/>
-                    <path d="M88,106 Q93,101 98,101 Q103,101 108,106" fill="#A78BFA" opacity="0.6"/>
+                  {/* Avatar C — bottom right */}
+                  <g className={styles.fc2FamC} filter="url(#famGlowF)">
+                    <circle cx="112" cy="110" r="18" fill="rgba(109,40,217,0.45)"/>
+                    <circle cx="112" cy="110" r="16" stroke="#C4B5FD" strokeWidth="1.5" fill="none" opacity="0.65"/>
+                    <circle cx="112" cy="106" r="7.5" fill="#C4B5FD" opacity="0.95"/>
+                    <path d="M100,120 Q105,114 112,114 Q119,114 124,120" fill="#C4B5FD" opacity="0.85"/>
                   </g>
+                  {/* CIRCLE badge */}
+                  <rect x="38" y="5" width="74" height="16" rx="8" fill="rgba(139,92,246,0.3)" stroke="rgba(196,181,253,0.7)" strokeWidth="1"/>
+                  <text x="75" y="16.5" fill="#DDD6FE" fontSize="7.5" fontWeight="800" fontFamily="sans-serif" textAnchor="middle" letterSpacing="1.5">CIRCLE</text>
                 </svg>
               </div>
               <div className={`${styles.fc2IconBox} ${styles.fc2IconBoxPurple}`}>
@@ -749,16 +818,31 @@ export default function Home() {
             {/* 4. SOS */}
             <div className={`${styles.fc2Card} ${styles.fc2CardSos2}`}>
               <div className={styles.fc2Illus}>
-                <svg viewBox="0 0 130 130" fill="none">
-                  <circle cx="65" cy="65" r="16" fill="none" stroke="#FF5252" strokeWidth="2.5" className={styles.fc2SosR1}/>
-                  <circle cx="65" cy="65" r="16" fill="none" stroke="#FF5252" strokeWidth="2" className={styles.fc2SosR2}/>
-                  <circle cx="65" cy="65" r="16" fill="none" stroke="#FF5252" strokeWidth="1.5" className={styles.fc2SosR3}/>
-                  <circle cx="65" cy="65" r="28" fill="rgba(255,82,82,0.08)"/>
-                  <g className={styles.fc2SosWarn}>
-                    <path d="M65,38 L88,78 L42,78 Z" fill="rgba(255,82,82,0.85)" stroke="#FF5252" strokeWidth="1.5" strokeLinejoin="round"/>
-                    <rect x="62" y="52" width="6" height="14" rx="3" fill="#1C0606"/>
-                    <circle cx="65" cy="71" r="3" fill="#1C0606"/>
+                <svg viewBox="0 0 150 150" fill="none">
+                  <defs>
+                    <filter id="sosGlowF"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <radialGradient id="sosBtnGrad" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#FF6B6B"/>
+                      <stop offset="100%" stopColor="#B91C1C"/>
+                    </radialGradient>
+                  </defs>
+                  {/* 3 expanding ping rings — BRIGHT near-white so visible on dark red */}
+                  <circle cx="75" cy="75" r="16" fill="none" stroke="rgba(255,220,220,0.95)" strokeWidth="2.5" className={styles.fc2SosR1}/>
+                  <circle cx="75" cy="75" r="16" fill="none" stroke="rgba(255,180,180,0.8)" strokeWidth="2" className={styles.fc2SosR2}/>
+                  <circle cx="75" cy="75" r="16" fill="none" stroke="rgba(255,140,140,0.65)" strokeWidth="1.5" className={styles.fc2SosR3}/>
+                  {/* Background glow */}
+                  <circle cx="75" cy="75" r="40" fill="rgba(255,82,82,0.18)" filter="url(#sosGlowF)"/>
+                  {/* SOS button — scale pulses with warning triangle inside */}
+                  <g className={styles.fc2SosBtn}>
+                    <circle cx="75" cy="75" r="28" fill="url(#sosBtnGrad)" filter="url(#sosGlowF)"/>
+                    {/* Warning triangle */}
+                    <path d="M75,56 L91,84 L59,84 Z" fill="rgba(255,255,255,0.9)" strokeLinejoin="round"/>
+                    <rect x="72.5" y="64" width="5" height="11" rx="2.5" fill="#B91C1C"/>
+                    <circle cx="75" cy="79" r="2.5" fill="#B91C1C"/>
                   </g>
+                  {/* SOS label badge */}
+                  <rect x="52" y="114" width="46" height="17" rx="8" fill="rgba(255,82,82,0.18)" stroke="rgba(255,82,82,0.5)" strokeWidth="1"/>
+                  <text x="75" y="126.5" fill="#FF6B6B" fontSize="9" fontWeight="800" fontFamily="sans-serif" textAnchor="middle" letterSpacing="2">SOS</text>
                 </svg>
               </div>
               <div className={`${styles.fc2IconBox} ${styles.fc2IconBoxRed}`}>
@@ -772,25 +856,40 @@ export default function Home() {
             {/* 5. Battery */}
             <div className={`${styles.fc2Card} ${styles.fc2CardBattery}`}>
               <div className={styles.fc2Illus}>
-                <svg viewBox="0 0 130 130" fill="none">
+                <svg viewBox="0 0 150 150" fill="none">
                   <defs>
-                    <clipPath id="battClip"><rect x="50" y="16" width="30" height="68" rx="5"/></clipPath>
+                    <clipPath id="battClip"><rect x="54" y="16" width="32" height="78" rx="4"/></clipPath>
                     <filter id="battGlowF"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
                     <linearGradient id="battGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#00E676"/>
+                      <stop offset="0%" stopColor="#69F0AE"/>
+                      <stop offset="60%" stopColor="#00E676"/>
                       <stop offset="100%" stopColor="#00A040"/>
                     </linearGradient>
                   </defs>
-                  <rect x="50" y="16" width="30" height="68" rx="5" fill="rgba(0,200,83,0.07)" filter="url(#battGlowF)"/>
-                  <rect x="50" y="16" width="30" height="68" rx="5" stroke="#00C853" strokeWidth="2.5" fill="rgba(0,200,83,0.04)"/>
-                  <rect x="59" y="8" width="12" height="9" rx="3" fill="#00C853" opacity="0.85"/>
-                  <rect className={styles.fc2BattFill} x="52" y="18" width="26" height="64" rx="4" fill="url(#battGrad)" clipPath="url(#battClip)" opacity="0.92"/>
-                  <path className={styles.fc2BattBolt} d="M71,26 L58,52 L65,52 L57,84 L72,54 L64,54 Z" fill="#061510" opacity="0.85"/>
-                  <circle className={styles.fc2Spark1} cx="88" cy="80" r="3.5" fill="#00E676" opacity="0.75"/>
-                  <circle className={styles.fc2Spark2} cx="93" cy="58" r="2.5" fill="#00C853" opacity="0.65"/>
-                  <circle className={styles.fc2Spark3} cx="88" cy="36" r="3" fill="#00E676" opacity="0.7"/>
-                  <g className={styles.fc2Leaf1}><ellipse cx="108" cy="90" rx="5" ry="8" fill="#00C853" opacity="0.45" transform="rotate(-30,108,90)"/></g>
-                  <g className={styles.fc2Leaf2}><ellipse cx="116" cy="68" rx="4" ry="6.5" fill="#00E676" opacity="0.35" transform="rotate(20,116,68)"/></g>
+                  {/* Battery outer glow */}
+                  <rect x="50" y="12" width="40" height="86" rx="7" fill="rgba(0,230,118,0.08)" filter="url(#battGlowF)" className={styles.fc2BattBolt}/>
+                  {/* Battery body */}
+                  <rect x="52" y="14" width="36" height="82" rx="6" stroke="#00E676" strokeWidth="2.5" fill="rgba(3,12,6,0.85)"/>
+                  {/* Battery tip */}
+                  <rect x="63" y="6" width="14" height="10" rx="3" fill="#00E676"/>
+                  {/* Battery fill — animates from bottom upward, BRIGHT neon green */}
+                  <rect className={styles.fc2BattFill} x="54" y="16" width="32" height="78" rx="4" fill="url(#battGrad)" clipPath="url(#battClip)"/>
+                  {/* Bright top-edge "charge bar" — shows progress clearly */}
+                  <rect x="54" y="16" width="32" height="3" rx="1.5" fill="#B9F6CA" opacity="0.5"/>
+                  {/* Lightning bolt — WHITE so visible on green fill */}
+                  <path d="M81,28 L66,58 L74,58 L67,96 L84,60 L76,60 Z" fill="rgba(255,255,255,0.85)"/>
+                  {/* Bright sparks flying out */}
+                  <circle className={styles.fc2Spark1} cx="98" cy="90" r="5" fill="#86EFAC"/>
+                  <circle className={styles.fc2Spark2} cx="105" cy="64" r="4" fill="#4ADE80"/>
+                  <circle className={styles.fc2Spark3} cx="99" cy="40" r="4.5" fill="#86EFAC"/>
+                  <circle className={styles.fc2Spark4} cx="107" cy="52" r="3" fill="#D1FAE5"/>
+                  {/* Leaf energy particles */}
+                  <g className={styles.fc2Leaf1}><ellipse cx="118" cy="104" rx="5.5" ry="9" fill="#4ADE80" opacity="0.7" transform="rotate(-30,118,104)"/></g>
+                  <g className={styles.fc2Leaf2}><ellipse cx="128" cy="78" rx="4.5" ry="7" fill="#86EFAC" opacity="0.6" transform="rotate(20,128,78)"/></g>
+                  <g className={styles.fc2Leaf3}><ellipse cx="123" cy="53" rx="4" ry="6.5" fill="#BBF7D0" opacity="0.55" transform="rotate(10,123,53)"/></g>
+                  {/* Charging badge */}
+                  <rect x="36" y="107" width="68" height="17" rx="8" fill="rgba(0,200,83,0.2)" stroke="rgba(134,239,172,0.6)" strokeWidth="1"/>
+                  <text x="70" y="119.5" fill="#86EFAC" fontSize="8.5" fontWeight="700" fontFamily="sans-serif" textAnchor="middle" className={styles.fc2BattPct}>CHARGING...</text>
                 </svg>
               </div>
               <div className={`${styles.fc2IconBox} ${styles.fc2IconBoxGreen}`}>
@@ -804,21 +903,47 @@ export default function Home() {
             {/* 6. Privacy */}
             <div className={`${styles.fc2Card} ${styles.fc2CardPrivacy}`}>
               <div className={styles.fc2Illus}>
-                <svg viewBox="0 0 130 130" fill="none">
+                <svg viewBox="0 0 150 150" fill="none">
                   <defs>
-                    <filter id="shieldGlow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <filter id="shieldGlow"><feGaussianBlur stdDeviation="3.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <clipPath id="shieldClip">
+                      <path d="M75,15 L35,30 L35,68 C35,92 53,112 75,120 C97,112 115,92 115,68 L115,30 Z"/>
+                    </clipPath>
                   </defs>
-                  <circle cx="100" cy="95" r="3" fill="#818CF8" opacity="0.6" className={styles.fc2Pt1}/>
-                  <circle cx="85" cy="110" r="2" fill="#6B8EFF" opacity="0.5" className={styles.fc2Pt2}/>
-                  <circle cx="112" cy="80" r="2.5" fill="#818CF8" opacity="0.55" className={styles.fc2Pt3}/>
-                  <circle cx="95" cy="108" r="2" fill="#6B8EFF" opacity="0.4" className={styles.fc2Pt4}/>
-                  <g className={styles.fc2ShieldGrp} filter="url(#shieldGlow)">
-                    <path d="M65,18 L32,32 L32,62 C32,83 47,102 65,110 C83,102 98,83 98,62 L98,32 Z" fill="rgba(79,70,229,0.25)" stroke="#6B8EFF" strokeWidth="2" strokeLinejoin="round"/>
-                    <rect x="53" y="58" width="24" height="20" rx="4" fill="#818CF8" opacity="0.9"/>
-                    <path d="M59,58 L59,52 A6,6 0 0 1 71,52 L71,58" stroke="#818CF8" strokeWidth="3" fill="none" strokeLinecap="round"/>
-                    <circle cx="65" cy="66" r="3.5" fill="rgba(12,21,53,0.8)"/>
-                    <rect x="63.5" y="67" width="3" height="5" rx="1" fill="rgba(12,21,53,0.8)"/>
+                  {/* Floating lock icons — BRIGHT so visible on dark indigo */}
+                  <g className={styles.fc2Pt1}>
+                    <rect x="109" y="96" width="10" height="9" rx="2.5" fill="#A5B4FC"/>
+                    <path d="M111,96 L111,92 A3,3 0 0 1 117,92 L117,96" stroke="#A5B4FC" strokeWidth="2" fill="none"/>
                   </g>
+                  <g className={styles.fc2Pt2}>
+                    <rect x="94" y="117" width="9" height="8" rx="2" fill="#818CF8"/>
+                    <path d="M96,117 L96,113 A2.5,2.5 0 0 1 101,113 L101,117" stroke="#818CF8" strokeWidth="1.8" fill="none"/>
+                  </g>
+                  <g className={styles.fc2Pt3}>
+                    <rect x="122" y="80" width="10" height="9" rx="2.5" fill="#A5B4FC"/>
+                    <path d="M124,80 L124,76 A3,3 0 0 1 130,76 L130,80" stroke="#A5B4FC" strokeWidth="2" fill="none"/>
+                  </g>
+                  <circle cx="26" cy="55" r="3.5" fill="#818CF8" opacity="0.6" className={styles.fc2Pt4}/>
+                  <circle cx="30" cy="98" r="3" fill="#A5B4FC" opacity="0.55" className={styles.fc2Pt5}/>
+                  {/* Shield group — floats, VERY BRIGHT */}
+                  <g className={styles.fc2ShieldGrp} filter="url(#shieldGlow)">
+                    {/* Outer glow */}
+                    <path d="M75,15 L35,30 L35,68 C35,92 53,112 75,120 C97,112 115,92 115,68 L115,30 Z" fill="rgba(99,102,241,0.08)" stroke="#A5B4FC" strokeWidth="2.5" strokeLinejoin="round"/>
+                    {/* Inner fill */}
+                    <path d="M75,20 L40,33 L40,68 C40,90 56,108 75,115 C94,108 110,90 110,68 L110,33 Z" fill="rgba(129,140,248,0.2)"/>
+                    {/* Lock body — bright */}
+                    <rect x="61" y="66" width="28" height="24" rx="5" fill="#A5B4FC"/>
+                    {/* Lock shackle */}
+                    <path d="M68,66 L68,58 A7,7 0 0 1 82,58 L82,66" stroke="#A5B4FC" strokeWidth="3.5" fill="none" strokeLinecap="round"/>
+                    {/* Keyhole */}
+                    <circle cx="75" cy="76" r="4.5" fill="#06091a"/>
+                    <rect x="73" y="78" width="4" height="7" rx="1" fill="#06091a"/>
+                    {/* Scan line — BRIGHT WHITE */}
+                    <rect x="35" y="30" width="80" height="3" rx="1.5" fill="rgba(255,255,255,0.9)" className={styles.fc2ScanLine} clipPath="url(#shieldClip)"/>
+                  </g>
+                  {/* ENCRYPTED label */}
+                  <rect x="30" y="128" width="90" height="16" rx="8" fill="rgba(79,70,229,0.25)" stroke="rgba(165,180,252,0.6)" strokeWidth="1"/>
+                  <text x="75" y="139.5" fill="#C7D2FE" fontSize="7" fontWeight="800" fontFamily="sans-serif" textAnchor="middle" letterSpacing="1.5">ENCRYPTED</text>
                 </svg>
               </div>
               <div className={`${styles.fc2IconBox} ${styles.fc2IconBoxIndigo}`}>
@@ -1274,12 +1399,18 @@ export default function Home() {
             <ul className={styles.footerLinks}><li><a href="#features">Features</a></li><li><a href="#how">How it works</a></li><li><a href="#download">Download</a></li><li><a href="#">Pricing</a></li></ul>
           </div>
           <div className={styles.footerCol}>
-            <h4 className={styles.footerColHeading}>Company</h4>
-            <ul className={styles.footerLinks}><li><a href="#">About Trackalways</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li><li><a href="#">Contact Us</a></li></ul>
+            <h4 className={styles.footerColHeading}>Panels</h4>
+            <ul className={styles.footerLinks}>
+              <li><Link to="/parent">For Parents</Link></li>
+              <li><Link to="/child">For Children</Link></li>
+              <li><Link to="/login">Sign In</Link></li>
+              <li><Link to="/login?redirect=/parent/panel">Parent Panel</Link></li>
+              <li><Link to="/login?redirect=/child/panel">Child Panel</Link></li>
+            </ul>
           </div>
           <div className={styles.footerCol}>
-            <h4 className={styles.footerColHeading}>Support</h4>
-            <ul className={styles.footerLinks}><li><a href="#">Help Center</a></li><li><a href="#">FAQ</a></li><li><a href="#">Report a Bug</a></li><li><a href="#">Community</a></li></ul>
+            <h4 className={styles.footerColHeading}>Company</h4>
+            <ul className={styles.footerLinks}><li><a href="#">About Trackalways</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li><li><a href="#">Contact Us</a></li></ul>
           </div>
         </div>
         <div className={styles.footerBottom}>

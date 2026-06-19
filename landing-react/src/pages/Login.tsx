@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import styles from './Login.module.css'
 
 const API = window.location.origin + '/api/v1'
@@ -11,6 +11,7 @@ function validatePhone(phone: string): boolean {
 
 export default function Login() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
 
   // Login form state
@@ -80,10 +81,12 @@ export default function Login() {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]))
         if (payload.exp && payload.exp * 1000 > Date.now()) {
+          const urlRedirect = searchParams.get('redirect')
           const savedRedirect = localStorage.getItem('gravity_redirect')
           localStorage.removeItem('gravity_redirect')
-          if (savedRedirect) {
-            navigate(savedRedirect)
+          const dest = urlRedirect || savedRedirect
+          if (dest) {
+            navigate(dest)
           } else {
             const storedUser = JSON.parse(localStorage.getItem('gravity_user') || 'null')
             navigate(storedUser?.account_type === 'child' ? '/child/panel' : '/parent/panel')
@@ -94,7 +97,7 @@ export default function Login() {
         localStorage.removeItem('gravity_user')
       }
     }
-  }, [])
+  }, [searchParams])
 
   // Auto-detect tab from URL hash
   useEffect(() => {
@@ -146,10 +149,12 @@ export default function Login() {
   function onLoginSuccess(data: { token: string; user: Record<string, string> }) {
     localStorage.setItem('gravity_token', data.token)
     localStorage.setItem('gravity_user', JSON.stringify(data.user))
+    const urlRedirect = searchParams.get('redirect')
     const savedRedirect = localStorage.getItem('gravity_redirect')
     localStorage.removeItem('gravity_redirect')
-    if (savedRedirect) {
-      navigate(savedRedirect)
+    const dest = urlRedirect || savedRedirect
+    if (dest) {
+      navigate(dest)
     } else {
       const type = data.user?.account_type || accountType
       navigate(type === 'child' ? '/child/panel' : '/parent/panel')
