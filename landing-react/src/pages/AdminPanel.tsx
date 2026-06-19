@@ -1265,7 +1265,7 @@ export default function AdminPanel() {
               onClick={() => setActiveSection(item.key)}
             >
               <span className={styles.navIcon}>{item.icon}</span>
-              <span>{item.label}</span>
+              <span className={styles.navLabel}>{item.label}</span>
             </div>
           ))}
         </div>
