@@ -1,0 +1,75 @@
+# Production — gravity.trackalways.com
+# Caddy auto-provisions TLS via Let's Encrypt
+
+gravity.trackalways.com {
+
+  # ---------- Traccar OsmAnd telemetry — mobile location pings ----------
+  handle /telemetry* {
+    reverse_proxy localhost:5055 {
+      header_up Host {host}
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  # ---------- SSE (Server-Sent Events) — buffering MUST be off ----------
+  @sse path /api/v1/sse/*
+  handle @sse {
+    reverse_proxy localhost:8002 {
+      flush_interval -1
+      header_up Host {host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # ---------- REST API ----------
+  @api path /api/*
+  handle @api {
+    reverse_proxy localhost:8002 {
+      header_up Host {host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # ---------- Traccar Webhooks ----------
+  @webhooks path /webhooks/*
+  handle @webhooks {
+    reverse_proxy localhost:8002 {
+      header_up Host {host}
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  # ---------- Health ----------
+  handle /health {
+    reverse_proxy localhost:8002
+  }
+
+  # ---------- Static web (landing + panels) ----------
+  handle {
+    reverse_proxy localhost:8090
+  }
+
+  # ---------- Security headers ----------
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy strict-origin-when-cross-origin
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    -Server
+  }
+
+  encode gzip
+
+  log {
+    output file /tmp/gravity-caddy-access.log {
+      roll_size 10MiB
+      roll_keep 5
+    }
+    format console
+  }
+}

@@ -1,0 +1,1756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Child Panel | Gravity</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📍</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#050C08;
+  --surface:#0A1A0F;
+  --card:#0D1F13;
+  --card2:#111E16;
+  --green:#00E676;
+  --accent:#00C853;
+  --bright:#00FFB2;
+  --red:#FF5252;
+  --orange:#FFB300;
+  --blue:#29B6F6;
+  --purple:#AB47BC;
+  --white:#FFFFFF;
+  --text2:#5E8B6E;
+  --border:rgba(0,230,118,0.12);
+  --glow:rgba(0,230,118,0.3);
+}
+html{height:100%;scroll-behavior:smooth;}
+body{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  background:radial-gradient(ellipse at 30% 20%, #071A0E 0%, #020A05 55%, #040D07 100%);
+  display:flex;
+  justify-content:center;
+  min-height:100vh;
+  padding:24px 16px;
+  color:var(--white);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── PHONE FRAME ── */
+.app-frame{
+  width:100%;
+  max-width:430px;
+  background:var(--bg);
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  min-height:calc(100vh - 48px);
+}
+@media(min-width:600px){
+  .app-frame{
+    border-radius:44px;
+    box-shadow:
+      0 0 0 10px #0A1A0F,
+      0 0 0 13px #1A3A24,
+      0 40px 100px rgba(0,0,0,.95),
+      0 0 80px rgba(0,230,118,0.12);
+    overflow:hidden;
+    min-height:860px;
+  }
+}
+@media(max-width:599px){
+  body{padding:0;}
+  .app-frame{min-height:100vh;border-radius:0;}
+}
+
+/* ── STATUS BAR ── */
+.status-bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 24px 6px;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.5px;
+  color:var(--white);
+  background:var(--bg);
+  position:sticky;
+  top:0;
+  z-index:100;
+}
+.status-bar .time{font-size:14px;font-weight:800;}
+.status-icons{display:flex;align-items:center;gap:5px;}
+.signal-bars{display:flex;align-items:flex-end;gap:2px;height:12px;}
+.signal-bars span{background:var(--white);border-radius:1px;width:3px;}
+.signal-bars span:nth-child(1){height:4px;}
+.signal-bars span:nth-child(2){height:7px;}
+.signal-bars span:nth-child(3){height:10px;}
+.signal-bars span:nth-child(4){height:12px;opacity:.4;}
+.wifi-icon{font-size:11px;}
+.battery-shell{
+  display:flex;align-items:center;gap:2px;
+  border:1.5px solid rgba(255,255,255,.6);
+  border-radius:3px;
+  padding:1px 2px;
+  width:22px;height:12px;
+  position:relative;
+}
+.battery-shell::after{
+  content:'';position:absolute;right:-4px;top:50%;transform:translateY(-50%);
+  width:2px;height:6px;background:rgba(255,255,255,.6);border-radius:0 1px 1px 0;
+}
+.battery-fill{background:var(--green);border-radius:2px;height:100%;width:34%;}
+
+/* ── HEADER ── */
+.app-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:8px 20px 12px;
+  background:var(--bg);
+  border-bottom:1px solid var(--border);
+  position:sticky;
+  top:38px;
+  z-index:99;
+}
+.header-logo{display:flex;align-items:center;gap:10px;}
+
+/* LOGO */
+.nav-logo-icon{display:flex;align-items:center;justify-content:center;}
+.logo-svg{overflow:visible;filter:drop-shadow(0 0 6px rgba(0,230,118,0.3));transition:filter .3s;}
+.nav-logo-text{font-size:13px;font-weight:900;letter-spacing:4px;text-transform:uppercase;color:#fff;}
+
+.header-right{display:flex;align-items:center;gap:10px;}
+.header-greeting{text-align:right;}
+.header-greeting .hey{font-size:11px;color:var(--text2);font-weight:500;}
+.header-greeting .name{font-size:13px;font-weight:700;color:var(--white);}
+.header-avatar{
+  width:34px;height:34px;border-radius:50%;
+  border:2px solid var(--blue);
+  object-fit:cover;
+  box-shadow:0 0 10px rgba(41,182,246,.4);
+  min-width:34px;
+}
+
+/* ── SCROLLABLE CONTENT ── */
+.tab-content{
+  flex:1;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  padding-bottom:90px;
+}
+.tab-content::-webkit-scrollbar{display:none;}
+.tab-pane{display:none;animation:fadeIn .25s ease;}
+.tab-pane.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{
+  display:flex;
+  align-items:center;
+  justify-content:space-around;
+  padding:8px 0 calc(env(safe-area-inset-bottom) + 8px);
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  position:sticky;
+  bottom:0;
+  z-index:100;
+  overflow:visible;
+}
+.nav-tab{
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:6px 10px;border-radius:14px;cursor:pointer;
+  transition:all .2s ease;flex:1;
+  background:none;border:none;color:var(--text2);
+  font-family:'Plus Jakarta Sans',sans-serif;
+  min-height:44px;
+}
+.nav-tab.active{color:var(--green);}
+.nav-tab.active .nav-icon{color:var(--green);}
+.nav-tab .nav-icon{font-size:20px;transition:transform .2s;}
+.nav-tab .nav-label{font-size:10px;font-weight:600;letter-spacing:.3px;}
+.nav-tab:active .nav-icon{transform:scale(.88);}
+
+/* SOS NAV TAB — floating action button style */
+.nav-tab.sos-tab{
+  position:relative;
+  flex:none;
+  width:60px;
+  padding:0;
+  display:flex;flex-direction:column;align-items:center;gap:0;
+}
+.sos-nav-circle{
+  width:60px;height:60px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#FF5252,#FF1744 45%,#B71C1C 100%);
+  display:flex;align-items:center;justify-content:center;
+  transform:translateY(-16px);
+  box-shadow:0 0 0 3px var(--surface),0 4px 20px rgba(255,23,68,.6),0 0 30px rgba(255,23,68,.35);
+  animation:sosNavPulse 2s ease-in-out infinite;
+  font-size:13px;font-weight:900;color:#fff;letter-spacing:1px;
+  font-family:'Plus Jakarta Sans',sans-serif;
+  flex-shrink:0;
+}
+.sos-nav-label{
+  font-size:10px;font-weight:700;color:var(--red);
+  letter-spacing:.3px;
+  margin-top:-10px;
+}
+.nav-tab.sos-tab.active .sos-nav-circle{
+  box-shadow:0 0 0 3px var(--surface),0 4px 24px rgba(255,23,68,.8),0 0 40px rgba(255,23,68,.5);
+}
+@keyframes sosNavPulse{
+  0%{box-shadow:0 0 0 3px var(--surface),0 4px 20px rgba(255,23,68,.6),0 0 0 0 rgba(255,23,68,.5);}
+  50%{box-shadow:0 0 0 3px var(--surface),0 4px 20px rgba(255,23,68,.6),0 0 0 8px rgba(255,23,68,0);}
+  100%{box-shadow:0 0 0 3px var(--surface),0 4px 20px rgba(255,23,68,.6),0 0 0 0 rgba(255,23,68,0);}
+}
+
+/* ── SOS ANIMATIONS ── */
+@keyframes sosPulse{
+  0%{box-shadow:0 8px 32px rgba(255,82,82,.5),0 0 0 0 rgba(255,82,82,.55);}
+  50%{box-shadow:0 8px 32px rgba(255,82,82,.7),0 0 0 14px rgba(255,82,82,0);}
+  100%{box-shadow:0 8px 32px rgba(255,82,82,.5),0 0 0 0 rgba(255,82,82,0);}
+}
+@keyframes sosBigPulse{
+  0%{box-shadow:0 8px 40px rgba(255,82,82,.6),0 0 0 0 rgba(255,82,82,.5);}
+  50%{box-shadow:0 8px 40px rgba(255,82,82,.8),0 0 0 18px rgba(255,82,82,0);}
+  100%{box-shadow:0 8px 40px rgba(255,82,82,.6),0 0 0 0 rgba(255,82,82,0);}
+}
+@keyframes sosRing{
+  0%{transform:scale(1);opacity:.8;}
+  100%{transform:scale(2.2);opacity:0;}
+}
+.sos-ring-1{animation:sosRing 2s ease-out infinite;}
+.sos-ring-2{animation:sosRing 2s ease-out infinite .6s;}
+.sos-ring-3{animation:sosRing 2s ease-out infinite 1.2s;}
+@keyframes countFlash{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.1)}}
+
+/* ── SECTION PADDING ── */
+.section{padding:16px 16px 0;}
+.section-title{
+  font-size:13px;font-weight:700;color:var(--text2);
+  letter-spacing:1.5px;text-transform:uppercase;
+  margin-bottom:12px;
+}
+
+/* ── GREETING CARD ── */
+.greeting-card{
+  background:linear-gradient(135deg,#0D2B18 0%,#0A1F13 100%);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:18px;
+  margin-bottom:14px;
+  position:relative;
+  overflow:hidden;
+}
+.greeting-card::before{
+  content:'';position:absolute;top:-30px;right:-20px;
+  width:120px;height:120px;border-radius:50%;
+  background:radial-gradient(circle,rgba(0,230,118,.1) 0%,transparent 70%);
+}
+.greeting-time{font-size:11px;color:var(--text2);font-weight:500;margin-bottom:4px;}
+.greeting-name{font-size:22px;font-weight:800;color:var(--white);margin-bottom:6px;}
+.greeting-sub{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;}
+.online-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 6px var(--green);
+  animation:blink 1.5s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── LOCATION CARD ── */
+.location-card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-left:3px solid var(--blue);
+  border-radius:20px;
+  padding:16px;
+  display:flex;align-items:center;gap:14px;
+  margin-bottom:14px;
+}
+.loc-icon{font-size:24px;}
+.loc-info{flex:1;}
+.loc-name{font-size:15px;font-weight:700;}
+.loc-time{font-size:11px;color:var(--text2);margin-top:3px;display:flex;align-items:center;gap:5px;}
+.loc-pulse{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;}
+
+/* ── BIG SOS BUTTON (HOME) ── */
+.sos-section{
+  padding:24px 16px;
+  display:flex;flex-direction:column;align-items:center;
+  gap:16px;
+}
+.sos-wrapper{
+  position:relative;
+  width:200px;height:200px;
+  display:flex;align-items:center;justify-content:center;
+}
+.sos-ring{
+  position:absolute;
+  border-radius:50%;
+  width:140px;height:140px;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(1);
+}
+.sos-ring-1{border:2px solid rgba(255,82,82,0.7);}
+.sos-ring-2{border:2px solid rgba(255,82,82,0.45);}
+.sos-ring-3{border:2px solid rgba(255,82,82,0.25);}
+.sos-btn-main{
+  width:140px;height:140px;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%,#FF5252 0%,#B71C1C 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;user-select:none;
+  animation:sosPulse 2s ease-in-out infinite;
+  border:none;
+  position:relative;z-index:2;
+  transition:transform .15s;
+  min-width:140px;min-height:140px;
+  flex-shrink:0;
+}
+.sos-btn-main:active{transform:scale(.95);}
+.sos-btn-main .sos-text{font-size:28px;font-weight:900;color:#fff;letter-spacing:4px;line-height:1;}
+.sos-btn-main .sos-sub{font-size:9px;font-weight:600;color:rgba(255,255,255,.7);letter-spacing:2px;margin-top:4px;}
+.sos-countdown{
+  font-size:42px;font-weight:900;color:#fff;
+  display:none;
+  animation:countFlash .5s ease-in-out infinite;
+}
+.sos-hint{font-size:12px;color:var(--text2);text-align:center;line-height:1.5;}
+.sos-contacts-hint{font-size:11px;color:var(--green);font-weight:600;text-align:center;}
+
+/* ── QUICK ACTIONS ── */
+.quick-actions{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;
+  padding:0 16px 14px;
+}
+.qa-card{
+  background:rgba(13,31,19,.85);
+  backdrop-filter:blur(10px);
+  border-radius:20px;
+  padding:18px 14px;
+  cursor:pointer;
+  transition:transform .18s ease, box-shadow .18s ease;
+  display:flex;flex-direction:column;gap:8px;
+  position:relative;overflow:hidden;
+  min-height:44px;
+}
+.qa-card::after{
+  content:'';position:absolute;inset:0;border-radius:20px;
+  background:transparent;
+  transition:background .15s;
+}
+.qa-card:active{transform:scale(.95);}
+.qa-card:active::after{background:rgba(255,255,255,.04);}
+.qa-icon{
+  font-size:32px;line-height:1;
+}
+.qa-label{font-size:13px;font-weight:700;color:var(--white);}
+.qa-desc{font-size:10px;color:var(--text2);font-weight:500;}
+.qa-card.safe{
+  border:1px solid rgba(0,230,118,0.3);
+  border-left:3px solid var(--green);
+}
+.qa-card.safe .qa-icon{filter:drop-shadow(0 0 8px rgba(0,230,118,0.7));}
+.qa-card.share{
+  border:1px solid rgba(41,182,246,0.3);
+  border-left:3px solid var(--blue);
+}
+.qa-card.share .qa-icon{filter:drop-shadow(0 0 8px rgba(41,182,246,0.7));}
+.qa-card.arrive{
+  border:1px solid rgba(255,179,0,0.3);
+  border-left:3px solid var(--orange);
+}
+.qa-card.arrive .qa-icon{filter:drop-shadow(0 0 8px rgba(255,179,0,0.7));}
+.qa-card.message{
+  border:1px solid rgba(171,71,188,0.3);
+  border-left:3px solid var(--purple);
+}
+.qa-card.message .qa-icon{filter:drop-shadow(0 0 8px rgba(171,71,188,0.7));}
+
+/* ── FAMILY STRIP ── */
+.family-safe-banner{
+  margin:0 16px 12px;
+  background:rgba(0,230,118,.08);
+  border:1px solid rgba(0,230,118,.2);
+  border-radius:12px;
+  padding:8px 14px;
+  font-size:12px;font-weight:600;color:var(--green);
+  display:flex;align-items:center;gap:7px;
+}
+.family-scroll-wrap{
+  overflow-x:auto;
+  padding:0 16px 16px;
+  scrollbar-width:none;
+}
+.family-scroll-wrap::-webkit-scrollbar{display:none;}
+.family-scroll{display:flex;gap:14px;min-width:max-content;}
+.family-mini{
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  cursor:pointer;
+  min-width:44px;
+}
+.family-mini-ring{
+  position:relative;
+  width:56px;height:56px;border-radius:50%;
+  padding:2.5px;
+}
+.family-mini-ring img{
+  width:100%;height:100%;border-radius:50%;object-fit:cover;
+  border:2px solid var(--bg);
+}
+.family-mini-indicator{
+  position:absolute;bottom:1px;right:1px;
+  width:12px;height:12px;border-radius:50%;
+  background:var(--green);
+  border:2px solid var(--bg);
+  box-shadow:0 0 5px var(--green);
+}
+.family-mini-indicator.offline{background:#444;box-shadow:none;}
+.family-mini-name{font-size:10px;font-weight:600;color:var(--white);}
+
+/* ── MAP TAB ── */
+#map-leaflet{height:380px;width:100%;border-radius:0;}
+/* Map type switcher */
+.map-type-switcher{position:absolute;bottom:14px;right:12px;z-index:1000;display:flex;gap:3px;background:rgba(5,12,8,.9);border:1px solid rgba(0,230,118,.22);border-radius:14px;padding:5px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 4px 24px rgba(0,0,0,.6);}
+.map-type-btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 9px;border-radius:9px;border:1px solid transparent;background:transparent;color:#5E8B6E;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;transition:all .2s;font-family:'Plus Jakarta Sans',sans-serif;min-width:42px;line-height:1;}
+.map-type-btn .mti{font-size:15px;margin-bottom:2px;display:block;}
+.map-type-btn.active{background:rgba(0,230,118,.15);color:#00E676;border-color:rgba(0,230,118,.35);}
+.map-type-btn:hover:not(.active){background:rgba(255,255,255,.06);color:#ccc;}
+/* Zoom controls */
+.map-zoom-ctrl{position:absolute;bottom:14px;left:12px;z-index:1000;display:flex;flex-direction:column;gap:4px;}
+.map-zoom-btn{width:38px;height:38px;background:rgba(5,12,8,.9);border:1px solid rgba(0,230,118,.22);border-radius:11px;color:#00E676;font-size:22px;font-weight:300;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(14px);transition:all .2s;font-family:system-ui,sans-serif;}
+.map-zoom-btn:hover{background:rgba(0,230,118,.15);border-color:rgba(0,230,118,.4);}
+.map-zoom-btn:active{transform:scale(.9);}
+/* Animated connection lines */
+.conn-line { stroke-dasharray: 10 7 !important; animation: dashFlow 1.4s linear infinite; }
+@keyframes dashFlow { to { stroke-dashoffset: -17; } }
+/* Marker pulse ring */
+.marker-pulse { position:absolute; top:50%; left:50%; transform:translate(-50%,-54%); border-radius:50%; pointer-events:none; z-index:0; animation: markerPulse 2s ease-out infinite; }
+@keyframes markerPulse { 0%{transform:translate(-50%,-54%) scale(0.8);opacity:0.7} 100%{transform:translate(-50%,-54%) scale(2.2);opacity:0} }
+/* Leaflet overrides */
+.leaflet-container { background: #050C08; }
+.leaflet-control-attribution { display: none !important; }
+.leaflet-popup-content-wrapper { background: #0D1F13 !important; border: 1px solid rgba(0,230,118,0.2) !important; border-radius: 12px !important; box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important; padding: 0 !important; }
+.leaflet-popup-tip { background: #0D1F13 !important; }
+.leaflet-popup-content { margin: 0 !important; }
+.map-header{padding:16px;display:flex;justify-content:space-between;align-items:center;}
+.map-title{font-size:17px;font-weight:800;}
+.map-sub{font-size:11px;color:var(--text2);}
+.nearest-card{
+  margin:14px 16px 0;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-left:3px solid var(--blue);
+  border-radius:20px;
+  padding:16px;
+}
+.nearest-label{font-size:11px;color:var(--text2);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;}
+.nearest-info{display:flex;align-items:center;gap:10px;}
+.nearest-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid var(--green);}
+.nearest-name{font-size:15px;font-weight:700;}
+.nearest-dist{font-size:12px;color:var(--green);font-weight:600;}
+.distance-badges{padding:14px 16px 0;display:flex;flex-wrap:wrap;gap:8px;}
+.dist-badge{
+  background:var(--card2);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:5px 12px;
+  font-size:11px;font-weight:600;
+  display:flex;align-items:center;gap:5px;
+}
+.dist-dot{width:8px;height:8px;border-radius:50%;}
+
+/* ── SOS TAB ── */
+.sos-tab-header{
+  padding:24px 16px 8px;
+  text-align:center;
+}
+.sos-tab-title{font-size:22px;font-weight:900;color:var(--red);letter-spacing:.5px;}
+.sos-tab-sub{font-size:12px;color:var(--text2);margin-top:4px;}
+.sos-big-wrap{
+  display:flex;flex-direction:column;align-items:center;
+  padding:24px 16px;gap:20px;
+}
+.sos-big-ring-wrap{
+  position:relative;width:220px;height:220px;
+  display:flex;align-items:center;justify-content:center;
+}
+.sos-big-ring{
+  position:absolute;border-radius:50%;
+  width:160px;height:160px;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(1);
+}
+.sos-big-ring.sos-ring-1{border:2px solid rgba(255,82,82,0.7);}
+.sos-big-ring.sos-ring-2{border:2px solid rgba(255,82,82,0.45);}
+.sos-big-ring.sos-ring-3{border:2px solid rgba(255,82,82,0.22);}
+.sos-btn-big{
+  width:160px;height:160px;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%,#FF5252 0%,#B71C1C 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;user-select:none;
+  animation:sosBigPulse 2s ease-in-out infinite;
+  border:none;
+  position:relative;z-index:2;
+  transition:transform .15s;
+  min-width:160px;min-height:160px;
+  flex-shrink:0;
+  -webkit-tap-highlight-color:transparent;
+}
+.sos-btn-big:active{transform:scale(.95);}
+.sos-btn-big .sos-main-text{font-size:32px;font-weight:900;color:#fff;letter-spacing:4px;line-height:1;}
+.sos-btn-big .sos-inst{font-size:10px;font-weight:600;color:rgba(255,255,255,.75);letter-spacing:1.5px;margin-top:5px;}
+.sos-countdown-big{
+  font-size:56px;font-weight:900;color:#fff;
+  display:none;
+  animation:countFlash .5s ease-in-out infinite;
+}
+.hold-instructions{
+  font-size:13px;color:var(--text2);text-align:center;line-height:1.6;
+}
+
+/* Quick Messages */
+.quick-msgs{padding:0 16px 16px;}
+.qm-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+.qm-btn{
+  border:none;border-radius:16px;
+  padding:14px 12px;
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:12px;font-weight:700;
+  cursor:pointer;transition:all .2s;
+  letter-spacing:.3px;
+  min-height:44px;
+}
+.qm-btn:active{transform:scale(.95);}
+.qm-red{background:rgba(255,23,68,.15);color:var(--red);border:1px solid rgba(255,23,68,.3);}
+.qm-orange{background:rgba(255,179,0,.12);color:var(--orange);border:1px solid rgba(255,179,0,.3);}
+.qm-blue{background:rgba(41,182,246,.12);color:var(--blue);border:1px solid rgba(41,182,246,.3);}
+.qm-green{background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.25);}
+
+/* Emergency Contacts */
+.emerg-contacts{padding:0 16px 20px;}
+.emerg-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:14px 16px;
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:10px;
+}
+.emerg-card.police{border-left:3px solid var(--red);background:rgba(255,23,68,.06);}
+.emerg-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;}
+.emerg-name{font-size:13px;font-weight:700;flex:1;}
+.emerg-phone{font-size:11px;color:var(--text2);margin-top:2px;}
+.call-btn{
+  padding:7px 14px;border-radius:12px;border:none;
+  font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:700;
+  cursor:pointer;transition:all .2s;
+  min-height:44px;min-width:44px;
+}
+.call-btn:active{transform:scale(.94);}
+.call-green{background:rgba(0,230,118,.15);color:var(--green);}
+.call-red{background:var(--red);color:#fff;box-shadow:0 4px 14px rgba(255,82,82,.4);}
+
+/* ── FAMILY TAB ── */
+.family-tab-header{padding:20px 16px 8px;}
+.family-tab-title{font-size:19px;font-weight:800;}
+.family-tab-sub{font-size:12px;color:var(--text2);margin-top:3px;}
+.family-cards{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px;}
+.fm-card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:16px;
+  display:flex;align-items:center;gap:14px;
+  cursor:pointer;
+  transition:all .25s;
+  position:relative;overflow:hidden;
+}
+.fm-card:active{transform:scale(.98);}
+.fm-card-left{position:relative;}
+.fm-avatar{width:52px;height:52px;border-radius:50%;object-fit:cover;border:2.5px solid;}
+.fm-status-dot{
+  position:absolute;bottom:1px;right:1px;
+  width:13px;height:13px;border-radius:50%;
+  border:2px solid var(--card);
+  background:var(--green);
+}
+.fm-info{flex:1;}
+.fm-name{font-size:14px;font-weight:700;}
+.fm-role{font-size:11px;color:var(--text2);font-weight:500;margin-bottom:5px;}
+.fm-meta{display:flex;gap:10px;align-items:center;}
+.fm-dist{font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px;}
+.fm-battery{font-size:10px;color:var(--text2);display:flex;align-items:center;gap:5px;}
+.batt-bar{width:36px;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;flex-shrink:0;}
+.batt-fill{height:100%;border-radius:3px;transition:width 0.6s cubic-bezier(0.16,1,0.3,1);}
+.fm-status-tag{
+  font-size:10px;font-weight:600;
+  padding:3px 10px;border-radius:20px;
+  background:rgba(0,230,118,.1);color:var(--green);
+  border:1px solid rgba(0,230,118,.2);
+}
+.map-tap-hint{font-size:10px;color:var(--text2);margin-top:6px;}
+
+/* ── PROFILE TAB ── */
+.profile-header{
+  padding:24px 16px 16px;
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  text-align:center;
+}
+.profile-avatar-wrap{
+  position:relative;width:90px;height:90px;
+}
+.profile-avatar{
+  width:90px;height:90px;border-radius:50%;object-fit:cover;
+  border:3px solid var(--green);
+  box-shadow:0 0 20px rgba(0,230,118,.35);
+}
+.profile-edit-btn{
+  position:absolute;bottom:0;right:0;
+  width:28px;height:28px;border-radius:50%;
+  background:var(--green);color:var(--bg);
+  font-size:12px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;border:2px solid var(--bg);
+  font-weight:800;
+}
+.profile-name{font-size:20px;font-weight:800;}
+.profile-age{font-size:12px;color:var(--text2);font-weight:500;}
+.profile-edit-full{
+  margin-top:6px;
+  padding:8px 22px;border-radius:20px;
+  background:rgba(0,230,118,.12);color:var(--green);
+  font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:700;
+  cursor:pointer;border:1px solid rgba(0,230,118,.25);
+  transition:all .2s;
+  min-height:44px;
+}
+.profile-edit-full:active{transform:scale(.96);}
+
+/* Toggle rows */
+.toggle-section{padding:0 16px;margin-bottom:16px;}
+.toggle-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:20px;padding:6px 4px;overflow:hidden;
+}
+.toggle-row{
+  display:flex;align-items:center;gap:12px;
+  padding:13px 16px;
+  border-bottom:1px solid var(--border);
+}
+.toggle-row:last-child{border-bottom:none;}
+.toggle-icon{font-size:18px;width:28px;text-align:center;}
+.toggle-info{flex:1;}
+.toggle-label{font-size:13px;font-weight:600;}
+.toggle-desc{font-size:10px;color:var(--text2);margin-top:2px;}
+.toggle-switch{
+  width:44px;height:24px;border-radius:12px;
+  background:rgba(0,230,118,.2);
+  position:relative;cursor:pointer;
+  transition:background .25s;
+  border:none;
+  flex-shrink:0;
+  min-width:44px;min-height:24px;
+}
+.toggle-switch.on{background:var(--green);}
+.toggle-thumb{
+  position:absolute;top:2px;left:2px;
+  width:20px;height:20px;border-radius:50%;
+  background:#fff;
+  transition:transform .25s;
+  box-shadow:0 1px 4px rgba(0,0,0,.3);
+}
+.toggle-switch.on .toggle-thumb{transform:translateX(20px);}
+
+/* Precision segmented */
+.prec-wrap{display:flex;gap:6px;margin-top:6px;}
+.prec-btn{
+  flex:1;padding:7px 0;border-radius:10px;border:none;
+  font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:600;
+  cursor:pointer;background:rgba(255,255,255,.05);color:var(--text2);
+  transition:all .2s;
+  min-height:44px;
+}
+.prec-btn.active{background:rgba(0,230,118,.15);color:var(--green);border:1px solid rgba(0,230,118,.3);}
+
+/* Stats */
+.stats-row{
+  padding:0 16px;display:flex;gap:10px;margin-bottom:16px;
+}
+.stat-card{
+  flex:1;background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:14px 12px;text-align:center;
+}
+.stat-val{font-size:18px;font-weight:800;color:var(--green);}
+.stat-label{font-size:9px;color:var(--text2);font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-top:3px;line-height:1.3;}
+
+/* Links */
+.profile-links{padding:0 16px 24px;display:flex;flex-direction:column;gap:8px;}
+.profile-link{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:14px 16px;
+  display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;transition:all .2s;
+  text-decoration:none;color:var(--white);
+  min-height:44px;
+}
+.profile-link:active{transform:scale(.98);}
+.profile-link-text{font-size:13px;font-weight:600;}
+.profile-link-arrow{color:var(--text2);font-size:14px;}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;
+  top:80px;right:16px;
+  transform:translateX(0) translateY(-8px);
+  background:var(--card);
+  border:1px solid var(--green);
+  border-radius:12px;
+  padding:12px 20px;
+  font-size:13px;font-weight:600;
+  color:var(--green);
+  z-index:9999;
+  opacity:0;
+  transition:opacity .3s ease, transform .3s ease;
+  white-space:nowrap;
+  box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 16px rgba(0,230,118,.12);
+  pointer-events:none;
+  max-width:280px;
+  white-space:normal;
+}
+.toast.show{opacity:1;transform:translateX(0) translateY(0);}
+.toast.toast-sos{
+  border-color:var(--red);
+  color:var(--red);
+  box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 20px rgba(255,82,82,.2);
+}
+
+/* ── CARD REVEAL ── */
+.reveal{opacity:0;transform:translateY(16px);transition:all .4s ease;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+
+/* ── LEAFLET OVERRIDES ── */
+.leaflet-container{background:#050C08!important;}
+.leaflet-tile{filter:brightness(.9) saturate(.9);}
+.leaflet-control-zoom{display:none;}
+.leaflet-attribution-flag{display:none!important;}
+.leaflet-control-attribution{font-size:8px;background:rgba(5,12,8,.7)!important;color:var(--text2)!important;}
+
+/* ── CUSTOM MARKERS ── */
+.custom-marker{
+  position:relative;display:flex;flex-direction:column;align-items:center;
+}
+.custom-marker img{
+  width:40px;height:40px;border-radius:50%;
+  border:2.5px solid;object-fit:cover;
+}
+.marker-name{
+  font-size:9px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;
+  background:rgba(5,12,8,.85);
+  color:#fff;padding:2px 5px;border-radius:4px;margin-top:2px;
+  white-space:nowrap;
+}
+.my-marker img{
+  width:46px;height:46px;
+  box-shadow:0 0 0 3px rgba(41,182,246,.5),0 0 14px rgba(41,182,246,.4);
+}
+
+/* scrollable map */
+.map-container{position:relative;overflow:hidden;}
+
+/* ── SOS SENT FLASH ── */
+@keyframes sentFlash{
+  0%{background:radial-gradient(circle at 38% 32%,#FF5252 0%,#B71C1C 100%);}
+  30%{background:radial-gradient(circle at 38% 32%,#00E676 0%,#00C853 100%);}
+  60%{background:radial-gradient(circle at 38% 32%,#00FFB2 0%,#00E676 100%);}
+  100%{background:radial-gradient(circle at 38% 32%,#00E676 0%,#00C853 100%);}
+}
+</style>
+</head>
+<body>
+
+<div class="app-frame" id="appFrame">
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="status-icons">
+      <div class="signal-bars">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <span class="wifi-icon">&#x1F4F6;</span>
+      <div class="battery-shell"><div class="battery-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <div class="app-header">
+    <div class="header-logo">
+      <div class="nav-logo-icon">
+        <svg class="logo-svg" width="28" height="28" viewBox="0 0 40 40" fill="none">
+          <defs>
+            <linearGradient id="pinGradP" x1="12" y1="4" x2="28" y2="26" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#00FFB2"/>
+              <stop offset="100%" stop-color="#00C853"/>
+            </linearGradient>
+          </defs>
+          <path d="M20 4C14.48 4 10 8.48 10 14c0 8.5 10 22 10 22s10-13.5 10-22c0-5.52-4.48-10-10-10z" fill="url(#pinGradP)"/>
+          <circle cx="20" cy="13.5" r="3.5" fill="rgba(5,12,8,0.85)"/>
+        </svg>
+      </div>
+      <span class="nav-logo-text">Gravity</span>
+    </div>
+    <div class="header-right">
+      <div class="header-greeting">
+        <div class="hey">Welcome back</div>
+        <div class="name" id="headerUserName">Hey 👋</div>
+      </div>
+      <img class="header-avatar" id="headerAvatar" src="https://picsum.photos/seed/gravity-user/56/56" alt="User">
+    </div>
+  </div>
+
+  <!-- SCROLLABLE CONTENT -->
+  <div class="tab-content" id="tabContent">
+
+    <!-- ══════════ TAB 1: HOME ══════════ -->
+    <div class="tab-pane active" id="tab-home">
+
+      <!-- MY STATUS -->
+      <div class="section">
+        <div class="section-title">My Status</div>
+
+        <div class="greeting-card reveal">
+          <div class="greeting-time" id="currentTime">Good morning · 9:41 AM</div>
+          <div class="greeting-name" id="greetingName">Good morning ☀️</div>
+          <div class="greeting-sub">
+            <div class="online-dot"></div>
+            Your family can see your location
+          </div>
+        </div>
+
+        <div class="location-card reveal">
+          <div class="loc-icon">📍</div>
+          <div class="loc-info">
+            <div class="loc-name" id="locName">Location sharing active</div>
+            <div class="loc-time">
+              <div class="loc-pulse"></div>
+              Updated 30 sec ago
+            </div>
+          </div>
+          <div style="color:var(--green);font-size:11px;font-weight:700;">LIVE</div>
+        </div>
+      </div>
+
+      <!-- BIG SOS BUTTON -->
+      <div class="sos-section">
+        <div class="sos-wrapper">
+          <div class="sos-ring sos-ring-1"></div>
+          <div class="sos-ring sos-ring-2"></div>
+          <div class="sos-ring sos-ring-3"></div>
+          <button class="sos-btn-main" id="homeSosBtn" aria-label="SOS Emergency Button">
+            <span class="sos-text" id="homeSosText">SOS</span>
+            <span class="sos-sub" id="homeSosSub">EMERGENCY</span>
+            <span class="sos-countdown" id="homeSosCountdown"></span>
+          </button>
+        </div>
+        <div class="sos-hint">Hold <strong style="color:var(--red)">3 seconds</strong> to send emergency alert</div>
+        <div class="sos-contacts-hint">Alerts: Mom, Dad + 2 more</div>
+      </div>
+
+      <!-- QUICK ACTIONS -->
+      <div class="section">
+        <div class="section-title">Quick Actions</div>
+      </div>
+      <div class="quick-actions">
+        <div class="qa-card safe reveal" onclick="triggerImSafe(this)">
+          <div class="qa-icon">✅</div>
+          <div class="qa-label">I'm Safe</div>
+          <div class="qa-desc">Notify all family members</div>
+        </div>
+        <div class="qa-card share reveal" onclick="triggerShareLocation()">
+          <div class="qa-icon">📍</div>
+          <div class="qa-label">Share Location</div>
+          <div class="qa-desc">Send live location link</div>
+        </div>
+        <div class="qa-card arrive reveal" onclick="triggerArriveSafe()">
+          <div class="qa-icon">🔔</div>
+          <div class="qa-label">Arrive Safe</div>
+          <div class="qa-desc">Set destination alert</div>
+        </div>
+        <div class="qa-card message reveal" onclick="triggerMessage()">
+          <div class="qa-icon">💬</div>
+          <div class="qa-label">Message Family</div>
+          <div class="qa-desc">Open group chat</div>
+        </div>
+      </div>
+
+      <!-- FAMILY STATUS STRIP -->
+      <div class="section">
+        <div class="section-title" style="margin-bottom:8px;">Family Circle</div>
+      </div>
+      <div class="family-safe-banner reveal">
+        <span>✓</span> <span id="familySafeBanner">Family members are safe</span>
+      </div>
+      <div class="family-scroll-wrap">
+        <div class="family-scroll" id="familyStrip"></div>
+      </div>
+
+    </div><!-- /tab-home -->
+
+
+    <!-- ══════════ TAB 2: MAP ══════════ -->
+    <div class="tab-pane" id="tab-map">
+      <div class="map-header">
+        <div>
+          <div class="map-title">Family Map</div>
+          <div class="map-sub">Live locations · Updated now</div>
+        </div>
+        <div style="font-size:11px;color:var(--green);font-weight:700;background:rgba(0,230,118,.1);padding:5px 10px;border-radius:10px;border:1px solid rgba(0,230,118,.25);">
+          🟢 ALL SAFE
+        </div>
+      </div>
+
+      <div class="map-container">
+        <div id="map-leaflet"></div>
+        <div class="map-type-switcher" id="mapTypeSwitcher">
+          <button class="map-type-btn active" onclick="switchMapType('dark')" data-type="dark"><span class="mti">🌙</span>Dark</button>
+          <button class="map-type-btn" onclick="switchMapType('light')" data-type="light"><span class="mti">☀️</span>Light</button>
+          <button class="map-type-btn" onclick="switchMapType('satellite')" data-type="satellite"><span class="mti">🛰️</span>Sat</button>
+          <button class="map-type-btn" onclick="switchMapType('street')" data-type="street"><span class="mti">🗺️</span>Street</button>
+        </div>
+        <div class="map-zoom-ctrl">
+          <button class="map-zoom-btn" onclick="mapZoomIn()">+</button>
+          <button class="map-zoom-btn" onclick="mapZoomOut()">−</button>
+        </div>
+      </div>
+
+      <div class="distance-badges" id="distBadges"></div>
+
+      <div class="nearest-card reveal">
+        <div class="nearest-label">Nearest Family Member</div>
+        <div class="nearest-info">
+          <img class="nearest-avatar" src="https://picsum.photos/seed/woman-mom/56/56" alt="Mom">
+          <div>
+            <div class="nearest-name">Mom</div>
+            <div class="nearest-dist">📍 0.8 km away · Santacruz West</div>
+          </div>
+        </div>
+      </div>
+      <div style="height:20px;"></div>
+    </div><!-- /tab-map -->
+
+
+    <!-- ══════════ TAB 3: SOS ══════════ -->
+    <div class="tab-pane" id="tab-sos">
+      <div class="sos-tab-header">
+        <div class="sos-tab-title">🚨 Emergency SOS</div>
+        <div class="sos-tab-sub">Press and hold to send emergency alert to family</div>
+      </div>
+
+      <div class="sos-big-wrap">
+        <div class="sos-big-ring-wrap">
+          <div class="sos-big-ring sos-ring-1"></div>
+          <div class="sos-big-ring sos-ring-2"></div>
+          <div class="sos-big-ring sos-ring-3"></div>
+          <button class="sos-btn-big" id="bigSosBtn" aria-label="Big SOS Button">
+            <span class="sos-main-text" id="bigSosText">SOS</span>
+            <span class="sos-inst" id="bigSosInst">PRESS &amp; HOLD</span>
+            <span class="sos-countdown-big" id="bigSosCountdown"></span>
+          </button>
+        </div>
+        <div class="hold-instructions">
+          Hold for <strong style="color:var(--red)">3 seconds</strong> to activate<br>
+          <span style="font-size:11px;">Your GPS location will be sent instantly</span>
+        </div>
+      </div>
+
+      <!-- Quick Messages -->
+      <div class="quick-msgs">
+        <div class="section-title" style="padding-left:0;margin-bottom:0;">Quick Messages</div>
+        <div class="qm-grid">
+          <button class="qm-btn qm-red" onclick="sendQuickMsg('I need help!')">🆘 I need help!</button>
+          <button class="qm-btn qm-orange" onclick="sendQuickMsg('I\'m in danger')">⚠️ I'm in danger</button>
+          <button class="qm-btn qm-blue" onclick="sendQuickMsg('Call me now')">📞 Call me now</button>
+          <button class="qm-btn qm-green" onclick="sendQuickMsg('Come pick me up')">🚗 Come pick me up</button>
+        </div>
+      </div>
+
+      <!-- Emergency Contacts -->
+      <div class="emerg-contacts">
+        <div class="section-title" style="padding-left:0;margin-bottom:10px;">Emergency Contacts</div>
+
+        <div class="emerg-card">
+          <img class="emerg-avatar" src="https://picsum.photos/seed/woman-mom/56/56" alt="Mom" style="border:2px solid #00E676;">
+          <div style="flex:1;">
+            <div class="emerg-name">Mom</div>
+            <div class="emerg-phone">📞 +91-98765-43210</div>
+          </div>
+          <button class="call-btn call-green" onclick="showToast('📞 Calling Mom...')">Call</button>
+        </div>
+
+        <div class="emerg-card">
+          <img class="emerg-avatar" src="https://picsum.photos/seed/man-dad/56/56" alt="Dad" style="border:2px solid #00C853;">
+          <div style="flex:1;">
+            <div class="emerg-name">Dad</div>
+            <div class="emerg-phone">📞 +91-98765-43211</div>
+          </div>
+          <button class="call-btn call-green" onclick="showToast('📞 Calling Dad...')">Call</button>
+        </div>
+
+        <div class="emerg-card police">
+          <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,23,68,.15);display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid var(--red);">🚔</div>
+          <div style="flex:1;">
+            <div class="emerg-name">Emergency Services</div>
+            <div class="emerg-phone">📞 112 · Police / Ambulance</div>
+          </div>
+          <button class="call-btn call-red" onclick="showToast('🚨 Calling 112...')">Call</button>
+        </div>
+      </div>
+
+    </div><!-- /tab-sos -->
+
+
+    <!-- ══════════ TAB 4: FAMILY ══════════ -->
+    <div class="tab-pane" id="tab-family">
+      <div class="family-tab-header">
+        <div class="family-tab-title">My Family Circle</div>
+        <div class="family-tab-sub" id="familyTabSub">Loading members...</div>
+      </div>
+      <div class="family-cards" id="familyCards"></div>
+    </div><!-- /tab-family -->
+
+
+    <!-- ══════════ TAB 5: PROFILE ══════════ -->
+    <div class="tab-pane" id="tab-profile">
+
+      <div class="profile-header">
+        <div class="profile-avatar-wrap">
+          <img class="profile-avatar" src="https://picsum.photos/seed/boy-rahul/56/56" alt="Rahul">
+          <div class="profile-edit-btn" onclick="showToast('✏️ Edit mode coming soon')">✏</div>
+        </div>
+        <div class="profile-name" id="profileName">Loading...</div>
+        <div class="profile-age" id="profileRole">Member</div>
+        <button class="profile-edit-full" onclick="showToast('✏️ Edit profile coming soon')">Edit Profile</button>
+        <button onclick="doLogout()" style="width:100%;margin-top:12px;padding:14px;background:rgba(255,82,82,0.1);border:1px solid rgba(255,82,82,0.3);border-radius:14px;color:#FF5252;font-size:14px;font-weight:700;cursor:pointer;">🚪 Logout</button>
+      </div>
+
+      <!-- Location Sharing -->
+      <div class="toggle-section">
+        <div class="section-title" style="padding:0 0 10px 0;">Location Sharing</div>
+        <div class="toggle-card">
+          <div class="toggle-row">
+            <div class="toggle-icon">📍</div>
+            <div class="toggle-info">
+              <div class="toggle-label">Share my location</div>
+              <div class="toggle-desc">Family can see where you are</div>
+            </div>
+            <button class="toggle-switch on" onclick="toggleSwitch(this)"><div class="toggle-thumb"></div></button>
+          </div>
+          <div class="toggle-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+            <div style="display:flex;align-items:center;gap:12px;width:100%;">
+              <div class="toggle-icon">🎯</div>
+              <div class="toggle-info">
+                <div class="toggle-label">Location Precision</div>
+                <div class="toggle-desc">How accurate to share</div>
+              </div>
+            </div>
+            <div class="prec-wrap" style="width:100%;padding-left:40px;">
+              <button class="prec-btn active" onclick="setPrecision(this,'exact')">Exact</button>
+              <button class="prec-btn" onclick="setPrecision(this,'approximate')">Approximate</button>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-icon">🚨</div>
+            <div class="toggle-info">
+              <div class="toggle-label">Auto-share in SOS zone</div>
+              <div class="toggle-desc">Always precise in danger</div>
+            </div>
+            <button class="toggle-switch on" onclick="toggleSwitch(this)"><div class="toggle-thumb"></div></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="toggle-section">
+        <div class="section-title" style="padding:0 0 10px 0;">Notifications</div>
+        <div class="toggle-card">
+          <div class="toggle-row">
+            <div class="toggle-icon">🏠</div>
+            <div class="toggle-info">
+              <div class="toggle-label">Family arrivals</div>
+              <div class="toggle-desc">When someone reaches home</div>
+            </div>
+            <button class="toggle-switch on" onclick="toggleSwitch(this)"><div class="toggle-thumb"></div></button>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-icon">🆘</div>
+            <div class="toggle-info">
+              <div class="toggle-label">SOS alerts from family</div>
+              <div class="toggle-desc">Emergency notifications</div>
+            </div>
+            <button class="toggle-switch on" onclick="toggleSwitch(this)"><div class="toggle-thumb"></div></button>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-icon">📌</div>
+            <div class="toggle-info">
+              <div class="toggle-label">Geofence alerts</div>
+              <div class="toggle-desc">Safe zone enter/exit alerts</div>
+            </div>
+            <button class="toggle-switch on" onclick="toggleSwitch(this)"><div class="toggle-thumb"></div></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="section">
+        <div class="section-title" style="padding:0 0 10px 0;">Today's Activity</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card reveal">
+          <div class="stat-val">4.2<span style="font-size:12px;"> km</span></div>
+          <div class="stat-label">Distance Today</div>
+        </div>
+        <div class="stat-card reveal">
+          <div class="stat-val">2</div>
+          <div class="stat-label">Safe Zones Visited</div>
+        </div>
+        <div class="stat-card reveal">
+          <div class="stat-val">5</div>
+          <div class="stat-label">Family Check-ins</div>
+        </div>
+      </div>
+
+      <!-- Links -->
+      <div class="profile-links">
+        <a class="profile-link" href="parent-panel.html">
+          <span class="profile-link-text">👨‍👩‍👧‍👦 View Parent Panel</span>
+          <span class="profile-link-arrow">→</span>
+        </a>
+        <a class="profile-link" href="index.html">
+          <span class="profile-link-text">🏠 Back to Home</span>
+          <span class="profile-link-arrow">→</span>
+        </a>
+        <a class="profile-link" href="child.html">
+          <span class="profile-link-text">👦 Classic Child View</span>
+          <span class="profile-link-arrow">→</span>
+        </a>
+      </div>
+
+    </div><!-- /tab-profile -->
+
+  </div><!-- /tab-content -->
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-tab active" data-tab="home" onclick="switchTab('home',this)">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Home</span>
+    </button>
+    <button class="nav-tab" data-tab="map" onclick="switchTab('map',this)">
+      <span class="nav-icon">🗺️</span>
+      <span class="nav-label">Map</span>
+    </button>
+    <button class="nav-tab sos-tab" data-tab="sos" onclick="switchTab('sos',this)">
+      <div class="sos-nav-circle">SOS</div>
+      <span class="sos-nav-label">SOS</span>
+    </button>
+    <button class="nav-tab" data-tab="family" onclick="switchTab('family',this)">
+      <span class="nav-icon">👨‍👩‍👦</span>
+      <span class="nav-label">Family</span>
+    </button>
+    <button class="nav-tab" data-tab="profile" onclick="switchTab('profile',this)">
+      <span class="nav-icon">👤</span>
+      <span class="nav-label">Profile</span>
+    </button>
+  </nav>
+
+</div><!-- /app-frame -->
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── API CONFIG ──
+const API_BASE = window.location.origin + '/api/v1'
+
+const gravityToken = localStorage.getItem('gravity_token')
+const gravityUser = JSON.parse(localStorage.getItem('gravity_user') || 'null')
+
+if (!gravityToken) {
+  localStorage.setItem('gravity_redirect', 'child-panel.html')
+  window.location.href = 'login.html'
+}
+
+async function apiGet(path) {
+  const res = await fetch(API_BASE + path, { headers: { 'Authorization': 'Bearer ' + gravityToken } })
+  if (res.status === 401) { localStorage.clear(); window.location.href = 'login.html'; return null }
+  return res.json()
+}
+
+async function apiPost(path, body) {
+  const res = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + gravityToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  return res.json()
+}
+
+let currentCircleId = null
+let displayMembers = []   // real members from API; populated in loadRealData
+let myLatLng = null       // current user's location; set from SSE
+let memberMarkers = {}    // leafletMap markers keyed by member id
+let mapInitialized = false;
+
+async function loadRealData() {
+  try {
+    // Update user name everywhere
+    if (gravityUser) {
+      const name = gravityUser.name || 'User'
+      const greetEl = document.getElementById('greetingName')
+      if (greetEl) {
+        const h = new Date().getHours()
+        const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+        greetEl.textContent = greeting + ', ' + name + (h < 12 ? ' ☀️' : h < 17 ? ' 👋' : ' 🌙')
+      }
+      const profileNameEl = document.getElementById('profileName')
+      if (profileNameEl) profileNameEl.textContent = name
+      const profileRoleEl = document.getElementById('profileRole')
+      if (profileRoleEl) profileRoleEl.textContent = gravityUser.role || 'Member'
+      const headerNameEl = document.getElementById('headerUserName')
+      if (headerNameEl) headerNameEl.textContent = 'Hey, ' + name + ' 👋'
+      if (gravityUser.avatar_url) {
+        const avatarEls = document.querySelectorAll('#headerAvatar, .profile-avatar')
+        avatarEls.forEach(el => { el.src = gravityUser.avatar_url; el.alt = name; })
+      }
+    }
+
+    const data = await apiGet('/circles')
+    if (!data || !data.circles || !data.circles.length) {
+      document.getElementById('familySafeBanner').textContent = 'No circle joined yet'
+      document.getElementById('familyTabSub').textContent = 'No members · Join a circle'
+      return
+    }
+    currentCircleId = data.circles[0].id
+
+    const membersData = await apiGet('/circles/' + currentCircleId + '/members')
+    if (membersData && membersData.members) {
+      const colors = ['#00E676','#00C853','#FFB300','#AB47BC','#5E8B6E','#29B6F6']
+      displayMembers = membersData.members.map((m, i) => ({
+        id: m.id,
+        name: m.name,
+        lat: parseFloat(m.latitude) || null,
+        lng: parseFloat(m.longitude) || null,
+        status: m.location_updated_at ? 'Online' : 'Offline',
+        battery: m.battery_level || 70,
+        color: colors[i % colors.length],
+        avatar: m.avatar_url || ('https://picsum.photos/seed/' + encodeURIComponent(m.name) + '/56/56'),
+        isMe: m.id === (gravityUser && gravityUser.id)
+      }))
+
+      const total = displayMembers.length
+      const others = displayMembers.filter(m => !m.isMe)
+      document.getElementById('familySafeBanner').textContent = total + ' family member' + (total === 1 ? '' : 's') + ' in your circle'
+      document.getElementById('familyTabSub').textContent = total + ' member' + (total === 1 ? '' : 's') + ' · Read-only view'
+
+      buildFamilyStrip(others)
+      buildDistBadges(others)
+      buildFamilyCards(displayMembers)
+
+      // Init or refresh map with real data
+      if (mapInitialized) refreshMapMarkers()
+    }
+    connectSSEChild()
+  } catch(e) { console.error('Child loadRealData error', e) }
+}
+
+function connectSSEChild() {
+  if (!currentCircleId || !gravityToken) return
+  const evtSource = new EventSource(API_BASE + '/sse/stream?token=' + gravityToken)
+  evtSource.addEventListener('location_update', e => {
+    const d = JSON.parse(e.data)
+    if (!d.userId || !d.latitude || !d.longitude) return
+    // Update displayMembers cache
+    const member = displayMembers.find(m => m.id === d.userId)
+    if (member) {
+      member.lat = d.latitude
+      member.lng = d.longitude
+      member.status = 'Online'
+      member.battery = d.batteryLevel || member.battery
+    }
+    // Update leaflet marker if map is open
+    if (leafletMap && memberMarkers[d.userId]) {
+      memberMarkers[d.userId].setLatLng([d.latitude, d.longitude])
+    } else if (leafletMap && member) {
+      addMemberMarker(member)
+    }
+  })
+  evtSource.addEventListener('sos_alert', e => {
+    const d = JSON.parse(e.data)
+    showToast('🆘 SOS from ' + (d.userName || 'Family member'), 'sos')
+  })
+  evtSource.onerror = () => evtSource.close()
+}
+
+function doLogout() {
+  localStorage.removeItem('gravity_token')
+  localStorage.removeItem('gravity_user')
+  window.location.href = 'login.html'
+}
+let leafletMap = null;
+let activeTileLayer = null;
+
+const TILE_LAYERS = {
+  dark:      { url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',          opts:{subdomains:'abcd',maxZoom:19} },
+  light:     { url:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',         opts:{subdomains:'abcd',maxZoom:19} },
+  satellite: { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts:{maxZoom:19} },
+  street:    { url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',opts:{subdomains:'abcd',maxZoom:19} }
+};
+
+function switchMapType(type) {
+  if (!leafletMap) return;
+  if (activeTileLayer) leafletMap.removeLayer(activeTileLayer);
+  const t = TILE_LAYERS[type];
+  activeTileLayer = L.tileLayer(t.url, t.opts).addTo(leafletMap);
+  activeTileLayer.bringToBack();
+  document.querySelectorAll('#mapTypeSwitcher .map-type-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.type === type)
+  );
+}
+function mapZoomIn()  { if (leafletMap) leafletMap.setZoom(leafletMap.getZoom() + 1, {animate:true}); }
+function mapZoomOut() { if (leafletMap) leafletMap.setZoom(leafletMap.getZoom() - 1, {animate:true}); }
+
+// ── TAB SWITCHING ──
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  btn.classList.add('active');
+  document.getElementById('tabContent').scrollTop = 0;
+  if (tabId === 'map' && !mapInitialized) {
+    setTimeout(initMap, 80);
+  }
+  triggerReveal();
+}
+
+// ── REVEAL ANIMATION ──
+function triggerReveal() {
+  setTimeout(() => {
+    document.querySelectorAll('.reveal:not(.visible)').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight + 100) {
+        el.classList.add('visible');
+      }
+    });
+  }, 50);
+}
+
+// IntersectionObserver with DOMContentLoaded fallback
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+
+// ── FAMILY STRIP (HOME) ──
+function buildFamilyStrip(members) {
+  const strip = document.getElementById('familyStrip');
+  strip.innerHTML = '';
+  if (!members || !members.length) return;
+  members.forEach(m => {
+    const isOnline = m.status === 'Online';
+    const el = document.createElement('div');
+    el.className = 'family-mini';
+    el.innerHTML = `
+      <div class="family-mini-ring" style="background:linear-gradient(135deg,${m.color}55,${m.color}22);box-shadow:0 0 0 2.5px ${m.color},0 0 10px ${m.color}40;">
+        <img src="${m.avatar}" alt="${m.name}" loading="lazy">
+        <div class="family-mini-indicator${isOnline ? '' : ' offline'}"></div>
+      </div>
+      <div class="family-mini-name">${m.name.split(' ')[0]}</div>
+    `;
+    el.onclick = () => { showToast('📍 ' + m.name + ' · ' + m.status); };
+    strip.appendChild(el);
+  });
+}
+
+// ── FAMILY CARDS (FAMILY TAB) ──
+function buildFamilyCards(membersOverride) {
+  const container = document.getElementById('familyCards');
+  container.innerHTML = '';
+  const list = membersOverride || displayMembers;
+  if (!list || !list.length) {
+    container.innerHTML = '<p style="color:var(--text2);text-align:center;padding:24px;">No family members yet</p>';
+    return;
+  }
+  list.forEach(m => {
+    const isMe = m.isMe;
+    const color = m.color || '#00E676';
+    const avatarSrc = m.avatar || ('https://picsum.photos/seed/' + encodeURIComponent(m.name) + '/56/56');
+    const role = m.role || (isMe ? 'You' : 'Member');
+    const statusText = m.status || 'Offline';
+    const card = document.createElement('div');
+    card.className = 'fm-card reveal';
+    card.style.borderLeft = '3px solid ' + color;
+    card.innerHTML = `
+      <div class="fm-card-left">
+        <img class="fm-avatar" src="${avatarSrc}" alt="${m.name}" style="border-color:${color};" loading="lazy">
+        <div class="fm-status-dot" style="background:${m.battery < 30 ? '#FFB300' : '#00E676'};"></div>
+      </div>
+      <div class="fm-info">
+        <div class="fm-name">${m.name}${isMe ? ' <span style="font-size:10px;color:var(--blue);font-weight:600;">(You)</span>' : ''}</div>
+        <div class="fm-role">${role}</div>
+        <div class="fm-meta">
+          <span class="fm-dist" style="color:${color};">📍 ${isMe ? 'Your location' : (m.lat ? 'Location known' : 'No location yet')}</span>
+          <span class="fm-battery">
+            <div class="batt-bar"><div class="batt-fill" style="width:${m.battery}%;background:${m.battery>60?'#00E676':m.battery>20?'#FFB300':'#FF5252'};"></div></div>
+            ${m.battery}%
+          </span>
+        </div>
+        <div class="map-tap-hint" style="color:${color};opacity:.7;">${statusText}</div>
+      </div>
+      <div class="fm-status-tag" style="background:${color}18;color:${color};border-color:${color}30;">${statusText}</div>
+    `;
+    card.onclick = () => {
+      showToast('📍 ' + m.name + ' · ' + statusText);
+      if (!isMe) { switchTab('map', document.querySelector('[data-tab="map"]')); }
+    };
+    container.appendChild(card);
+  });
+}
+
+// ── DISTANCE BADGES ──
+function buildDistBadges(members) {
+  const wrap = document.getElementById('distBadges');
+  wrap.innerHTML = '';
+  if (!members || !members.length) return;
+  members.forEach(m => {
+    const badge = document.createElement('div');
+    badge.className = 'dist-badge';
+    badge.innerHTML = '<div class="dist-dot" style="background:' + m.color + ';box-shadow:0 0 6px ' + m.color + '80;"></div>' + m.name.split(' ')[0];
+    wrap.appendChild(badge);
+  });
+}
+
+// ── LEAFLET MAP ──
+function addMemberMarker(m) {
+  if (!leafletMap || !m.lat || !m.lng) return;
+  if (memberMarkers[m.id]) {
+    memberMarkers[m.id].setLatLng([m.lat, m.lng]);
+    return;
+  }
+  const isMe = m.isMe;
+  const size = isMe ? 52 : 44;
+  const icon = L.divIcon({
+    className: '',
+    html: `
+      <div style="text-align:center;position:relative;">
+        ${isMe ? `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-54%);width:74px;height:74px;border-radius:50%;border:2px solid rgba(41,182,246,.55);animation:sosRing 2s ease-out infinite;pointer-events:none;z-index:0;"></div>` : ''}
+        <img src="${m.avatar}"
+             style="width:${size}px;height:${size}px;border-radius:50%;border:2.5px solid ${m.color};object-fit:cover;box-shadow:0 0 14px ${m.color}90;display:block;margin:auto;position:relative;z-index:1;"
+             loading="lazy">
+        <div style="font-size:9px;font-weight:700;background:rgba(5,12,8,.92);color:${m.color};padding:2px 6px;border-radius:5px;margin-top:3px;border:1px solid ${m.color}40;font-family:'Plus Jakarta Sans',sans-serif;position:relative;z-index:1;">
+          ${isMe ? '📍 You' : m.name.split(' ')[0]}
+        </div>
+      </div>
+    `,
+    iconSize: [size + 10, size + 28],
+    iconAnchor: [(size + 10) / 2, (size + 10) / 2]
+  });
+  const marker = L.marker([m.lat, m.lng], { icon }).addTo(leafletMap);
+  marker.bindPopup(`
+    <div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border-radius:10px;padding:8px;min-width:120px;border:1px solid ${m.color}40;">
+      <strong style="color:${m.color};">${m.name}</strong><br>
+      <span style="font-size:11px;color:#5E8B6E;">${m.role || (m.isMe ? 'You' : 'Member')}</span><br>
+      <span style="font-size:11px;">🔋 ${m.battery}%</span><br>
+      <span style="font-size:11px;color:${m.color};">${m.status}</span>
+    </div>
+  `, { className: 'dark-popup' });
+  memberMarkers[m.id] = marker;
+}
+
+function refreshMapMarkers() {
+  if (!leafletMap) return;
+  const located = displayMembers.filter(m => m.lat && m.lng);
+  located.forEach(m => addMemberMarker(m));
+  if (located.length >= 2) {
+    leafletMap.fitBounds(located.map(m => [m.lat, m.lng]), { padding: [36, 36] });
+  } else if (located.length === 1) {
+    leafletMap.setView([located[0].lat, located[0].lng], 14);
+  }
+  setTimeout(() => { leafletMap.invalidateSize(); }, 150);
+}
+
+function initMap() {
+  if (mapInitialized) return;
+  mapInitialized = true;
+
+  // Default center — will be overridden once real locations load
+  const defaultCenter = [20.5937, 78.9629]; // India center
+  leafletMap = L.map('map-leaflet', {
+    center: defaultCenter,
+    zoom: 5,
+    zoomControl: false,
+    attributionControl: false
+  });
+
+  activeTileLayer = L.tileLayer(TILE_LAYERS.dark.url, TILE_LAYERS.dark.opts).addTo(leafletMap);
+
+  // Plot any members that already have locations
+  if (displayMembers.length) {
+    refreshMapMarkers();
+  }
+
+  setTimeout(() => { leafletMap.invalidateSize(); }, 150);
+}
+
+// ── TOAST SYSTEM ──
+let toastQueue = [];
+let toastShowing = false;
+
+function showToast(message, type) {
+  type = type || 'success';
+  const frame = document.getElementById('appFrame');
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = message;
+  // Append to body so fixed positioning works reliably
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 320);
+  }, 3000);
+}
+
+// ── SOS BUTTON LOGIC (HOME) ──
+function setupHomeSOS() {
+  const btn = document.getElementById('homeSosBtn');
+  const textEl = document.getElementById('homeSosText');
+  const subEl = document.getElementById('homeSosSub');
+  const cdEl = document.getElementById('homeSosCountdown');
+  let sosActive = false;
+  let sosTimer = null;
+  let count = 3;
+
+  function startHold() {
+    if (sosActive) return;
+    sosActive = true;
+    count = 3;
+    textEl.style.display = 'none';
+    subEl.style.display = 'none';
+    cdEl.style.display = 'block';
+    cdEl.textContent = count;
+
+    sosTimer = setInterval(() => {
+      count--;
+      if (count > 0) {
+        cdEl.textContent = count;
+      } else {
+        clearInterval(sosTimer);
+        activateHomeSOS();
+      }
+    }, 1000);
+  }
+
+  function cancelHold() {
+    if (!sosActive) return;
+    sosActive = false;
+    clearInterval(sosTimer);
+    textEl.style.display = '';
+    subEl.style.display = '';
+    cdEl.style.display = 'none';
+    cdEl.textContent = '';
+  }
+
+  function activateHomeSOS() {
+    sosActive = false;
+    textEl.style.display = '';
+    subEl.style.display = '';
+    cdEl.style.display = 'none';
+    cdEl.textContent = '';
+    activateSOS();
+  }
+
+  btn.addEventListener('mousedown', startHold);
+  btn.addEventListener('mouseup', cancelHold);
+  btn.addEventListener('mouseleave', cancelHold);
+  btn.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, { passive: false });
+  btn.addEventListener('touchend', (e) => { e.preventDefault(); cancelHold(); }, { passive: false });
+  btn.addEventListener('touchcancel', cancelHold);
+}
+
+// ── SOS BUTTON LOGIC (BIG / SOS TAB) ──
+function setupBigSOS() {
+  const btn = document.getElementById('bigSosBtn');
+  const textEl = document.getElementById('bigSosText');
+  const instEl = document.getElementById('bigSosInst');
+  const cdEl = document.getElementById('bigSosCountdown');
+  let bigSosActive = false;
+  let bigSosTimer = null;
+  let count = 3;
+
+  function startHold() {
+    if (bigSosActive) return;
+    bigSosActive = true;
+    count = 3;
+    textEl.style.display = 'none';
+    instEl.style.display = 'none';
+    cdEl.style.display = 'block';
+    cdEl.textContent = count;
+
+    bigSosTimer = setInterval(() => {
+      count--;
+      if (count > 0) {
+        cdEl.textContent = count;
+      } else {
+        clearInterval(bigSosTimer);
+        activateBigSOS();
+      }
+    }, 1000);
+  }
+
+  function cancelHold() {
+    if (!bigSosActive) return;
+    bigSosActive = false;
+    clearInterval(bigSosTimer);
+    textEl.style.display = '';
+    instEl.style.display = '';
+    cdEl.style.display = 'none';
+    cdEl.textContent = '';
+  }
+
+  function activateBigSOS() {
+    bigSosActive = false;
+    textEl.style.display = '';
+    instEl.style.display = '';
+    cdEl.style.display = 'none';
+    cdEl.textContent = '';
+    activateSOS();
+  }
+
+  btn.addEventListener('mousedown', startHold);
+  btn.addEventListener('mouseup', cancelHold);
+  btn.addEventListener('mouseleave', cancelHold);
+  btn.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, { passive: false });
+  btn.addEventListener('touchend', (e) => { e.preventDefault(); cancelHold(); }, { passive: false });
+  btn.addEventListener('touchcancel', cancelHold);
+}
+
+// ── SOS SEND ──
+function activateSOS() {
+  showToast('🆘 SOS Alert sent to your family!', 'sos')
+  // Get current location and send to backend
+  const sendSOS = async (lat, lng) => {
+    try {
+      await apiPost('/sos', {
+        latitude: lat,
+        longitude: lng,
+        message: 'SOS! I need help!'
+      })
+    } catch(e) { console.error('SOS send failed', e) }
+  }
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => sendSOS(pos.coords.latitude, pos.coords.longitude),
+      () => sendSOS(null, null)
+    )
+  } else {
+    sendSOS(null, null)
+  }
+}
+
+// ── QUICK ACTIONS ──
+function triggerImSafe(card) {
+  card.style.background = 'rgba(0,230,118,.2)';
+  card.style.boxShadow = '0 0 20px rgba(0,230,118,.3)';
+  showToast('✓ Family notified you are safe!', 'success');
+  setTimeout(() => {
+    card.style.background = '';
+    card.style.boxShadow = '';
+  }, 1200);
+}
+
+function triggerShareLocation() {
+  showToast('📍 Live location link copied!', 'success');
+}
+
+function triggerArriveSafe() {
+  showToast('🔔 Set destination for arrival alert', 'success');
+}
+
+function triggerMessage() {
+  showToast('💬 Opening family group chat...', 'success');
+}
+
+function sendQuickMsg(msg) {
+  showToast('✓ Sent: "' + msg + '"', 'success');
+}
+
+// ── TOGGLE SWITCH ──
+function toggleSwitch(btn) {
+  btn.classList.toggle('on');
+  const isOn = btn.classList.contains('on');
+  showToast(isOn ? '✓ Setting enabled' : '○ Setting disabled');
+}
+
+// ── PRECISION SELECTOR ──
+function setPrecision(btn, val) {
+  document.querySelectorAll('.prec-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  showToast('🎯 Precision: ' + val.charAt(0).toUpperCase() + val.slice(1));
+}
+
+// ── CLOCK UPDATE ──
+function updateTime() {
+  const now = new Date();
+  const h = now.getHours();
+  const m = now.getMinutes().toString().padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = ((h % 12) || 12);
+  const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const timeEl = document.getElementById('currentTime');
+  if (timeEl) timeEl.textContent = greeting + ' · ' + h12 + ':' + m + ' ' + ampm;
+  const statusTime = document.querySelector('.status-bar .time');
+  if (statusTime) statusTime.textContent = h12 + ':' + m;
+  // Refresh greeting name with updated time-of-day
+  const greetEl = document.getElementById('greetingName');
+  if (greetEl && gravityUser) {
+    const name = gravityUser.name || 'User';
+    const emoji = h < 12 ? ' ☀️' : h < 17 ? ' 👋' : ' 🌙';
+    greetEl.textContent = greeting + ', ' + name + emoji;
+  }
+}
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', () => {
+  buildFamilyStrip([]);
+  buildFamilyCards([]);
+  buildDistBadges([]);
+  loadRealData();
+  setupHomeSOS();
+  setupBigSOS();
+  updateTime();
+  setInterval(updateTime, 30000);
+
+  // Observe reveal elements
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+  // DOMContentLoaded fallback: add .visible to all cards in active tab
+  setTimeout(() => {
+    document.querySelectorAll('.reveal').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight + 120) el.classList.add('visible');
+    });
+  }, 200);
+
+  // Scroll-based reveal
+  document.getElementById('tabContent').addEventListener('scroll', () => {
+    document.querySelectorAll('.reveal:not(.visible)').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight + 80) el.classList.add('visible');
+    });
+  });
+});
+</script>
+</body>
+</html>

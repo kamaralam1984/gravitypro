@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trackalways Gravity — Engineering Specification</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #1a1a2e;
+    background: #fff;
+    padding: 40px 60px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 26px; font-weight: 900; color: #0A5C35; border-bottom: 3px solid #0A5C35; padding-bottom: 12px; margin: 28px 0 16px; page-break-after: avoid; }
+  h2 { font-size: 19px; font-weight: 700; color: #0A5C35; border-bottom: 2px solid #c8e6c9; padding-bottom: 8px; margin: 30px 0 14px; page-break-after: avoid; }
+  h3 { font-size: 15px; font-weight: 700; color: #1b5e20; margin: 22px 0 10px; page-break-after: avoid; }
+  h4 { font-size: 13px; font-weight: 600; color: #2e7d32; margin: 16px 0 8px; }
+  p { margin: 9px 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 11.5px;
+  }
+  th {
+    background: #0A5C35;
+    color: #fff;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #e8f5e9;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f1f8f4; }
+  pre {
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 14px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    border-left: 3px solid #0A5C35;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  code {
+    background: #e8f5e9;
+    color: #1b5e20;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 11px;
+  }
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    border-radius: 0;
+  }
+  ul, ol { padding-left: 22px; margin: 10px 0; }
+  li { margin: 4px 0; }
+  blockquote {
+    border-left: 3px solid #0A5C35;
+    padding: 8px 14px;
+    background: #e8f5e9;
+    margin: 12px 0;
+    border-radius: 0 4px 4px 0;
+  }
+  hr { border: none; border-top: 1px solid #c8e6c9; margin: 24px 0; }
+  a { color: #0A5C35; }
+  @media print {
+    body { padding: 20px 30px; }
+  }
+</style>
+</head>
+<body>
+<h1>Trackalways Gravity — Engineering Specification</h1>
+<p><strong>Version:</strong> 1.0.0<br />
+<strong>Platform:</strong> Family Safety &amp; Real-Time Location Tracking<br />
+<strong>Author:</strong> Rodney Otieno<br />
+<strong>Date:</strong> June 2026<br />
+<strong>Document Type:</strong> Full Engineering Reference</p>
+<hr />
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#1-system-overview">System Overview</a></li>
+<li><a href="#2-architecture-diagram">Architecture Diagram</a></li>
+<li><a href="#3-technology-stack">Technology Stack</a></li>
+<li><a href="#4-infrastructure-components">Infrastructure Components</a></li>
+<li><a href="#5-database-schema">Database Schema</a></li>
+<li><a href="#6-backend-api-reference">Backend API Reference</a></li>
+<li><a href="#7-real-time-system-sse">Real-Time System (SSE)</a></li>
+<li><a href="#8-mobile-application">Mobile Application</a></li>
+<li><a href="#9-web-platform">Web Platform</a></li>
+<li><a href="#10-authentication--security">Authentication &amp; Security</a></li>
+<li><a href="#11-geofencing-engine">Geofencing Engine</a></li>
+<li><a href="#12-background-jobs">Background Jobs</a></li>
+<li><a href="#13-push-notification-pipeline">Push Notification Pipeline</a></li>
+<li><a href="#14-media-storage-r2">Media Storage (R2)</a></li>
+<li><a href="#15-gps-telemetry-traccar">GPS Telemetry (Traccar)</a></li>
+<li><a href="#16-free-vs-paid-services-breakdown">Free vs Paid Services Breakdown</a></li>
+<li><a href="#17-feature-matrix-free-vs-premium">Feature Matrix (Free vs Premium)</a></li>
+<li><a href="#18-environment-configuration">Environment Configuration</a></li>
+<li><a href="#19-deployment--reverse-proxy">Deployment &amp; Reverse Proxy</a></li>
+<li><a href="#20-security-implementation">Security Implementation</a></li>
+</ol>
+<hr />
+<h2>1. System Overview</h2>
+<p>Trackalways Gravity is a multi-platform family safety application that provides:</p>
+<ul>
+<li><strong>Real-time GPS tracking</strong> of family members on an interactive map</li>
+<li><strong>Geofence (safe zone) management</strong> with automatic entry/exit notifications</li>
+<li><strong>SOS emergency alerts</strong> from child to all family members instantly</li>
+<li><strong>Family circles</strong> — invite-based group membership with admin controls</li>
+<li><strong>Push notifications</strong> for all critical events (SOS, geofence breach, low battery)</li>
+<li><strong>Cross-platform support</strong> — iOS, Android (React Native / Expo), and Web (responsive HTML)</li>
+</ul>
+<h3>Components</h3>
+<p>| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Backend API | Node.js 20 + Express 5.2 | REST API, SSE, webhooks |
+| Database | PostgreSQL 16 + PostGIS 3 | All data, spatial queries |
+| Mobile App | Expo 54 + React Native 0.81 | iOS + Android app |
+| Web Landing | Vanilla HTML/CSS/JS + Leaflet.js | Marketing + web dashboards |
+| Reverse Proxy | Caddy 2 | TLS, routing |
+| Object Storage | Cloudflare R2 | Avatars, circle icons |
+| GPS Telemetry | Traccar (self-hosted) | Hardware GPS device ingestion |</p>
+<hr />
+<h2>2. Architecture Diagram</h2>
+<pre><code>┌─────────────────────────────────────────────────────────────────┐
+│                         CLIENTS                                  │
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐│
+│  │  Mobile App  │  │ Parent Panel │  │  Child Panel / Landing ││
+│  │  iOS/Android │  │   (HTML5)    │  │      (HTML5)           ││
+│  │  Expo 54     │  │  Leaflet.js  │  │    Leaflet.js          ││
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬─────────────┘│
+└─────────┼─────────────────┼────────────────────┼───────────────┘
+          │  HTTPS          │  HTTPS             │  HTTPS
+          ▼                 ▼                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    CADDY REVERSE PROXY (:443 / :3021)            │
+│                   TLS termination + gzip + security headers      │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   EXPRESS 5.2 API (:8002)                        │
+│                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
+│  │  /auth   │  │ /circles │  │/geofences│  │     /sse      │  │
+│  │  /users  │  │ /media   │  │  /sos    │  │   (SSE push)  │  │
+│  └──────────┘  └──────────┘  └──────────┘  └───────────────┘  │
+│                                                                  │
+│  ┌──────────────────┐  ┌────────────────┐  ┌───────────────┐  │
+│  │  geofence.js     │  │   jobs/index   │  │  webhooks/    │  │
+│  │  PostGIS checks  │  │  node-cron /   │  │  traccar.js   │  │
+│  │  + push notif.   │  │  BullMQ        │  │               │  │
+│  └──────────────────┘  └────────────────┘  └───────────────┘  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+              ┌──────────────┼───────────────┐
+              ▼              ▼               ▼
+   ┌─────────────────┐  ┌────────┐  ┌──────────────┐
+   │  Neon PostgreSQL│  │ Redis  │  │Cloudflare R2  │
+   │  + PostGIS      │  │(BullMQ)│  │ Object Store  │
+   │  (cloud, paid)  │  │(opt.)  │  │  (paid)       │
+   └─────────────────┘  └────────┘  └──────────────┘
+
+External:
+  ┌─────────────────┐     ┌───────────────────────┐
+  │ Expo Push API   │     │  Traccar GPS Server   │
+  │ exp.host/--/... │     │  gravity.trackalways  │
+  │  (paid vol.)    │     │  .com/telemetry       │
+  └─────────────────┘     └───────────────────────┘
+</code></pre>
+<hr />
+<h2>3. Technology Stack</h2>
+<h3>Backend</h3>
+<p>| Package | Version | Purpose | License |
+|---------|---------|---------|---------|
+| Node.js | 20 LTS | JavaScript runtime | MIT (FREE) |
+| Express | 5.2.x | HTTP framework (latest stable) | MIT (FREE) |
+| pg | 8.12.x | PostgreSQL client (node-postgres) | MIT (FREE) |
+| @neondatabase/serverless | 1.1.x | Neon serverless HTTP driver | MIT (FREE) |
+| jsonwebtoken | 9.0.x | JWT sign/verify (HS256) | MIT (FREE) |
+| bcryptjs | 2.4.x | Password hashing (bcrypt, 10 rounds) | MIT (FREE) |
+| helmet | 7.1.x | HTTP security headers | MIT (FREE) |
+| cors | 2.8.x | Cross-Origin Resource Sharing | MIT (FREE) |
+| express-rate-limit | 7.3.x | API rate limiting | MIT (FREE) |
+| morgan | 1.10.x | HTTP request logger | MIT (FREE) |
+| zod | 3.23.x | Runtime schema validation | MIT (FREE) |
+| uuid | 10.0.x | UUID v4 generation | MIT (FREE) |
+| dotenv | 16.4.x | .env file loader | MIT (FREE) |
+| @aws-sdk/client-s3 | 3.600.x | S3-compatible R2 client | Apache-2 (FREE) |
+| @aws-sdk/s3-request-presigner | 3.600.x | Presigned URL generation | Apache-2 (FREE) |
+| bullmq | 5.12.x | Redis-backed job queue | MIT (FREE) |
+| ioredis | 5.4.x | Redis client for BullMQ | MIT (FREE) |
+| node-cron | 3.0.x | Fallback cron scheduler | MIT (FREE) |
+| ws | 8.21.x | WebSocket (used for SSE fallback) | MIT (FREE) |
+| nodemon | 3.1.x | Dev auto-restart | MIT (FREE, devDep) |</p>
+<h3>Mobile (Expo / React Native)</h3>
+<p>| Package | Version | Purpose | License |
+|---------|---------|---------|---------|
+| Expo | 54.0.x | Mobile build toolchain + OTA updates | MIT (FREE) |
+| React Native | 0.81.x | Cross-platform mobile UI | MIT (FREE) |
+| expo-router | 4.0.x | File-based routing (like Next.js) | MIT (FREE) |
+| @react-navigation/native | 6.x | Navigation core | MIT (FREE) |
+| @react-navigation/bottom-tabs | 6.x | Bottom tab navigator | MIT (FREE) |
+| @react-navigation/stack | 6.x | Stack navigator | MIT (FREE) |
+| react-native-maps | 1.18.x | Native Google/Apple Maps | MIT (FREE) |
+| expo-location | 18.0.x | Foreground + background GPS | MIT (FREE) |
+| expo-task-manager | 12.0.x | Background task registration | MIT (FREE) |
+| expo-notifications | 0.29.x | Push notification handler | MIT (FREE) |
+| expo-haptics | 14.0.x | Vibration/haptic feedback | MIT (FREE) |
+| expo-secure-store | 14.0.x | Encrypted key-value storage (native) | MIT (FREE) |
+| expo-image-picker | 16.0.x | Camera/gallery image selection | MIT (FREE) |
+| expo-file-system | 18.0.x | Local file read/write | MIT (FREE) |
+| expo-linear-gradient | 14.0.x | Gradient backgrounds | MIT (FREE) |
+| expo-blur | 14.0.x | Blur effects | MIT (FREE) |
+| expo-constants | 17.0.x | App constants + device info | MIT (FREE) |
+| expo-device | 7.0.x | Device type detection | MIT (FREE) |
+| expo-status-bar | 2.0.x | Status bar color control | MIT (FREE) |
+| expo-linking | 56.0.x | Deep links | MIT (FREE) |
+| zustand | 5.0.x | Lightweight global state management | MIT (FREE) |
+| @tanstack/react-query | 5.45.x | Async data fetching + caching | MIT (FREE) |
+| axios | 1.7.x | HTTP client | MIT (FREE) |
+| date-fns | 3.6.x | Date formatting utilities | MIT (FREE) |
+| react-native-reanimated | 3.16.x | 60fps animations on UI thread | MIT (FREE) |
+| react-native-svg | 15.8.x | SVG rendering | MIT (FREE) |
+| react-native-gesture-handler | 2.20.x | Touch gesture recognition | MIT (FREE) |
+| react-native-screens | 4.4.x | Native screen containers | MIT (FREE) |
+| react-native-safe-area-context | 4.12.x | Safe area insets | MIT (FREE) |
+| react-native-sse | 1.2.x | Server-Sent Events for native | MIT (FREE) |
+| react-native-web | 0.21.x | RN → DOM bridge for web compat | MIT (FREE) |
+| @expo/vector-icons | 14.0.x | Ionicons/MaterialIcons | MIT (FREE) |
+| @react-native-community/slider | 4.5.x | Radius slider for geofences | MIT (FREE) |
+| TypeScript | 5.3.x | Static types | Apache-2 (FREE) |</p>
+<h3>Web Frontend (Landing + Dashboards)</h3>
+<p>| Library | Version | Purpose | License |
+|---------|---------|---------|---------|
+| Leaflet.js | 1.9.4 | Interactive maps (CDN) | BSD-2 (FREE) |
+| CartoDB Tiles | — | Dark Matter / Light / Voyager map tiles | FREE (under limits) |
+| ESRI World Imagery | — | Satellite map tiles | FREE (attribution req.) |
+| Google Fonts | — | Inter typeface | OFL (FREE) |
+| Vanilla JS | ES2022 | No framework — plain HTML/CSS/JS | FREE |</p>
+<hr />
+<h2>4. Infrastructure Components</h2>
+<h3>4.1 Neon PostgreSQL (PAID)</h3>
+<ul>
+<li><strong>Provider:</strong> Neon.tech — serverless PostgreSQL</li>
+<li><strong>Extensions:</strong> PostGIS 3.x (spatial queries), uuid-ossp (UUID generation)</li>
+<li><strong>Connection:</strong> Pooled via <code>@neondatabase/serverless</code> HTTP driver (works in edge/serverless environments without WebSocket)</li>
+<li><strong>Plan:</strong> Neon Free Tier → upgrade to Neon Launch ($19/mo) for production scale</li>
+<li><strong>Usage in code:</strong><pre><code class="language-js">const { neon } = require('@neondatabase/serverless')
+const sql = neon(process.env.DATABASE_URL)
+</code></pre>
+</li>
+</ul>
+<h3>4.2 Cloudflare R2 (PAID)</h3>
+<ul>
+<li><strong>Provider:</strong> Cloudflare R2 — S3-compatible object storage</li>
+<li><strong>Zero egress fees</strong> (unlike AWS S3)</li>
+<li><strong>Used for:</strong> User avatars, circle group icons</li>
+<li><strong>Access:</strong> AWS SDK v3 (<code>@aws-sdk/client-s3</code>) with R2 endpoint</li>
+<li><strong>Presigned URLs:</strong> Generated server-side, client uploads directly to R2 (no backend bandwidth cost)</li>
+<li><strong>Free tier:</strong> 10 GB storage, 1M Class A ops/month (free for early stage)</li>
+<li><strong>Config:</strong><pre><code class="language-js">const r2 = new S3Client({
+  region: 'auto',
+  endpoint: `https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: { accessKeyId: R2_ACCESS_KEY, secretAccessKey: R2_SECRET_KEY }
+})
+</code></pre>
+</li>
+</ul>
+<h3>4.3 Expo Push Notification Service (PAID at scale)</h3>
+<ul>
+<li><strong>Provider:</strong> Expo — exp.host push API</li>
+<li><strong>Free tier:</strong> Up to 1,000 active push devices</li>
+<li><strong>Paid:</strong> Expo EAS ($99+/month) for production volume + priority delivery</li>
+<li><strong>Mechanism:</strong> Backend POSTs to <code>https://exp.host/--/api/v2/push/send</code></li>
+<li><strong>Authentication:</strong> <code>EXPO_ACCESS_TOKEN</code> in Authorization header</li>
+<li><strong>Token storage:</strong> Each user's <code>push_token</code> stored in <code>users.push_token</code> column</li>
+</ul>
+<h3>4.4 Traccar GPS Server (SELF-HOSTED / FREE)</h3>
+<ul>
+<li><strong>Software:</strong> Traccar (open-source GPS telemetry server)</li>
+<li><strong>Host:</strong> <code>gravity.trackalways.com/telemetry</code></li>
+<li><strong>Purpose:</strong> Ingest GPS from dedicated hardware trackers (OBD dongles, personal GPS units)</li>
+<li><strong>Integration:</strong> Traccar sends webhook POST to <code>/webhooks/traccar/location</code> on each position update</li>
+<li><strong>Cost:</strong> Server hosting cost only (free software)</li>
+</ul>
+<h3>4.5 Caddy 2 Reverse Proxy (FREE)</h3>
+<ul>
+<li><strong>Auto-HTTPS:</strong> Caddy automatically provisions Let's Encrypt TLS certificates</li>
+<li><strong>Features:</strong> gzip compression, SSE flush passthrough, security headers, API routing</li>
+<li><strong>Local dev config:</strong> <code>:3021</code> → backend <code>:8002</code></li>
+<li><strong>Production:</strong> <code>:443</code> → backend <code>:8002</code> with domain routing</li>
+</ul>
+<h3>4.6 Redis / BullMQ (OPTIONAL)</h3>
+<ul>
+<li><strong>Purpose:</strong> Job queue for background cleanup tasks</li>
+<li><strong>Fallback:</strong> If <code>REDIS_URL</code> env var not set, falls back to <code>node-cron</code> (no Redis needed)</li>
+<li><strong>Managed options:</strong> Upstash Redis (free tier: 10k cmd/day), Redis Cloud free tier</li>
+</ul>
+<hr />
+<h2>5. Database Schema</h2>
+<h3>5.1 Entity Relationship</h3>
+<pre><code>users ──&lt; circle_members &gt;── circles
+  │                               │
+  │                           safe_zones
+  │                               │
+  ├──&lt; device_locations       geofence_events &gt;── users
+  ├──&lt; user_latest_locations
+  └──&lt; geofence_events
+</code></pre>
+<h3>5.2 Table Definitions</h3>
+<h4><code>users</code></h4>
+<pre><code class="language-sql">CREATE TABLE users (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  phone        VARCHAR(20)  UNIQUE NOT NULL,
+  name         VARCHAR(100) NOT NULL,
+  email        VARCHAR(255) UNIQUE,
+  avatar_url   TEXT,
+  push_token   TEXT,                           -- Expo push token
+  country_code VARCHAR(5)   NOT NULL DEFAULT 'IN',
+  password_hash VARCHAR(255) NOT NULL,
+  google_id    TEXT UNIQUE,                    -- Google OAuth sub claim
+  created_at   TIMESTAMPTZ  DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ  DEFAULT NOW()
+);
+</code></pre>
+<h4><code>circles</code></h4>
+<pre><code class="language-sql">CREATE TABLE circles (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name        VARCHAR(100) NOT NULL,
+  icon_url    TEXT,                            -- R2 object URL
+  invite_code VARCHAR(12) UNIQUE NOT NULL,     -- 12-char alphanumeric
+  created_by  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+</code></pre>
+<h4><code>circle_members</code></h4>
+<pre><code class="language-sql">CREATE TABLE circle_members (
+  id        UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  circle_id UUID NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+  user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role      VARCHAR(20) NOT NULL DEFAULT 'member'
+              CHECK (role IN ('admin', 'member')),
+  joined_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(circle_id, user_id)
+);
+</code></pre>
+<h4><code>device_locations</code></h4>
+<pre><code class="language-sql">CREATE TABLE device_locations (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  geom        GEOMETRY(Point, 4326) NOT NULL,   -- WGS84 lon/lat
+  accuracy    FLOAT,                             -- meters
+  speed       FLOAT,                             -- m/s
+  bearing     FLOAT,                             -- degrees 0-360
+  altitude    FLOAT,                             -- meters
+  battery_level FLOAT,                           -- 0.0 to 1.0
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for performance
+CREATE INDEX idx_device_locations_user_id   ON device_locations(user_id);
+CREATE INDEX idx_device_locations_geom      ON device_locations USING GIST(geom);
+CREATE INDEX idx_device_locations_recorded_at ON device_locations(recorded_at DESC);
+</code></pre>
+<h4><code>user_latest_locations</code></h4>
+<pre><code class="language-sql">-- Materialized &quot;current position&quot; — updated via INSERT ... ON CONFLICT DO UPDATE
+CREATE TABLE user_latest_locations (
+  user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  geom          GEOMETRY(Point, 4326),
+  accuracy      FLOAT,
+  battery_level FLOAT,
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
+);
+</code></pre>
+<h4><code>safe_zones</code> (Geofences)</h4>
+<pre><code class="language-sql">CREATE TABLE safe_zones (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  circle_id    UUID NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+  name         VARCHAR(100) NOT NULL,
+  geom         GEOMETRY(Polygon, 4326) NOT NULL,  -- polygon boundary
+  radius_meters FLOAT,                              -- for display radius
+  created_by   UUID NOT NULL REFERENCES users(id),
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_safe_zones_circle_id ON safe_zones(circle_id);
+CREATE INDEX idx_safe_zones_geom      ON safe_zones USING GIST(geom);
+</code></pre>
+<h4><code>geofence_events</code></h4>
+<pre><code class="language-sql">CREATE TABLE geofence_events (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  safe_zone_id UUID NOT NULL REFERENCES safe_zones(id) ON DELETE CASCADE,
+  event_type   VARCHAR(10) NOT NULL CHECK (event_type IN ('entry', 'exit')),
+  geom         GEOMETRY(Point, 4326),              -- position at time of event
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_geofence_events_user_id    ON geofence_events(user_id);
+CREATE INDEX idx_geofence_events_created_at ON geofence_events(created_at DESC);
+</code></pre>
+<h3>5.3 Spatial Query Pattern (PostGIS)</h3>
+<p><strong>Geofence containment check:</strong></p>
+<pre><code class="language-sql">SELECT sz.id, sz.name
+FROM safe_zones sz
+JOIN circle_members cm ON cm.circle_id = sz.circle_id
+WHERE cm.user_id = $1
+  AND ST_Contains(sz.geom, ST_SetSRID(ST_MakePoint($2, $3), 4326))
+</code></pre>
+<ul>
+<li><code>$1</code> = user UUID</li>
+<li><code>$2</code> = longitude (float)</li>
+<li><code>$3</code> = latitude (float)</li>
+<li><code>ST_Contains</code> returns true if the point falls inside the polygon boundary</li>
+</ul>
+<hr />
+<h2>6. Backend API Reference</h2>
+<p><strong>Base URL:</strong> <code>https://gravity.trackalways.com/api/v1</code><br />
+<strong>Auth:</strong> Bearer JWT in <code>Authorization</code> header (all protected routes)<br />
+<strong>Rate Limit:</strong> 100 req/15 min per IP (via express-rate-limit)</p>
+<h3>6.1 Authentication — <code>/api/v1/auth</code></h3>
+<p>| Method | Path | Auth | Body | Response |
+|--------|------|------|------|---------|
+| POST | <code>/auth/register</code> | None | <code>{phone, name, password, country_code?}</code> | <code>{token, user}</code> |
+| POST | <code>/auth/login</code> | None | <code>{phone, password}</code> | <code>{token, user}</code> |
+| POST | <code>/auth/google</code> | None | <code>{id_token}</code> | <code>{token, user}</code> |</p>
+<p><strong>Registration flow:</strong></p>
+<ol>
+<li>Validate with Zod schema</li>
+<li><code>bcrypt.hash(password, 10)</code> → store <code>password_hash</code></li>
+<li><code>jwt.sign({userId}, JWT_SECRET, {expiresIn: '30d'})</code></li>
+<li>Return JWT + user object</li>
+</ol>
+<p><strong>Google OAuth flow:</strong></p>
+<ol>
+<li>Client receives Google <code>id_token</code> via Google Identity Services (GIS)</li>
+<li>Backend decodes JWT payload (base64url decode, no external library):<pre><code class="language-js">const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString())
+// payload.sub = Google user ID, payload.email, payload.name
+</code></pre>
+</li>
+<li>Upsert user by <code>google_id</code> — create if new, return existing if returning user</li>
+<li>Return Gravity JWT</li>
+</ol>
+<h3>6.2 Users — <code>/api/v1/users</code></h3>
+<p>| Method | Path | Auth | Body | Response |
+|--------|------|------|------|---------|
+| GET | <code>/users/me</code> | JWT | — | <code>{user}</code> |
+| PATCH | <code>/users/me</code> | JWT | <code>{name?, email?, push_token?, avatar_url?}</code> | <code>{user}</code> |</p>
+<p><strong><code>push_token</code> update:</strong> Called by mobile app after Expo push registration — stores device push token for notification delivery.</p>
+<h3>6.3 Circles — <code>/api/v1/circles</code></h3>
+<p>| Method | Path | Auth | Body | Response |
+|--------|------|------|------|---------|
+| GET | <code>/circles</code> | JWT | — | <code>[{circle, members[]}]</code> |
+| POST | <code>/circles</code> | JWT | <code>{name, icon_url?}</code> | <code>{circle}</code> |
+| GET | <code>/circles/:id</code> | JWT | — | <code>{circle, members[]}</code> |
+| POST | <code>/circles/:id/join</code> | JWT | <code>{invite_code}</code> | <code>{circle}</code> |
+| DELETE | <code>/circles/:id/leave</code> | JWT | — | <code>{success}</code> |
+| GET | <code>/circles/:id/locations</code> | JWT | — | <code>[{user_id, lat, lng, battery, updated_at}]</code> |</p>
+<p><strong>Auto invite_code generation:</strong></p>
+<pre><code class="language-js">const invite_code = Math.random().toString(36).slice(2, 14).toUpperCase()
+</code></pre>
+<h3>6.4 Geofences — <code>/api/v1/geofences</code></h3>
+<p>| Method | Path | Auth | Body | Response |
+|--------|------|------|------|---------|
+| GET | <code>/geofences</code> | JWT | — | <code>[{safe_zone}]</code> |
+| POST | <code>/geofences</code> | JWT | <code>{circle_id, name, center_lat, center_lng, radius_meters}</code> | <code>{safe_zone}</code> |
+| DELETE | <code>/geofences/:id</code> | JWT | — | <code>{success}</code> |</p>
+<p><strong>Polygon construction from center + radius:</strong>
+Backend converts <code>(center_lat, center_lng, radius_meters)</code> → PostGIS polygon using <code>ST_Buffer(ST_MakePoint(lng, lat)::geography, radius)::geometry</code>.</p>
+<h3>6.5 SOS — <code>/api/v1/sos</code></h3>
+<p>| Method | Path | Auth | Body | Response |
+|--------|------|------|------|---------|
+| POST | <code>/sos</code> | JWT | <code>{latitude?, longitude?, message?}</code> | <code>{success, notified_count}</code> |
+| GET | <code>/sos/history</code> | JWT | — | <code>[{sos_event}]</code> |</p>
+<p><strong>SOS trigger flow:</strong></p>
+<ol>
+<li>Authenticated user POSTs <code>/sos</code></li>
+<li>Backend looks up all circles the user belongs to → all member user IDs</li>
+<li>Broadcasts SSE event <code>type: 'sos'</code> to all connected circle members</li>
+<li>Sends Expo push notification to all members with a push token</li>
+</ol>
+<h3>6.6 Media — <code>/api/v1/media</code></h3>
+<p>| Method | Path | Auth | Body | Response |
+|--------|------|------|------|---------|
+| POST | <code>/media/presigned-url</code> | JWT | <code>{filename, content_type}</code> | <code>{upload_url, public_url}</code> |</p>
+<p><strong>R2 presigned upload flow:</strong></p>
+<ol>
+<li>Client requests presigned PUT URL</li>
+<li>Backend generates 15-min expiry presigned URL via AWS SDK</li>
+<li>Client PUTs file directly to R2 (no backend bandwidth)</li>
+<li>Client stores returned <code>public_url</code> in their profile</li>
+</ol>
+<h3>6.7 SSE — <code>/api/v1/sse</code></h3>
+<p>| Method | Path | Auth | Body | Response |
+|--------|------|------|------|---------|
+| GET | <code>/sse/stream</code> | JWT (header or <code>?token=</code>) | — | <code>text/event-stream</code> |</p>
+<p><strong>EventSource limitation workaround:</strong> Browser's native <code>EventSource</code> API cannot send custom headers. The SSE route accepts the JWT via <code>?token=</code> query parameter as a fallback (in addition to <code>Authorization: Bearer</code> header for native clients).</p>
+<p><strong>Event types pushed over SSE:</strong></p>
+<ul>
+<li><code>location_update</code> — a family member's GPS position changed</li>
+<li><code>geofence_entry</code> — a member entered a safe zone</li>
+<li><code>geofence_exit</code> — a member exited a safe zone</li>
+<li><code>sos</code> — emergency SOS triggered by a member</li>
+<li><code>heartbeat</code> — keepalive comment every 30s to prevent connection timeout</li>
+</ul>
+<h3>6.8 Traccar Webhook — <code>/webhooks/traccar/location</code></h3>
+<p>| Method | Path | Auth | Body |
+|--------|------|------|------|
+| POST | <code>/webhooks/traccar/location</code> | Shared secret header | <code>{deviceId, lat, lng, speed, bearing, battery}</code> |</p>
+<p><strong>Flow:</strong></p>
+<ol>
+<li>Traccar sends position update</li>
+<li>Backend maps <code>deviceId</code> → Gravity <code>user_id</code></li>
+<li>Inserts into <code>device_locations</code></li>
+<li>Upserts <code>user_latest_locations</code></li>
+<li>Runs geofence check via <code>geofence.js</code></li>
+<li>Broadcasts SSE <code>location_update</code> to all circle members</li>
+</ol>
+<hr />
+<h2>7. Real-Time System (SSE)</h2>
+<h3>Architecture</h3>
+<p>Gravity uses <strong>Server-Sent Events (SSE)</strong> rather than WebSockets for real-time updates. This was chosen because:</p>
+<ul>
+<li>SSE is unidirectional (server → client), which matches all use cases (location updates, alerts)</li>
+<li>SSE reconnects automatically on disconnect</li>
+<li>SSE works through HTTP/1.1 and most proxies (WebSocket requires protocol upgrade)</li>
+<li>Lower overhead than WebSocket for read-mostly streams</li>
+</ul>
+<h3>In-Memory Client Registry</h3>
+<pre><code class="language-js">// services/sse.js
+const clients = new Map()   // userId → [res, res, ...]  (multi-tab)
+
+function addClient(userId, res) { ... }
+function removeClient(userId, res) { ... }
+function sendToUser(userId, eventType, data) {
+  const conns = clients.get(userId) || []
+  conns.forEach(res =&gt; res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`))
+}
+function sendToUsers(userIds, eventType, data) {
+  userIds.forEach(id =&gt; sendToUser(id, eventType, data))
+}
+</code></pre>
+<p><strong>Note:</strong> The in-memory registry means SSE connections are node-process local. For multi-instance deployments, a Redis pub/sub adapter would be needed (BullMQ's <code>events</code> channel or a dedicated <code>ioredis</code> subscriber).</p>
+<h3>SSE Connection Headers</h3>
+<pre><code>Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+X-Accel-Buffering: no         ← disables Nginx/Caddy buffering
+</code></pre>
+<h3>Heartbeat</h3>
+<pre><code class="language-js">const heartbeat = setInterval(() =&gt; res.write(': heartbeat\n\n'), 30000)
+res.on('close', () =&gt; { clearInterval(heartbeat); removeClient(userId, res) })
+</code></pre>
+<hr />
+<h2>8. Mobile Application</h2>
+<h3>8.1 App Structure</h3>
+<pre><code>mobile/
+├── index.js                    # Entry point — registerRootComponent
+├── app/
+│   ├── _layout.jsx             # Root layout + navigation stack
+│   └── index.jsx               # Auth guard redirect
+└── src/
+    ├── screens/
+    │   ├── auth/               # Login, Register screens
+    │   ├── HomeScreen.jsx      # Live map + family locations
+    │   ├── CirclesScreen.jsx   # Family circles management
+    │   ├── AlertsScreen.jsx    # Notification history
+    │   ├── SafeZonesScreen.jsx # Geofence CRUD
+    │   └── ProfileScreen.jsx   # Account settings
+    ├── store/
+    │   ├── authStore.js        # Zustand — auth state + JWT
+    │   └── circleStore.js      # Zustand — circles + members
+    ├── services/
+    │   ├── api.js              # Axios instance + interceptors
+    │   ├── location.js         # Background GPS tracking
+    │   └── notifications.js   # Expo push registration
+    ├── components/
+    │   ├── MemberAvatar.jsx    # Avatar with online indicator
+    │   ├── PulseRing.jsx       # Animated location pulse
+    │   ├── BatteryIndicator.jsx # Battery level display
+    │   └── ui/PremiumButton.jsx # Haptics-enabled button
+    ├── hooks/                  # Custom React hooks
+    ├── navigation/             # Navigator configuration
+    ├── theme/
+    │   ├── colors.js           # Dark green palette (#0A5C35)
+    │   └── typography.js       # Inter font scale
+    └── utils/
+        └── storage.js          # Platform-safe storage wrapper
+</code></pre>
+<h3>8.2 State Management (Zustand)</h3>
+<p><strong>authStore</strong> — global auth state:</p>
+<pre><code class="language-js">{
+  user: null | { id, name, phone, email, avatar_url },
+  token: null | string,
+  isLoading: boolean,
+  login: (phone, password) =&gt; Promise,
+  logout: () =&gt; void,
+  loadFromStorage: () =&gt; Promise
+}
+</code></pre>
+<p>Token persisted to <code>expo-secure-store</code> (native) or <code>localStorage</code> (web) via <code>utils/storage.js</code>.</p>
+<p><strong>circleStore</strong> — circles data:</p>
+<pre><code class="language-js">{
+  circles: [],
+  activeCircle: null,
+  members: [],
+  setActiveCircle: (circle) =&gt; void,
+  fetchCircles: () =&gt; Promise
+}
+</code></pre>
+<h3>8.3 API Service</h3>
+<pre><code class="language-js">// src/services/api.js
+const apiClient = axios.create({ baseURL: API_BASE_URL })
+
+apiClient.interceptors.request.use(config =&gt; {
+  const token = authStore.getState().token
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+</code></pre>
+<p>TanStack Query wraps all API calls for caching, background refetch, and loading states.</p>
+<h3>8.4 Background Location Tracking</h3>
+<p><strong>Platform guard pattern:</strong></p>
+<pre><code class="language-js">// src/services/location.js
+if (Platform.OS !== 'web') {
+  const TaskManager = require('expo-task-manager')
+  TaskManager.defineTask(LOCATION_TASK, ({ data, error }) =&gt; {
+    if (error) return
+    const { locations } = data
+    // POST to /api/v1/locations with JWT
+  })
+}
+</code></pre>
+<p><strong>Foreground tracking</strong> (web fallback):</p>
+<pre><code class="language-js">if (Platform.OS === 'web' &amp;&amp; navigator.geolocation) {
+  navigator.geolocation.watchPosition(pos =&gt; postLocation(pos.coords), ...)
+}
+</code></pre>
+<p><strong>Location update payload:</strong></p>
+<pre><code class="language-json">{
+  &quot;latitude&quot;: 28.6139,
+  &quot;longitude&quot;: 77.2090,
+  &quot;accuracy&quot;: 12.5,
+  &quot;speed&quot;: 0.0,
+  &quot;bearing&quot;: 0.0,
+  &quot;altitude&quot;: 216.0,
+  &quot;battery_level&quot;: 0.85
+}
+</code></pre>
+<h3>8.5 Push Notifications (Mobile)</h3>
+<pre><code class="language-js">// src/services/notifications.js
+async function registerForPushNotifications() {
+  if (Platform.OS === 'web') return null
+  
+  const Notifications = require('expo-notifications')
+  const { status } = await Notifications.requestPermissionsAsync()
+  if (status !== 'granted') return null
+  
+  const token = await Notifications.getExpoPushTokenAsync({
+    projectId: Constants.expoConfig.extra.eas.projectId
+  })
+  
+  // Store token on backend
+  await api.patch('/users/me', { push_token: token.data })
+  return token.data
+}
+</code></pre>
+<h3>8.6 Web Compatibility Layer</h3>
+<p>All native-only APIs are guarded to allow web builds:</p>
+<p>| API | Native | Web Fallback |
+|-----|--------|-------------|
+| <code>expo-secure-store</code> | SecureStore.getItemAsync | <code>localStorage</code> |
+| <code>expo-haptics</code> | Haptics.impactAsync | (no-op) |
+| <code>expo-task-manager</code> | TaskManager.defineTask | not registered |
+| <code>expo-notifications</code> | full push support | returns null |
+| <code>react-native-sse</code> | NativeEventSource | browser EventSource |
+| <code>react-native-maps</code> | MapView native | stubs/react-native-maps.web.js |</p>
+<hr />
+<h2>9. Web Platform</h2>
+<h3>9.1 Landing Page (<code>index.html</code>)</h3>
+<p><strong>Features:</strong></p>
+<ul>
+<li>Interactive Leaflet.js map with animated family member markers</li>
+<li>Particle canvas background animation</li>
+<li>Stats counter (animated: users, countries, alerts)</li>
+<li>Map type switcher: Dark Matter / Light / Satellite / Street</li>
+<li>Features grid, testimonials, download CTA</li>
+<li>Google Play Store link: <code>https://play.google.com/store/apps/details?id=com.trackalways.gravity</code></li>
+<li>Responsive mobile layout</li>
+</ul>
+<p><strong>Map tile sources:</strong>
+| Mode | Provider | URL Template |
+|------|----------|-------------|
+| Dark | CartoDB | <code>https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png</code> |
+| Light | CartoDB | <code>https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png</code> |
+| Satellite | ESRI | <code>https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/...</code> |
+| Street | CartoDB | <code>https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png</code> |</p>
+<h3>9.2 Parent Dashboard (<code>parent-panel.html</code>)</h3>
+<p><strong>5-tab UI:</strong></p>
+<p>| Tab | Content |
+|-----|---------|
+| Map | Leaflet map with live family member positions, custom markers with avatar + battery |
+| Family | Member list with last seen, location, battery indicators |
+| Alerts | Real-time alert feed (geofence events, SOS) |
+| Geofence | Safe zone list + create/delete controls |
+| Settings | Account info, notifications toggle, logout |</p>
+<p><strong>Auth guard:</strong></p>
+<pre><code class="language-js">const token = localStorage.getItem('gravity_token')
+if (!token) {
+  localStorage.setItem('gravity_redirect', 'parent-panel.html')
+  window.location.href = 'login.html'
+}
+</code></pre>
+<p><strong>Real-time SSE connection:</strong></p>
+<pre><code class="language-js">const es = new EventSource(`${API_BASE}/sse/stream?token=${token}`)
+es.addEventListener('location_update', e =&gt; updateMemberOnMap(JSON.parse(e.data)))
+es.addEventListener('geofence_entry', e =&gt; showAlert(JSON.parse(e.data)))
+es.addEventListener('geofence_exit', e =&gt; showAlert(JSON.parse(e.data)))
+es.addEventListener('sos', e =&gt; triggerSOSAlert(JSON.parse(e.data)))
+</code></pre>
+<h3>9.3 Child Dashboard (<code>child-panel.html</code>)</h3>
+<p><strong>5-tab UI:</strong></p>
+<p>| Tab | Content |
+|-----|---------|
+| Home | Welcome, status card, quick actions |
+| Map | Child's own location on Leaflet map |
+| SOS | Large SOS button with 3-second hold confirmation |
+| Family | View circle members + their locations |
+| Profile | Account info, logout |</p>
+<p><strong>SOS button — hold-to-confirm UX:</strong></p>
+<pre><code class="language-js">let holdTimer = null
+let holdCount = 3
+
+button.addEventListener('mousedown', () =&gt; {
+  holdTimer = setInterval(() =&gt; {
+    holdCount--
+    updateButtonLabel(holdCount)
+    if (holdCount === 0) { clearInterval(holdTimer); activateSOS() }
+  }, 1000)
+})
+button.addEventListener('mouseup', () =&gt; { clearInterval(holdTimer); resetButton() })
+</code></pre>
+<p><strong>SOS with geolocation:</strong></p>
+<pre><code class="language-js">function activateSOS() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos =&gt; sendSOS(pos.coords.latitude, pos.coords.longitude),
+      () =&gt; sendSOS(null, null)
+    )
+  }
+}
+</code></pre>
+<h3>9.4 Login Page (<code>login.html</code>)</h3>
+<p><strong>Tabs:</strong> Login | Register</p>
+<p><strong>Phone + Password auth:</strong></p>
+<pre><code class="language-js">const res = await fetch(`${API_BASE}/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ phone, password })
+})
+const { token, user } = await res.json()
+localStorage.setItem('gravity_token', token)
+localStorage.setItem('gravity_user', JSON.stringify(user))
+</code></pre>
+<p><strong>Google Identity Services:</strong></p>
+<pre><code class="language-js">google.accounts.id.initialize({
+  client_id: GOOGLE_CLIENT_ID,
+  callback: async ({ credential }) =&gt; {
+    const res = await fetch(`${API_BASE}/auth/google`, {
+      method: 'POST',
+      body: JSON.stringify({ id_token: credential })
+    })
+  }
+})
+</code></pre>
+<h3>9.5 Marketing Pages</h3>
+<ul>
+<li><code>parent.html</code> — Parent features marketing page with feature cards, screenshots, CTA</li>
+<li><code>child.html</code> — Child features marketing page with safety messaging, CTA</li>
+</ul>
+<hr />
+<h2>10. Authentication &amp; Security</h2>
+<h3>10.1 JWT Implementation</h3>
+<p>| Property | Value |
+|----------|-------|
+| Algorithm | HS256 |
+| Secret | <code>JWT_SECRET</code> env var (min 32 chars recommended) |
+| Expiry | 30 days (<code>30d</code>) |
+| Payload | <code>{ userId: UUID, iat, exp }</code> |
+| Storage (native) | <code>expo-secure-store</code> (encrypted, OS keychain) |
+| Storage (web) | <code>localStorage</code> (acceptable for SPA, note XSS risk) |</p>
+<p><strong>Auth middleware:</strong></p>
+<pre><code class="language-js">function authenticate(req, res, next) {
+  const header = req.headers.authorization
+  if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
+  const token = header.slice(7)
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET)
+    next()
+  } catch {
+    res.status(401).json({ error: 'Invalid token' })
+  }
+}
+</code></pre>
+<h3>10.2 Password Security</h3>
+<ul>
+<li>Algorithm: bcrypt (via <code>bcryptjs</code>)</li>
+<li>Cost factor: 10 rounds (~100ms per hash)</li>
+<li>Storage: <code>password_hash</code> column only — plain password never persisted</li>
+</ul>
+<h3>10.3 HTTP Security Headers (Helmet)</h3>
+<pre><code class="language-js">app.use(helmet())   // sets:
+// X-Content-Type-Options: nosniff
+// X-Frame-Options: DENY
+// X-XSS-Protection: 1; mode=block
+// Strict-Transport-Security: max-age=15552000
+// Content-Security-Policy: default-src 'self'
+</code></pre>
+<h3>10.4 Rate Limiting</h3>
+<pre><code class="language-js">const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 100,                   // 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false
+})
+app.use('/api/', limiter)
+</code></pre>
+<h3>10.5 Input Validation (Zod)</h3>
+<p>All POST request bodies are validated with Zod schemas before processing:</p>
+<pre><code class="language-js">const registerSchema = z.object({
+  phone: z.string().min(10).max(15),
+  name: z.string().min(2).max(100),
+  password: z.string().min(8),
+  country_code: z.string().length(2).optional()
+})
+</code></pre>
+<h3>10.6 Circle Authorization</h3>
+<p>All circle operations verify membership:</p>
+<pre><code class="language-sql">SELECT 1 FROM circle_members
+WHERE circle_id = $1 AND user_id = $2
+</code></pre>
+<p>Only circle admins can delete geofences and remove members.</p>
+<hr />
+<h2>11. Geofencing Engine</h2>
+<h3>11.1 Flow</h3>
+<pre><code>Location Update Received
+         │
+         ▼
+  checkGeofenceStatus(userId, lng, lat)
+         │
+         ▼
+  PostGIS: SELECT safe_zones WHERE ST_Contains(geom, point)
+         │
+    ┌────┴────┐
+    │ Inside  │ Outside
+    ▼         ▼
+  entry      exit
+  event?    event?
+    │         │
+    ▼         ▼
+  Insert geofence_event
+         │
+         ▼
+  notifyCircleMembers()
+    ├── SSE broadcast
+    └── Expo push notifications
+</code></pre>
+<h3>11.2 Entry/Exit Detection</h3>
+<p>The service tracks the previous state to avoid duplicate events:</p>
+<pre><code class="language-js">const prevState = await getPreviousGeofenceState(userId, safeZoneId)
+if (isInside &amp;&amp; prevState !== 'inside') {
+  await insertGeofenceEvent(userId, safeZoneId, 'entry', geom)
+  await notifyCircleMembers(userId, safeZone, 'entry')
+} else if (!isInside &amp;&amp; prevState === 'inside') {
+  await insertGeofenceEvent(userId, safeZoneId, 'exit', geom)
+  await notifyCircleMembers(userId, safeZone, 'exit')
+}
+</code></pre>
+<h3>11.3 Push Notification Payload</h3>
+<pre><code class="language-js">{
+  to: user.push_token,
+  sound: 'default',
+  title: `${memberName} ${eventType === 'entry' ? 'arrived at' : 'left'} ${zoneName}`,
+  body: `${new Date().toLocaleTimeString()}`,
+  data: { type: 'geofence', event_type: eventType, zone_name: zoneName }
+}
+</code></pre>
+<hr />
+<h2>12. Background Jobs</h2>
+<h3>12.1 Job Runner Architecture</h3>
+<pre><code class="language-js">// jobs/index.js
+if (process.env.REDIS_URL) {
+  // BullMQ with Redis persistence
+  const queue = new Queue('cleanup', { connection: redisClient })
+  const worker = new Worker('cleanup', async job =&gt; { ... }, { connection: redisClient })
+} else {
+  // Fallback: node-cron (no Redis needed)
+  cron.schedule('0 2 * * *', cleanOldLocations)   // 2:00 UTC daily
+  cron.schedule('0 3 * * *', cleanOldGeofenceEvents) // 3:00 UTC daily
+}
+</code></pre>
+<h3>12.2 Scheduled Tasks</h3>
+<p>| Task | Schedule | Query |
+|------|----------|-------|
+| Clean old locations | Daily 02:00 UTC | <code>DELETE FROM device_locations WHERE recorded_at &lt; NOW() - INTERVAL '7 days'</code> |
+| Clean old geofence events | Daily 03:00 UTC | <code>DELETE FROM geofence_events WHERE created_at &lt; NOW() - INTERVAL '30 days'</code> |</p>
+<h3>12.3 Data Retention Policy</h3>
+<p>| Data Type | Retention |
+|-----------|-----------|
+| Location history | 7 days |
+| Geofence events | 30 days |
+| SOS events | Indefinite (safety records) |
+| User accounts | Until deletion request |
+| Latest location | Always (1 row per user) |</p>
+<hr />
+<h2>13. Push Notification Pipeline</h2>
+<h3>13.1 Expo Push API</h3>
+<pre><code>Backend → POST https://exp.host/--/api/v2/push/send
+Authorization: Bearer ${EXPO_ACCESS_TOKEN}
+Content-Type: application/json
+
+{
+  &quot;to&quot;: &quot;ExponentPushToken[xxxxx]&quot;,
+  &quot;sound&quot;: &quot;default&quot;,
+  &quot;title&quot;: &quot;Sarah left School&quot;,
+  &quot;body&quot;: &quot;3:45 PM&quot;,
+  &quot;data&quot;: { &quot;type&quot;: &quot;geofence_exit&quot; }
+}
+</code></pre>
+<h3>13.2 Token Registration Flow</h3>
+<ol>
+<li>App starts → <code>registerForPushNotifications()</code></li>
+<li>OS prompts user for notification permission</li>
+<li>If granted → <code>Notifications.getExpoPushTokenAsync()</code> → <code>ExponentPushToken[...]</code></li>
+<li>Token POST to <code>PATCH /api/v1/users/me</code> → stored in <code>users.push_token</code></li>
+<li>Backend uses token for all subsequent push deliveries</li>
+</ol>
+<h3>13.3 Notification Types</h3>
+<p>| Event | Title | Body |
+|-------|-------|------|
+| SOS | <code>🚨 {name} needs help!</code> | Location coordinates if available |
+| Geofence entry | <code>{name} arrived at {zone}</code> | Timestamp |
+| Geofence exit | <code>{name} left {zone}</code> | Timestamp |
+| Low battery | <code>{name}'s battery is low</code> | Battery percentage |</p>
+<hr />
+<h2>14. Media Storage (R2)</h2>
+<h3>14.1 Upload Flow</h3>
+<pre><code>Client                    Backend                  Cloudflare R2
+  │                          │                          │
+  ├─POST /media/presigned──▶│                          │
+  │  {filename, content_type}│                          │
+  │                          ├─CreatePresignedPost────▶│
+  │                          │◀──{uploadUrl, publicUrl}─┤
+  │◀─{upload_url, public_url}─┤                          │
+  │                          │                          │
+  ├─PUT {upload_url}─────────────────────────────────▶ │
+  │  (file binary)           │                          │
+  │                          │                 ◀stored─┤
+  │                          │                          │
+  ├─PATCH /users/me──────▶  │                          │
+  │  {avatar_url: public_url}│                          │
+</code></pre>
+<h3>14.2 Presigned URL Generation</h3>
+<pre><code class="language-js">const command = new PutObjectCommand({
+  Bucket: process.env.R2_BUCKET_NAME,
+  Key: `avatars/${userId}/${filename}`,
+  ContentType: contentType
+})
+const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 900 })
+const publicUrl = `https://${process.env.R2_PUBLIC_DOMAIN}/avatars/${userId}/${filename}`
+</code></pre>
+<hr />
+<h2>15. GPS Telemetry (Traccar)</h2>
+<h3>15.1 Integration Overview</h3>
+<p>Traccar is an open-source GPS tracking platform that supports 170+ GPS device protocols. Gravity integrates with Traccar for hardware GPS trackers (OBD port devices, personal GPS beacons).</p>
+<h3>15.2 Webhook Flow</h3>
+<pre><code>GPS Device → Traccar Server → Webhook POST → Gravity Backend
+</code></pre>
+<p><strong>Webhook endpoint:</strong> <code>POST /webhooks/traccar/location</code></p>
+<p><strong>Payload from Traccar:</strong></p>
+<pre><code class="language-json">{
+  &quot;deviceId&quot;: &quot;tracker_abc123&quot;,
+  &quot;latitude&quot;: 28.6139,
+  &quot;longitude&quot;: 77.2090,
+  &quot;speed&quot;: 12.5,
+  &quot;bearing&quot;: 245.0,
+  &quot;attributes&quot;: {
+    &quot;batteryLevel&quot;: 0.78
+  }
+}
+</code></pre>
+<p><strong>Backend processing:</strong></p>
+<ol>
+<li>Validate shared-secret header</li>
+<li>Look up <code>deviceId</code> → <code>user_id</code> mapping (stored in <code>users.device_id</code> or separate mapping table)</li>
+<li>Insert location record</li>
+<li>Update <code>user_latest_locations</code></li>
+<li>Run geofence check</li>
+<li>Broadcast SSE to circle members</li>
+</ol>
+<hr />
+<h2>16. Free vs Paid Services Breakdown</h2>
+<h3>16.1 Fully Free Components</h3>
+<p>| Service | Why Free | Limits |
+|---------|----------|--------|
+| Node.js 20 | Open source runtime | None |
+| Express 5.2 | Open source framework | None |
+| All npm packages | MIT/Apache open source | None |
+| Expo (toolchain) | Free tier available | OTA update limits |
+| React Native | Open source | None |
+| Leaflet.js | BSD-2 open source | None |
+| CartoDB map tiles | Free for low-traffic sites | Rate limits apply |
+| ESRI World Imagery | Free with attribution | Rate limits apply |
+| Traccar | Open source, self-hosted | Hosting cost only |
+| Caddy 2 | Open source + auto-TLS | None |
+| Let's Encrypt TLS | Free CA | 50 certs/domain/week |
+| PostGIS | Open source extension | None |
+| uuid-ossp | Open source | None |
+| Google Fonts (Inter) | Free | None |
+| Google Identity Services | Free OAuth | 10,000 users/day free |
+| node-cron | Open source | None |</p>
+<h3>16.2 Paid / Freemium Components</h3>
+<p>| Service | Free Tier | Paid Plan | When to Upgrade |
+|---------|-----------|-----------|----------------|
+| <strong>Neon PostgreSQL</strong> | 0.5 GB storage, 1 compute unit, 1 project | Launch: $19/mo (10 GB, 4 CU) | &gt;500 active users |
+| <strong>Cloudflare R2</strong> | 10 GB/mo storage, 1M Class A ops | $0.015/GB beyond free | &gt;500 avatars stored |
+| <strong>Expo Push (EAS)</strong> | 1,000 devices, 10 push/day limit | EAS Production: $99/mo | &gt;1,000 app users |
+| <strong>Redis (BullMQ)</strong> | Upstash free: 10k cmd/day | Upstash Pay-per-use ~$0.2/100k cmd | Multi-instance deploy |
+| <strong>VPS / Server</strong> | — | ~$6-20/mo (DigitalOcean, Hetzner) | Always (required for backend) |
+| <strong>Domain</strong> | — | ~$12/year | Always (required) |</p>
+<h3>16.3 Monthly Cost Estimate</h3>
+<p>| Stage | Users | Est. Cost/Month |
+|-------|-------|----------------|
+| Development | 0-10 | ~$6-20 (VPS only) |
+| Early beta | 10-500 | ~$25-40 (VPS + Neon Launch) |
+| Growth | 500-5000 | ~$130-200 (+ Expo EAS) |
+| Scale | 5000+ | Custom pricing |</p>
+<hr />
+<h2>17. Feature Matrix (Free vs Premium)</h2>
+<p><em>Business model: freemium app — basic features free, premium features via in-app subscription.</em></p>
+<h3>17.1 App Features</h3>
+<p>| Feature | Free | Premium |
+|---------|:----:|:-------:|
+| Join/create 1 family circle | ✓ | ✓ |
+| Create up to 3 family circles | — | ✓ |
+| See family member locations (real-time) | ✓ | ✓ |
+| Location history (last 24 hours) | ✓ | — |
+| Location history (7 days) | — | ✓ |
+| Up to 3 geofences | ✓ | ✓ |
+| Unlimited geofences | — | ✓ |
+| Geofence entry/exit alerts | ✓ | ✓ |
+| SOS emergency alert | ✓ | ✓ |
+| SOS with GPS coordinates | ✓ | ✓ |
+| Push notifications | ✓ | ✓ |
+| Battery level monitoring | ✓ | ✓ |
+| Custom avatar + circle icon | — | ✓ |
+| Speed alerts | — | ✓ |
+| Driving reports | — | ✓ |
+| Route history playback | — | ✓ |
+| Check-in reminders | — | ✓ |
+| Priority push delivery | — | ✓ |
+| Hardware GPS tracker support (Traccar) | — | ✓ |
+| Up to 5 members per circle | ✓ | — |
+| Unlimited members per circle | — | ✓ |
+| Ad-free experience | — | ✓ |</p>
+<h3>17.2 Web Dashboard Features</h3>
+<p>| Feature | Free | Premium |
+|---------|:----:|:-------:|
+| Parent web panel access | ✓ | ✓ |
+| Child web panel access | ✓ | ✓ |
+| Live map view | ✓ | ✓ |
+| Map type switcher (4 styles) | ✓ | ✓ |
+| Alert history (last 48 hours) | ✓ | — |
+| Full alert history | — | ✓ |
+| Geofence management UI | ✓ | ✓ |
+| Export location data (CSV) | — | ✓ |</p>
+<hr />
+<h2>18. Environment Configuration</h2>
+<h3>18.1 Backend <code>.env</code></h3>
+<pre><code class="language-bash"># Server
+PORT=8002
+NODE_ENV=production
+
+# Database (Neon PostgreSQL)
+DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/gravity?sslmode=require
+
+# JWT
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars
+
+# Cloudflare R2
+R2_ACCOUNT_ID=your_cf_account_id
+R2_ACCESS_KEY=your_r2_access_key
+R2_SECRET_KEY=your_r2_secret_key
+R2_BUCKET_NAME=gravity-media
+R2_PUBLIC_DOMAIN=pub-xxxx.r2.dev
+
+# Expo Push Notifications
+EXPO_ACCESS_TOKEN=your_expo_access_token
+
+# Redis (optional — BullMQ job queue)
+REDIS_URL=redis://localhost:6379
+
+# Traccar webhook secret
+TRACCAR_WEBHOOK_SECRET=your_traccar_secret
+
+# CORS
+ALLOWED_ORIGINS=https://gravity.trackalways.com,http://localhost:3021
+</code></pre>
+<h3>18.2 Mobile <code>app.config.js</code> (key fields)</h3>
+<pre><code class="language-js">{
+  name: &quot;Gravity&quot;,
+  slug: &quot;gravity&quot;,
+  version: &quot;1.0.0&quot;,
+  platforms: [&quot;ios&quot;, &quot;android&quot;, &quot;web&quot;],
+  android: {
+    package: &quot;com.trackalways.gravity&quot;,
+    permissions: [&quot;ACCESS_FINE_LOCATION&quot;, &quot;ACCESS_BACKGROUND_LOCATION&quot;]
+  },
+  ios: {
+    bundleIdentifier: &quot;com.trackalways.gravity&quot;,
+    infoPlist: {
+      NSLocationAlwaysAndWhenInUseUsageDescription: &quot;Gravity tracks location for family safety&quot;,
+      NSLocationWhenInUseUsageDescription: &quot;Gravity uses location to show your family where you are&quot;
+    }
+  },
+  extra: {
+    eas: { projectId: &quot;your-eas-project-id&quot; },
+    apiUrl: &quot;https://gravity.trackalways.com/api/v1&quot;
+  }
+}
+</code></pre>
+<hr />
+<h2>19. Deployment &amp; Reverse Proxy</h2>
+<h3>19.1 Production Deployment (Caddy)</h3>
+<pre><code class="language-caddyfile">gravity.trackalways.com {
+  # SSE — disable buffering for real-time events
+  @sse path /api/v1/sse/*
+  handle @sse {
+    reverse_proxy localhost:8002 {
+      flush_interval -1
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  # API
+  handle /api/* {
+    reverse_proxy localhost:8002 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Webhooks
+  handle /webhooks/* {
+    reverse_proxy localhost:8002
+  }
+
+  # Static web files
+  handle {
+    root * /media/server/linux-part/Gravity/landing
+    file_server
+  }
+
+  # Security headers
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+  }
+
+  encode gzip
+}
+</code></pre>
+<h3>19.2 Process Management (PM2)</h3>
+<pre><code class="language-bash">pm2 start src/app.js --name gravity-backend --watch
+pm2 startup
+pm2 save
+</code></pre>
+<h3>19.3 Database Migrations</h3>
+<pre><code class="language-bash">cd backend
+node src/db/migrate.js    # runs all .sql files in migrations/
+</code></pre>
+<p>Migration files:</p>
+<ul>
+<li><code>001_initial.sql</code> — full schema creation</li>
+<li><code>004_add_google_id.sql</code> — adds <code>google_id</code> column to users</li>
+</ul>
+<hr />
+<h2>20. Security Implementation</h2>
+<h3>20.1 Defense in Depth</h3>
+<p>| Layer | Control | Implementation |
+|-------|---------|---------------|
+| Transport | TLS 1.3 | Caddy + Let's Encrypt |
+| HTTP | Security headers | Helmet.js |
+| Network | Rate limiting | express-rate-limit (100/15min) |
+| Auth | JWT verification | jsonwebtoken (HS256) |
+| Password | Bcrypt hashing | bcryptjs (10 rounds) |
+| Input | Schema validation | Zod |
+| DB | Parameterized queries | pg prepared statements |
+| Authorization | Circle membership check | SQL before every circle op |
+| Storage (native) | Encrypted keychain | expo-secure-store |
+| Media | Presigned URLs | 15-min expiry, no proxy needed |
+| Webhook | Shared secret | X-Traccar-Secret header |</p>
+<h3>20.2 SQL Injection Prevention</h3>
+<p>All database queries use parameterized statements — no string interpolation:</p>
+<pre><code class="language-js">// SAFE — parameterized
+const result = await pool.query(
+  'SELECT * FROM users WHERE phone = $1',
+  [req.body.phone]
+)
+
+// NEVER done — string concat
+// `SELECT * FROM users WHERE phone = '${req.body.phone}'`  ← NEVER
+</code></pre>
+<h3>20.3 CORS Configuration</h3>
+<pre><code class="language-js">const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',')
+app.use(cors({
+  origin: (origin, callback) =&gt; {
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true)
+    else callback(new Error('Not allowed by CORS'))
+  },
+  credentials: true
+}))
+</code></pre>
+<h3>20.4 Known Security Considerations</h3>
+<p>| Item | Status | Notes |
+|------|--------|-------|
+| JWT in localStorage (web) | Acceptable | XSS risk mitigated by CSP headers |
+| SSE token in query param | Accepted tradeoff | EventSource API limitation — token in URL may appear in server logs; use HTTPS always |
+| Google JWT decoded without verification | ⚠ Improve | Should verify signature using Google's public keys for production |
+| No refresh token | MVP | Add refresh tokens for production to reduce 30-day token lifetime |
+| No 2FA | MVP | Consider TOTP for admin accounts |</p>
+<hr />
+<p><em>End of Engineering Specification — Trackalways Gravity v1.0.0</em></p>
+<p><em>Document generated: June 2026</em></p>
+
+</body>
+</html>

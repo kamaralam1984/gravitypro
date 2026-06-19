@@ -1,0 +1,47 @@
+module.exports = {
+  apps: [
+    {
+      name: 'gravity-api',
+      script: 'src/app.js',
+      cwd: '/media/server/linux-part/Gravity/backend',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 8002,
+      },
+      error_file: '/tmp/gravity-api-error.log',
+      out_file: '/tmp/gravity-api-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    },
+    {
+      name: 'gravity-traccar',
+      script: '/tmp/start-traccar.sh',
+      cwd: '/home/server/traccar',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '600M',
+      error_file: '/tmp/gravity-traccar-error.log',
+      out_file: '/tmp/gravity-traccar-out.log',
+      min_uptime: '30s',
+      kill_timeout: 5000,
+    },
+    {
+      name: 'gravity-web',
+      script: 'server.js',
+      cwd: '/media/server/linux-part/Gravity/landing-react',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      env: {
+        PORT: 8090,
+      },
+      error_file: '/tmp/gravity-web-error.log',
+      out_file: '/tmp/gravity-web-out.log',
+    },
+  ],
+}

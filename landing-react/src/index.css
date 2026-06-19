@@ -1,0 +1,269 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+
+/* GLOBAL RESET + VARIABLES */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #020C05;
+  --bg2: #050F08;
+  --bg3: #081510;
+  --card: #0D2018;
+  --green: #0A5C35;
+  --green2: #0D7A45;
+  --bright: #10A05C;
+  --accent: #00E676;
+  --accent2: #00C853;
+  --teal: #00FFB2;
+  --white: #FFFFFF;
+  --text: #E8F5E9;
+  --text2: #A5C9AE;
+  --muted: #5E8B6E;
+  --border: rgba(0,230,118,0.1);
+  --glow: rgba(0,200,83,0.25);
+  --radius: 20px;
+  --radius-sm: 12px;
+  --r: 20px;
+  --rs: 12px;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+a { text-decoration: none; color: inherit; }
+
+img { max-width: 100%; }
+
+section, div[id] { scroll-margin-top: 80px; }
+
+/* ===== NAV KEYFRAMES ===== */
+@keyframes navSlideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+@keyframes navBorderChase {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes logoGlow {
+  0%,100% { filter: drop-shadow(0 0 5px rgba(0,230,118,0.25)); }
+  50%     { filter: drop-shadow(0 0 14px rgba(0,230,118,0.7)) drop-shadow(0 0 28px rgba(0,200,83,0.3)); }
+}
+
+@keyframes logoPinDrop {
+  0%   { transform: translateY(-10px) scale(0.8); opacity: 0; }
+  65%  { transform: translateY(3px)  scale(1.06); opacity: 1; }
+  82%  { transform: translateY(-2px) scale(0.97); }
+  100% { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+
+@keyframes ctaPulse {
+  0%,100% { box-shadow: 0 4px 20px rgba(0,200,83,0.28); }
+  50%     { box-shadow: 0 4px 32px rgba(0,200,83,0.55), 0 0 48px rgba(0,200,83,0.15); }
+}
+
+@keyframes ctaShimmer {
+  0%   { left: -100%; opacity: 0.6; }
+  100% { left: 160%;  opacity: 0; }
+}
+
+@keyframes navLinkIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes activeDot {
+  0%,100% { transform: translateX(-50%) scale(1);   opacity: 0.9; }
+  50%     { transform: translateX(-50%) scale(1.5); opacity: 1; }
+}
+
+@keyframes mobileItemIn {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ===== HERO / GENERAL KEYFRAMES ===== */
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.4); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(0, 230, 118, 0); }
+}
+
+@keyframes slideUpFadeIn {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ===== MAP KEYFRAMES ===== */
+@keyframes mapPingRing {
+  0% { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.8); }
+}
+
+/* ===== FEATURE CARD v2 KEYFRAMES ===== */
+@keyframes fc2TrailDraw {
+  0%   { stroke-dashoffset: 160; opacity: 0; }
+  20%  { opacity: 0.55; }
+  80%  { opacity: 0.55; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+@keyframes fc2LocMove {
+  0%   { offset-distance: 0%; }
+  100% { offset-distance: 100%; }
+}
+
+@keyframes fc2LocPing {
+  0%   { r: 4; opacity: 0.85; }
+  100% { r: 16; opacity: 0; }
+}
+
+@keyframes fc2GeoSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes fc2GeoPulse {
+  0%,100% { opacity: 0.18; transform: scale(0.95); }
+  50%     { opacity: 0.08; transform: scale(1.05); }
+}
+
+@keyframes fc2FamFloat {
+  0%,100% { transform: translateY(0px); }
+  50%     { transform: translateY(-9px); }
+}
+
+@keyframes fc2FamPulse {
+  0%,100% { opacity: 0.18; }
+  50%     { opacity: 0.06; }
+}
+
+@keyframes fc2SosPing {
+  0%   { r: 16; opacity: 0.65; stroke-width: 2.5; }
+  100% { r: 54; opacity: 0;    stroke-width: 0.5; }
+}
+
+@keyframes fc2SosWarn {
+  0%,100% { opacity: 1; filter: drop-shadow(0 0 4px rgba(255,82,82,0.5)); }
+  50%     { opacity: 0.7; filter: drop-shadow(0 0 12px rgba(255,82,82,0.9)); }
+}
+
+@keyframes fc2BattFill {
+  0%   { transform: scaleY(0.05); }
+  100% { transform: scaleY(1); }
+}
+
+@keyframes fc2BattBolt {
+  0%,100% { opacity: 1; }
+  50%     { opacity: 0.35; }
+}
+
+@keyframes fc2BattLeaf {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 0.7; }
+  100% { transform: translateY(-28px) rotate(20deg); opacity: 0; }
+}
+
+@keyframes fc2ShieldFloat {
+  0%,100% { transform: translateY(0) rotate(-3deg); }
+  50%     { transform: translateY(-7px) rotate(3deg); }
+}
+
+@keyframes fc2ShieldParticle {
+  0%   { transform: translateY(0) translateX(0); opacity: 0.75; }
+  100% { transform: translateY(-32px) translateX(var(--px,6px)); opacity: 0; }
+}
+
+@keyframes fc2Shimmer {
+  from { left: -100%; }
+  to   { left: 160%; }
+}
+
+@keyframes fc2CardGlow {
+  0%,100% { box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  50%     { box-shadow: 0 12px 44px rgba(0,0,0,0.6), 0 0 28px var(--fc2-glow,rgba(0,200,83,0.1)); }
+}
+
+@keyframes fc2Spark {
+  0%   { transform: scale(0) translateY(0); opacity: 0; }
+  25%  { opacity: 0.9; }
+  100% { transform: scale(1.4) translateY(-18px); opacity: 0; }
+}
+
+/* ===== SOS KEYFRAMES ===== */
+@keyframes sosPulseSpot {
+  0%, 100% { box-shadow: 0 0 0 20px rgba(255,23,68,0.08), 0 0 0 40px rgba(255,23,68,0.04), 0 20px 60px rgba(255,23,68,0.4); }
+  50% { box-shadow: 0 0 0 30px rgba(255,23,68,0.12), 0 0 0 60px rgba(255,23,68,0.06), 0 20px 80px rgba(255,23,68,0.5); }
+}
+
+/* ===== PHONE / PANEL KEYFRAMES ===== */
+@keyframes phDotPing {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+@keyframes phMapFloat1 {
+  0%,100% { transform: translate(0,0); }
+  30%     { transform: translate(5px,-3px); }
+  60%     { transform: translate(7px,3px); }
+  80%     { transform: translate(2px,5px); }
+}
+
+@keyframes phMapFloat2 {
+  0%,100% { transform: translate(0,0); }
+  35%     { transform: translate(-5px,-4px); }
+  65%     { transform: translate(4px,3px); }
+}
+
+@keyframes phMapFloat3 {
+  0%,100% { transform: translate(0,0); }
+  40%     { transform: translate(-4px,5px); }
+  70%     { transform: translate(5px,-3px); }
+}
+
+@keyframes phSosRing {
+  0%   { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+@keyframes phSosGlow {
+  0%,100% { box-shadow: 0 0 20px rgba(255,23,68,0.4), 0 6px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2); }
+  50%     { box-shadow: 0 0 45px rgba(255,23,68,0.75), 0 6px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2); }
+}
+
+@keyframes phGeoSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes phSlideUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes phBattFill {
+  to { width: var(--pct,50%); }
+}
+
+@keyframes phSlideInAlert {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ===== LOGIN / AUTH KEYFRAMES ===== */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,230,118,0); }
+  50% { box-shadow: 0 0 0 6px rgba(0,230,118,0.1); }
+}

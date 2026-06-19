@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Gravity for Parents — Real-time family location tracking, geofence alerts, and SOS notifications. Keep every family member safe with one app." />
+  <meta name="theme-color" content="#020C05" />
+  <title>Gravity for Parents — Keep Your Children Safe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root {
+      --bg:#020C05; --bg2:#050F08; --bg3:#081510; --card:#0D2018;
+      --green:#0A5C35; --accent:#00E676; --accent2:#00C853;
+      --white:#FFFFFF; --text:#E8F5E9; --text2:#A5C9AE; --muted:#5E8B6E;
+      --border:rgba(0,230,118,0.1); --glow:rgba(0,200,83,0.25);
+      --r:20px; --rs:12px;
+    }
+    html{scroll-behavior:smooth;}
+    body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;}
+    a{text-decoration:none;color:inherit;}
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      padding: 0 24px;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(2,12,5,0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    nav.scrolled {
+      box-shadow: 0 4px 40px rgba(0,0,0,0.6);
+    }
+    .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+    /* ── LOGO ── */
+    .nav-logo-icon { display:flex; align-items:center; justify-content:center; }
+    .logo-svg { overflow:visible; filter:drop-shadow(0 0 6px rgba(0,230,118,0.3)); transition:filter .3s; }
+    .nav-logo:hover .logo-svg { filter:drop-shadow(0 0 10px rgba(0,230,118,0.55)); }
+    .nav-logo-text { font-size:15px; font-weight:900; letter-spacing:4px; text-transform:uppercase; color:#fff; }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text2);
+      transition: color 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    .nav-links a:hover { color: var(--accent); }
+    .nav-links a.active { color: var(--accent); }
+    .nav-cta {
+      background: linear-gradient(135deg, var(--green), var(--accent2));
+      color: var(--white);
+      font-weight: 700;
+      font-size: 14px;
+      padding: 10px 22px;
+      border-radius: 50px;
+      transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    .nav-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px var(--glow);
+    }
+
+    /* Hamburger */
+    .hamburger-input { display: none; }
+    .hamburger-label {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      cursor: pointer;
+      padding: 8px;
+      z-index: 1001;
+    }
+    .hamburger-label span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--text);
+      border-radius: 2px;
+      transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    .hamburger-input:checked ~ .hamburger-label span:nth-child(1) {
+      transform: translateY(7px) rotate(45deg);
+    }
+    .hamburger-input:checked ~ .hamburger-label span:nth-child(2) {
+      opacity: 0;
+    }
+    .hamburger-input:checked ~ .hamburger-label span:nth-child(3) {
+      transform: translateY(-7px) rotate(-45deg);
+    }
+    .mobile-nav {
+      display: none;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 140px 24px 100px;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 900px;
+      height: 900px;
+      background: radial-gradient(circle, rgba(0,200,83,0.12) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,230,118,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,230,118,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+    #heroCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 700px;
+      width: 100%;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,230,118,0.08);
+      border: 1px solid rgba(0,230,118,0.25);
+      border-radius: 50px;
+      padding: 8px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 32px;
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      transform: translateY(20px);
+      animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.1s forwards;
+    }
+    .badge-dot {
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hero h1 {
+      font-size: clamp(48px, 8vw, 88px);
+      font-weight: 900;
+      line-height: 1.0;
+      letter-spacing: -3px;
+      margin-bottom: 24px;
+    }
+    .hero h1 .word {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(40px);
+      animation: wordUp 0.6s cubic-bezier(0.16,1,0.3,1) forwards;
+    }
+    .hero h1 .line-break { display: block; }
+    .hero h1 .accent { color: var(--accent); }
+    @keyframes wordUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hero-sub {
+      font-size: 18px;
+      color: var(--text2);
+      max-width: 520px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+      opacity: 0;
+      transform: translateY(24px);
+      animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.7s forwards;
+    }
+    .hero-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+      opacity: 0;
+      transform: translateY(24px);
+      animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.85s forwards;
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, var(--green), var(--accent2));
+      color: var(--white);
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 32px;
+      border-radius: 50px;
+      transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    .btn-primary:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 48px var(--glow);
+    }
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,230,118,0.06);
+      color: var(--accent);
+      border: 1px solid rgba(0,230,118,0.3);
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 32px;
+      border-radius: 50px;
+      backdrop-filter: blur(8px);
+      transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), background 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    .btn-outline:hover {
+      transform: translateY(-4px);
+      background: rgba(0,230,118,0.12);
+    }
+    .trust-badges {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+      opacity: 0;
+      transform: translateY(24px);
+      animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 1s forwards;
+    }
+    .trust-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(13,32,24,0.8);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text2);
+      backdrop-filter: blur(8px);
+    }
+    .trust-chip .chip-icon { font-size: 14px; }
+    .family-circles {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      opacity: 0;
+      transform: translateY(24px);
+      animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 1.1s forwards;
+    }
+    .family-circles .circle-wrap {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      overflow: hidden;
+      margin-left: -10px;
+      background: var(--card);
+      box-shadow: 0 0 0 2px var(--bg);
+    }
+    .family-circles .circle-wrap:first-child { margin-left: 0; }
+    .family-circles img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .family-more {
+      margin-left: 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text2);
+    }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      background: var(--bg3);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 56px 24px;
+    }
+    .stats-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 48px;
+    }
+    .stat-item {
+      text-align: center;
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1);
+    }
+    .stat-item.revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .stat-num {
+      font-size: 52px;
+      font-weight: 900;
+      color: var(--accent);
+      line-height: 1;
+      display: block;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 600;
+      margin-top: 6px;
+      display: block;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── SECTION COMMON ── */
+    section { position: relative; }
+    .section-wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 100px 24px;
+    }
+    .section-label {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: block;
+    }
+    .section-title {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 900;
+      letter-spacing: -1.5px;
+      color: var(--white);
+      margin-bottom: 16px;
+      line-height: 1.1;
+    }
+    .section-sub {
+      font-size: 17px;
+      color: var(--text2);
+      max-width: 540px;
+      line-height: 1.7;
+    }
+    .section-header { margin-bottom: 64px; }
+    .section-header.centered { text-align: center; }
+    .section-header.centered .section-sub { margin: 0 auto; }
+
+    /* ── FEATURES ── */
+    .features-section { background: var(--bg2); }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 32px;
+      transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s cubic-bezier(0.16,1,0.3,1), border-color 0.3s cubic-bezier(0.16,1,0.3,1);
+      opacity: 0;
+      transform: translateY(40px);
+    }
+    .feature-card.revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .feature-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(0,230,118,0.3);
+      box-shadow: 0 20px 60px var(--glow);
+    }
+    .feature-card.sos {
+      border-color: rgba(255,82,82,0.2);
+    }
+    .feature-card.sos:hover {
+      border-color: rgba(255,82,82,0.4);
+      box-shadow: 0 20px 60px rgba(255,82,82,0.15);
+    }
+    .feature-icon {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, rgba(0,200,83,0.15), rgba(0,200,83,0.05));
+      border: 1px solid rgba(0,230,118,0.2);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .feature-card.sos .feature-icon {
+      background: linear-gradient(135deg, rgba(255,82,82,0.15), rgba(255,82,82,0.05));
+      border-color: rgba(255,82,82,0.2);
+    }
+    .feature-icon svg { width: 24px; height: 24px; stroke: var(--accent); }
+    .feature-card.sos .feature-icon svg { stroke: #FF5252; }
+    .feature-card h3 {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--white);
+      margin-bottom: 10px;
+    }
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.6;
+    }
+
+    /* ── HOW IT WORKS ── */
+    .how-section { background: var(--bg2); }
+    .timeline {
+      position: relative;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .timeline-line {
+      position: absolute;
+      left: 50%;
+      top: 0; bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--accent), transparent);
+      transform: translateX(-50%);
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 40px;
+      margin-bottom: 64px;
+      position: relative;
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1);
+    }
+    .step.revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .step:nth-child(even) { flex-direction: row-reverse; }
+    .step-number-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .step-num {
+      width: 56px; height: 56px;
+      background: linear-gradient(135deg, var(--green), var(--accent2));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--white);
+      position: relative;
+      z-index: 1;
+      box-shadow: 0 0 0 4px var(--bg2), 0 8px 32px var(--glow);
+    }
+    .step-content {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 28px 32px;
+      flex: 1;
+    }
+    .step-content h3 {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--white);
+      margin-bottom: 8px;
+    }
+    .step-content p {
+      font-size: 15px;
+      color: var(--text2);
+      line-height: 1.6;
+    }
+
+    /* ── TESTIMONIALS ── */
+    .testimonials-section { background: var(--bg); }
+    .testimonials-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .testimonial-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 32px;
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1);
+    }
+    .testimonial-card.revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .testimonial-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 48px var(--glow);
+      border-color: rgba(0,230,118,0.25);
+    }
+    .stars {
+      font-size: 16px;
+      color: #FFB300;
+      margin-bottom: 16px;
+      display: block;
+      letter-spacing: 2px;
+    }
+    .testimonial-quote {
+      font-size: 15px;
+      color: var(--text2);
+      line-height: 1.7;
+      font-style: italic;
+      margin-bottom: 24px;
+    }
+    .testimonial-author {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .author-avatar {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--white);
+      flex-shrink: 0;
+    }
+    .author-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--white);
+      display: block;
+    }
+    .author-loc {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── DOWNLOAD CTA ── */
+    .cta-section {
+      background: var(--bg3);
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      bottom: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(0,200,83,0.15) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .cta-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 120px 24px;
+      text-align: center;
+    }
+    .cta-inner h2 {
+      font-size: clamp(32px, 5vw, 56px);
+      font-weight: 900;
+      letter-spacing: -2px;
+      color: var(--white);
+      line-height: 1.1;
+      margin-bottom: 16px;
+    }
+    .cta-inner p {
+      font-size: 17px;
+      color: var(--text2);
+      margin-bottom: 48px;
+    }
+    .store-badges {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .store-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(13,32,24,0.9);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 24px;
+      transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    .store-badge:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px var(--glow);
+      border-color: rgba(0,230,118,0.3);
+    }
+    .store-badge svg { width: 28px; height: 28px; }
+    .store-text { text-align: left; }
+    .store-small { font-size: 11px; color: var(--muted); font-weight: 500; }
+    .store-name { font-size: 16px; font-weight: 800; color: var(--white); }
+    .cta-note {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      background: #010A03;
+      border-top: 1px solid var(--border);
+      padding: 64px 24px 32px;
+    }
+    .footer-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .footer-top {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 48px;
+      margin-bottom: 64px;
+    }
+    .footer-brand .nav-logo { margin-bottom: 16px; }
+    .footer-tagline {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 220px;
+    }
+    .footer-col h4 {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--white);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+    }
+    .footer-col ul { list-style: none; }
+    .footer-col ul li { margin-bottom: 12px; }
+    .footer-col ul a {
+      font-size: 14px;
+      color: var(--muted);
+      transition: color 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    .footer-col ul a:hover { color: var(--accent); }
+    .footer-bottom {
+      border-top: 1px solid var(--border);
+      padding-top: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .footer-copyright {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .footer-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    /* ── SCROLL REVEAL ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1);
+    }
+    .reveal.revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── MOBILE 768px ── */
+    @media (max-width: 768px) {
+      .hamburger-label { display: flex; }
+      .nav-links { display: none; }
+      .nav-cta { display: none; }
+
+      .mobile-nav {
+        display: block;
+        position: fixed;
+        top: 72px; left: 0; right: 0;
+        background: rgba(2,12,5,0.97);
+        backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--border);
+        padding: 0;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.4s cubic-bezier(0.16,1,0.3,1), padding 0.4s cubic-bezier(0.16,1,0.3,1);
+        z-index: 999;
+      }
+      .hamburger-input:checked ~ .mobile-nav {
+        max-height: 400px;
+        padding: 20px 0;
+      }
+      .mobile-nav ul {
+        list-style: none;
+        padding: 0 24px;
+      }
+      .mobile-nav ul li { margin-bottom: 4px; }
+      .mobile-nav ul a {
+        display: block;
+        padding: 12px 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text2);
+        border-bottom: 1px solid var(--border);
+      }
+      .mobile-nav ul a.active { color: var(--accent); }
+      .mobile-nav .mobile-cta {
+        margin: 20px 24px 0;
+        display: block;
+        background: linear-gradient(135deg, var(--green), var(--accent2));
+        color: var(--white);
+        font-weight: 700;
+        font-size: 15px;
+        padding: 14px;
+        border-radius: 12px;
+        text-align: center;
+      }
+
+      .hero { padding: 100px 20px 80px; }
+      .hero h1 { letter-spacing: -2px; }
+      .hero-sub { font-size: 16px; }
+
+      .stats-inner { gap: 32px; }
+      .stat-item { min-width: 120px; }
+      .stat-num { font-size: 40px; }
+
+      .section-wrap { padding: 72px 20px; }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .timeline-line { left: 28px; }
+      .step { flex-direction: column !important; gap: 16px; padding-left: 72px; }
+      .step-number-wrap { position: absolute; left: 0; }
+      .step:nth-child(even) { flex-direction: column !important; }
+      .timeline { padding-left: 0; }
+
+      .testimonials-grid { grid-template-columns: 1fr; }
+
+      .footer-top { grid-template-columns: 1fr 1fr; gap: 32px; }
+      .footer-brand { grid-column: 1 / -1; }
+
+      .footer-bottom { flex-direction: column; text-align: center; }
+      .section, section { padding: 60px 20px !important; }
+      h1 { font-size: clamp(32px, 9vw, 52px) !important; }
+      .stats { flex-wrap: wrap; gap: 24px; padding: 40px 20px; }
+      footer { padding: 40px 20px; flex-direction: column; }
+    }
+
+    /* ── MOBILE 480px ── */
+    @media (max-width: 480px) {
+      .hero h1 { font-size: clamp(36px, 10vw, 48px); letter-spacing: -1.5px; }
+      .btn-primary, .btn-outline { width: 100%; justify-content: center; }
+      .hero-buttons { flex-direction: column; }
+      .trust-badges { gap: 8px; }
+      .trust-chip { font-size: 11px; padding: 6px 10px; }
+      .footer-top { grid-template-columns: 1fr; }
+      .store-badges { flex-direction: column; align-items: center; }
+      .store-badge { width: 100%; max-width: 260px; justify-content: center; }
+      .stats-inner { gap: 24px; }
+      .stat-item { min-width: 100px; }
+      .btn-primary-hero, .btn-secondary-hero, .btn-primary, .btn-secondary {
+        width: 100%; justify-content: center;
+      }
+      .hero-btns, .hero-buttons { flex-direction: column; align-items: stretch; }
+    }
+
+    /* ── CROSS-PROMO ── */
+    .cross-promo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 20px;
+      background: rgba(0,230,118,0.05);
+      border-top: 1px solid rgba(0,230,118,0.1);
+      border-bottom: 1px solid rgba(0,230,118,0.1);
+      font-size: 14px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .cross-promo-link {
+      color: var(--accent);
+      font-weight: 700;
+      transition: opacity 0.2s;
+    }
+    .cross-promo-link:hover { opacity: 0.8; }
+  </style>
+</head>
+<body>
+
+  <!-- ── NAV ── -->
+  <input type="checkbox" id="hamburger-toggle" class="hamburger-input" />
+  <nav id="mainNav">
+    <a href="index.html" class="nav-logo" aria-label="Gravity Home">
+      <div class="nav-logo-icon">
+        <svg class="logo-svg" width="32" height="32" viewBox="0 0 40 40" fill="none">
+          <defs>
+            <linearGradient id="pinGrad" x1="12" y1="4" x2="28" y2="26" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#00FFB2"/>
+              <stop offset="100%" stop-color="#00C853"/>
+            </linearGradient>
+          </defs>
+          <path d="M20 4C14.48 4 10 8.48 10 14c0 8.5 10 22 10 22s10-13.5 10-22c0-5.52-4.48-10-10-10z" fill="url(#pinGrad)"/>
+          <circle cx="20" cy="13.5" r="3.5" fill="rgba(5,12,8,0.85)"/>
+        </svg>
+      </div>
+      <span class="nav-logo-text">Gravity</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="parent.html" class="active">For Parents</a></li>
+      <li><a href="child.html">For Children</a></li>
+      <li><a href="index.html">Home</a></li>
+    </ul>
+    <label for="hamburger-toggle" class="hamburger-label" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </label>
+    <a href="#download" class="nav-cta">Download App</a>
+  </nav>
+  <div class="mobile-nav">
+    <ul>
+      <li><a href="parent.html" class="active">For Parents</a></li>
+      <li><a href="child.html">For Children</a></li>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how">How It Works</a></li>
+    </ul>
+    <a href="#download" class="mobile-cta">Download App</a>
+  </div>
+
+  <!-- ── HERO ── -->
+  <section class="hero" id="home">
+    <canvas id="heroCanvas"></canvas>
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="badge-dot" aria-hidden="true"></span>
+        For Parents &amp; Guardians
+      </div>
+      <h1>
+        <span class="line-break">
+          <span class="word" style="animation-delay:0.15s">Always</span>&nbsp;<span class="word" style="animation-delay:0.23s">Know</span>&nbsp;<span class="word" style="animation-delay:0.31s">Your</span>
+        </span>
+        <span class="line-break accent">
+          <span class="word" style="animation-delay:0.42s">Family</span>&nbsp;<span class="word" style="animation-delay:0.50s">Is</span>&nbsp;<span class="word" style="animation-delay:0.58s">Safe</span>
+        </span>
+      </h1>
+      <p class="hero-sub">
+        Real-time location, geofence alerts, and SOS notifications for every member of your family — all in one app.
+      </p>
+      <div class="hero-buttons">
+        <a href="#download" class="btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download for Free
+        </a>
+        <a href="#how" class="btn-outline">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
+          See How It Works
+        </a>
+      </div>
+      <div class="trust-badges" role="list">
+        <span class="trust-chip" role="listitem"><span class="chip-icon">🔒</span> End-to-End Encrypted</span>
+        <span class="trust-chip" role="listitem"><span class="chip-icon">🔋</span> Battery Friendly</span>
+        <span class="trust-chip" role="listitem"><span class="chip-icon">🌍</span> Works in 5 Countries</span>
+        <span class="trust-chip" role="listitem"><span class="chip-icon">📱</span> iOS &amp; Android</span>
+      </div>
+      <div class="family-circles" aria-label="Trusted by families worldwide">
+        <div class="circle-wrap">
+          <img src="https://picsum.photos/seed/woman-mom/60/60" alt="Mom" loading="lazy" />
+        </div>
+        <div class="circle-wrap">
+          <img src="https://picsum.photos/seed/man-dad/60/60" alt="Dad" loading="lazy" />
+        </div>
+        <div class="circle-wrap">
+          <img src="https://picsum.photos/seed/boy-rahul/60/60" alt="Child" loading="lazy" />
+        </div>
+        <span class="family-more">+3 more family</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATS BAR ── -->
+  <div class="stats-bar" role="region" aria-label="Key statistics">
+    <div class="stats-inner">
+      <div class="stat-item" data-target="10000" data-suffix="K+" data-scale="1000">
+        <span class="stat-num" aria-label="10K+ Families Protected">10K+</span>
+        <span class="stat-label">Families Protected</span>
+      </div>
+      <div class="stat-item" data-target="5" data-suffix="">
+        <span class="stat-num" aria-label="5 Countries">5</span>
+        <span class="stat-label">Countries</span>
+      </div>
+      <div class="stat-item" data-static="&lt; 3s">
+        <span class="stat-num" aria-label="Under 3 seconds location update">&lt; 3s</span>
+        <span class="stat-label">Location Update Speed</span>
+      </div>
+      <div class="stat-item" data-static="24/7">
+        <span class="stat-num" aria-label="24/7 monitoring">24/7</span>
+        <span class="stat-label">Always On Monitoring</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FEATURES ── -->
+  <section class="features-section" id="features">
+    <div class="section-wrap">
+      <div class="section-header reveal">
+        <span class="section-label">Built for Parents</span>
+        <h2 class="section-title">Everything a parent needs</h2>
+        <p class="section-sub">Powerful tools designed to give you complete peace of mind — without intruding on your family's privacy.</p>
+      </div>
+      <div class="features-grid">
+
+        <div class="feature-card" style="transition-delay:0s">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+          </div>
+          <h3>Live Location Map</h3>
+          <p>See exactly where every family member is, updated every few seconds. Full map view with real-time tracking.</p>
+        </div>
+
+        <div class="feature-card" style="transition-delay:0.1s">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h3>Geofence Safe Zones</h3>
+          <p>Draw zones around home, school, and work. Get instant alerts the moment anyone enters or leaves your defined area.</p>
+        </div>
+
+        <div class="feature-card sos" style="transition-delay:0.2s">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:#FF5252">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <h3>SOS Panic Button</h3>
+          <p>Your child presses one button. You receive an immediate alert with their exact location — every second counts.</p>
+        </div>
+
+        <div class="feature-card" style="transition-delay:0.3s">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="7" width="18" height="11" rx="2"/>
+              <path d="M22 11v4"/>
+              <line x1="6" y1="11" x2="6" y2="14"/>
+              <line x1="10" y1="11" x2="10" y2="14"/>
+              <line x1="14" y1="11" x2="14" y2="14"/>
+            </svg>
+          </div>
+          <h3>Battery Monitor</h3>
+          <p>See everyone's battery level at a glance. Get low battery alerts before phones die and communication goes dark.</p>
+        </div>
+
+        <div class="feature-card" style="transition-delay:0.4s">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <h3>Location History</h3>
+          <p>Review where family members have been with a complete 30-day history per member — clear, private, and secure.</p>
+        </div>
+
+        <div class="feature-card" style="transition-delay:0.5s">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <h3>Family Circles</h3>
+          <p>Create a private group for your family. Invite members with a simple code — no email or account setup required.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── HOW IT WORKS ── -->
+  <section class="how-section" id="how">
+    <div class="section-wrap">
+      <div class="section-header centered reveal">
+        <span class="section-label">How It Works</span>
+        <h2 class="section-title">Set up in under 5 minutes</h2>
+        <p class="section-sub">Getting your family protected is simple. No technical knowledge needed — just four easy steps.</p>
+      </div>
+      <div class="timeline" role="list">
+        <div class="timeline-line" aria-hidden="true"></div>
+
+        <div class="step" role="listitem">
+          <div class="step-number-wrap" aria-hidden="true">
+            <div class="step-num">1</div>
+          </div>
+          <div class="step-content">
+            <h3>Download Gravity</h3>
+            <p>Free on Android and iOS. Install in 30 seconds with no sign-up complexity. Just open and go.</p>
+          </div>
+        </div>
+
+        <div class="step" role="listitem">
+          <div class="step-number-wrap" aria-hidden="true">
+            <div class="step-num">2</div>
+          </div>
+          <div class="step-content">
+            <h3>Create Family Circle</h3>
+            <p>Choose a name for your family group and get a unique invite code instantly. Your private space is ready.</p>
+          </div>
+        </div>
+
+        <div class="step" role="listitem">
+          <div class="step-number-wrap" aria-hidden="true">
+            <div class="step-num">3</div>
+          </div>
+          <div class="step-content">
+            <h3>Add Family Members</h3>
+            <p>Share the code with your family. Each member joins with one tap — simple for children and seniors alike.</p>
+          </div>
+        </div>
+
+        <div class="step" role="listitem">
+          <div class="step-number-wrap" aria-hidden="true">
+            <div class="step-num">4</div>
+          </div>
+          <div class="step-content">
+            <h3>Set Your Safe Zones</h3>
+            <p>Draw geofence zones around home, school, and any important location. Alerts start working automatically.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TESTIMONIALS ── -->
+  <section class="testimonials-section" id="testimonials">
+    <div class="section-wrap">
+      <div class="section-header centered reveal">
+        <span class="section-label">Parent Stories</span>
+        <h2 class="section-title">Trusted by parents worldwide</h2>
+        <p class="section-sub">Real families sharing how Gravity changed their peace of mind every single day.</p>
+      </div>
+      <div class="testimonials-grid">
+
+        <div class="testimonial-card">
+          <span class="stars" aria-label="5 stars">★★★★★</span>
+          <p class="testimonial-quote">"My daughter walks 1km to school every day. Gravity tells me the moment she arrives. I can't imagine parenting without it."</p>
+          <div class="testimonial-author">
+            <div class="author-avatar" style="background:linear-gradient(135deg,#0A5C35,#00C853)" aria-hidden="true">AK</div>
+            <div>
+              <span class="author-name">Anita K.</span>
+              <span class="author-loc">Mumbai, India</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card">
+          <span class="stars" aria-label="5 stars">★★★★★</span>
+          <p class="testimonial-quote">"My son is at university in another city. I check the app once a day and that's enough. Total peace of mind — exactly what I needed."</p>
+          <div class="testimonial-author">
+            <div class="author-avatar" style="background:linear-gradient(135deg,#1B5E20,#388E3C)" aria-hidden="true">JM</div>
+            <div>
+              <span class="author-name">James M.</span>
+              <span class="author-loc">Nairobi, Kenya</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card">
+          <span class="stars" aria-label="5 stars">★★★★★</span>
+          <p class="testimonial-quote">"Set up geofences around our whole neighborhood in Dubai. Any child leaves the zone, I know in seconds. It's like having eyes everywhere."</p>
+          <div class="testimonial-author">
+            <div class="author-avatar" style="background:linear-gradient(135deg,#0D47A1,#1565C0)" aria-hidden="true">FA</div>
+            <div>
+              <span class="author-name">Fatima A.</span>
+              <span class="author-loc">Dubai, UAE</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DOWNLOAD CTA ── -->
+  <section class="cta-section" id="download">
+    <div class="cta-inner">
+      <div class="reveal">
+        <h2>Start Protecting Your Family Today</h2>
+        <p>Free forever. No subscription. No ads.</p>
+        <div class="store-badges">
+          <a href="https://play.google.com/store/apps/details?id=com.trackalways.gravity" class="store-badge" aria-label="Get it on Google Play" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3.5 2.5L13.5 12L3.5 21.5" stroke="#00E676" stroke-width="2" stroke-linecap="round"/>
+              <path d="M3.5 2.5L20 12L13.5 12" stroke="#00E676" stroke-width="2" stroke-linecap="round"/>
+              <path d="M3.5 21.5L13.5 12L20 12" stroke="#00C853" stroke-width="2" stroke-linecap="round"/>
+              <path d="M3.5 2.5L13.5 12L3.5 21.5" fill="#00E676" fill-opacity="0.15"/>
+            </svg>
+            <div class="store-text">
+              <span class="store-small">Get it on</span>
+              <span class="store-name">Google Play</span>
+            </div>
+          </a>
+          <a href="https://apps.apple.com/app/trackalways-gravity/id0000000000" class="store-badge" aria-label="Download on the App Store" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C10.5 2 9 3 9 4.5C9 3 7.5 2 6 2C4 2 2 4 2 7C2 11 7 16 12 20C17 16 22 11 22 7C22 4 20 2 18 2C16.5 2 15 3 15 4.5C15 3 13.5 2 12 2Z" stroke="#00E676" stroke-width="1.5" fill="#00E676" fill-opacity="0.15"/>
+              <path d="M12 6V18M9 9l3-3 3 3" stroke="#00E676" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div class="store-text">
+              <span class="store-small">Download on the</span>
+              <span class="store-name">App Store</span>
+            </div>
+          </a>
+        </div>
+        <p class="cta-note">Available on Android &amp; iOS — built for parents</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CROSS-PROMO ── -->
+  <div class="cross-promo">
+    <span>For your children:</span>
+    <a href="child.html" class="cross-promo-link">See the Children's guide →</a>
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <a href="index.html" class="nav-logo" aria-label="Gravity Home">
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="16" cy="13" r="7" fill="#0A5C35"/>
+              <circle cx="16" cy="13" r="4" fill="#00E676"/>
+              <path d="M16 20 L10 28 Q16 25 22 28 Z" fill="#0A5C35"/>
+            </svg>
+            <span>GRAVITY</span>
+          </a>
+          <p class="footer-tagline">Keep your family connected and protected — wherever life takes them.</p>
+        </div>
+        <div class="footer-col">
+          <h4>App</h4>
+          <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="parent.html">For Parents</a></li>
+            <li><a href="child.html">For Children</a></li>
+            <li><a href="#download">Download</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#how">How It Works</a></li>
+            <li><a href="#testimonials">Reviews</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Company</h4>
+          <ul>
+            <li><a href="#">Privacy Policy</a></li>
+            <li><a href="#">Terms of Service</a></li>
+            <li><a href="#">Contact Us</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p class="footer-copyright">© 2026 Trackalways. All rights reserved.</p>
+        <span class="footer-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Privacy First · Encrypted
+        </span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // ── PARTICLE CANVAS ──
+    (function() {
+      const canvas = document.getElementById('heroCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const hero = document.querySelector('.hero');
+      let W, H, particles = [], animFrame;
+
+      function resize() {
+        W = canvas.width = hero.offsetWidth;
+        H = canvas.height = hero.offsetHeight;
+      }
+
+      function Particle() {
+        this.x = Math.random() * W;
+        this.y = Math.random() * H;
+        this.vx = (Math.random() - 0.5) * 0.5;
+        this.vy = (Math.random() - 0.5) * 0.5;
+        this.r = Math.random() * 2 + 1;
+        this.alpha = Math.random() * 0.5 + 0.15;
+      }
+
+      Particle.prototype.update = function() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 0 || this.x > W) this.vx *= -1;
+        if (this.y < 0 || this.y > H) this.vy *= -1;
+      };
+
+      function init() {
+        particles = [];
+        for (let i = 0; i < 55; i++) particles.push(new Particle());
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          p.update();
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0,230,118,${p.alpha})`;
+          ctx.fill();
+
+          for (let j = i + 1; j < particles.length; j++) {
+            const q = particles[j];
+            const dx = p.x - q.x, dy = p.y - q.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 140) {
+              const a = (1 - dist / 140) * 0.12;
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(q.x, q.y);
+              ctx.strokeStyle = `rgba(0,230,118,${a})`;
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+        }
+        animFrame = requestAnimationFrame(draw);
+      }
+
+      window.addEventListener('resize', function() {
+        resize();
+        init();
+      });
+      resize();
+      init();
+      draw();
+    })();
+
+    // ── NAV SCROLL ──
+    (function() {
+      var nav = document.getElementById('mainNav');
+      function onScroll() {
+        if (window.scrollY > 30) nav.classList.add('scrolled');
+        else nav.classList.remove('scrolled');
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+    })();
+
+    // ── MOBILE NAV CLOSE ON LINK CLICK ──
+    (function() {
+      var toggle = document.getElementById('hamburger-toggle');
+      var links = document.querySelectorAll('.mobile-nav a');
+      links.forEach(function(link) {
+        link.addEventListener('click', function() {
+          toggle.checked = false;
+        });
+      });
+    })();
+
+    // ── INTERSECTION OBSERVER: SCROLL REVEALS ──
+    (function() {
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            var el = entry.target;
+            var delay = el.style.transitionDelay || '';
+            if (!delay) {
+              var idx = el.dataset.revealIdx;
+              if (idx !== undefined) {
+                el.style.transitionDelay = (parseInt(idx) * 0.1) + 's';
+              }
+            }
+            el.classList.add('revealed');
+            observer.unobserve(el);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+      // Feature cards
+      var featureCards = document.querySelectorAll('.feature-card');
+      featureCards.forEach(function(card, i) {
+        card.dataset.revealIdx = i;
+        observer.observe(card);
+      });
+
+      // Steps
+      var steps = document.querySelectorAll('.step');
+      steps.forEach(function(step, i) {
+        step.dataset.revealIdx = i;
+        observer.observe(step);
+      });
+
+      // Testimonial cards
+      var tCards = document.querySelectorAll('.testimonial-card');
+      tCards.forEach(function(card, i) {
+        card.dataset.revealIdx = i;
+        observer.observe(card);
+      });
+
+      // Generic .reveal
+      var reveals = document.querySelectorAll('.reveal');
+      reveals.forEach(function(el) {
+        observer.observe(el);
+      });
+    })();
+
+    // ── STAT COUNTER ANIMATION ──
+    (function() {
+      var statItems = document.querySelectorAll('.stat-item');
+      var counted = false;
+
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('revealed');
+          }
+        });
+
+        if (!counted) {
+          var anyVisible = false;
+          entries.forEach(function(e) { if (e.isIntersecting) anyVisible = true; });
+          if (anyVisible) {
+            counted = true;
+            statItems.forEach(function(item, idx) {
+              setTimeout(function() {
+                runCounter(item);
+              }, idx * 120);
+            });
+          }
+        }
+      }, { threshold: 0.3 });
+
+      statItems.forEach(function(item) {
+        observer.observe(item);
+      });
+
+      function runCounter(item) {
+        var numEl = item.querySelector('.stat-num');
+        if (!numEl) return;
+        if (item.dataset.static) return; // static value, no animation
+
+        var target = parseInt(item.dataset.target, 10);
+        var suffix = item.dataset.suffix || '';
+        var scale = parseInt(item.dataset.scale, 10) || 1;
+        var duration = 1600;
+        var start = performance.now();
+
+        function step(now) {
+          var elapsed = now - start;
+          var progress = Math.min(elapsed / duration, 1);
+          var ease = 1 - Math.pow(1 - progress, 3);
+          var current = Math.round(ease * target / scale);
+          if (scale > 1) {
+            numEl.textContent = current + suffix;
+          } else {
+            numEl.textContent = current + suffix;
+          }
+          if (progress < 1) requestAnimationFrame(step);
+          else {
+            if (scale === 1000) numEl.textContent = '10' + suffix;
+            else numEl.textContent = target + suffix;
+          }
+        }
+
+        requestAnimationFrame(step);
+      }
+    })();
+  </script>
+</body>
+</html>

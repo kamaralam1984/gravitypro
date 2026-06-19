@@ -1,0 +1,41 @@
+# Caddy reverse proxy with automatic TLS, SSE support for Trackalways Gravity
+# Supports Kenya, India, UAE, UK, USA users
+
+gravity.trackalways.com {
+  # SSE route needs special buffering disabled
+  @sse path /api/v1/sse/*
+  handle @sse {
+    reverse_proxy localhost:3000 {
+      flush_interval -1
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  # Traccar telemetry ingestion
+  handle /telemetry/* {
+    reverse_proxy localhost:8082 {
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  # All other API routes go to Express
+  handle /api/* {
+    reverse_proxy localhost:3000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Security headers
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+  }
+
+  encode gzip
+  log {
+    output file /var/log/caddy/gravity.log
+    format json
+  }
+}

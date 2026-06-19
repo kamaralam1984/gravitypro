@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Gravity",
+    "slug": "gravity",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#050F08",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050F08"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#050F08"
+      },
+      "package": "com.trackalways.gravity",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.trackalways.gravity",
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Gravity needs your location to keep your family safe and share your position with your circle.",
+        "NSLocationAlwaysUsageDescription": "Gravity needs background location to track your position even when the app is closed.",
+        "NSLocationWhenInUseUsageDescription": "Gravity needs your location to show your position on the family map."
+      }
+    },
+    "plugins": [
+      ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Allow Gravity to use your location to keep your family connected and safe." }],
+      ["expo-notifications", { "sounds": ["./assets/notification.wav"] }]
+    ],
+    "scheme": "gravity",
+    "platforms": ["ios", "android"]
+  }
+}

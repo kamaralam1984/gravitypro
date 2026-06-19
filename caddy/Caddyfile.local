@@ -1,0 +1,57 @@
+# Local development — listens on :3021, proxies to backend :8002
+:3021 {
+  # Traccar OsmAnd telemetry — mobile location pings
+  handle /telemetry* {
+    reverse_proxy localhost:5055 {
+      header_up Host {host}
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  # SSE — buffering off
+  @sse path /api/v1/sse/*
+  handle @sse {
+    reverse_proxy localhost:8002 {
+      flush_interval -1
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  # All API routes
+  handle /api/* {
+    reverse_proxy localhost:8002 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Webhooks
+  handle /webhooks/* {
+    reverse_proxy localhost:8002 {
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  # Health check
+  handle /health {
+    reverse_proxy localhost:8002
+  }
+
+  # Static web (landing pages + dashboards)
+  handle {
+    reverse_proxy localhost:8090
+  }
+
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Access-Control-Allow-Origin *
+  }
+
+  encode gzip
+
+  log {
+    output stdout
+    format console
+  }
+}

@@ -1,0 +1,2591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Parent Panel | Gravity</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root {
+  --bg: #050C08;
+  --surface: #0A1A0F;
+  --card: #0D1F13;
+  --card2: #111E16;
+  --green: #00E676;
+  --accent: #00C853;
+  --bright: #00FFB2;
+  --red: #FF5252;
+  --orange: #FFB300;
+  --blue: #29B6F6;
+  --purple: #AB47BC;
+  --white: #FFFFFF;
+  --text2: #5E8B6E;
+  --border: rgba(0,230,118,0.12);
+  --glow: rgba(0,230,118,0.3);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 32px 16px 40px;
+  background: #020A05;
+  background-image:
+    radial-gradient(ellipse at 20% 20%, rgba(0,230,118,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(0,200,83,0.04) 0%, transparent 50%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(0,230,118,0.02) 39px,
+      rgba(0,230,118,0.02) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      rgba(0,230,118,0.02) 39px,
+      rgba(0,230,118,0.02) 40px
+    );
+  color: var(--white);
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* FLOATING ORB BACKGROUNDS */
+.bg-orb {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(80px);
+}
+.bg-orb-1 {
+  width: 320px; height: 320px;
+  background: radial-gradient(circle, rgba(0,230,118,0.07) 0%, transparent 70%);
+  top: -80px; left: -80px;
+  animation: floatOrb1 12s ease-in-out infinite;
+}
+.bg-orb-2 {
+  width: 250px; height: 250px;
+  background: radial-gradient(circle, rgba(0,200,83,0.05) 0%, transparent 70%);
+  bottom: 100px; right: -60px;
+  animation: floatOrb2 15s ease-in-out infinite;
+}
+.bg-orb-3 {
+  width: 180px; height: 180px;
+  background: radial-gradient(circle, rgba(0,255,178,0.04) 0%, transparent 70%);
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  animation: floatOrb3 18s ease-in-out infinite;
+}
+
+@keyframes floatOrb1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, 20px) scale(1.1); }
+  66% { transform: translate(-15px, 35px) scale(0.95); }
+}
+@keyframes floatOrb2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40% { transform: translate(-25px, -30px) scale(1.15); }
+  70% { transform: translate(20px, -10px) scale(0.9); }
+}
+@keyframes floatOrb3 {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+  50% { transform: translate(-50%, -55%) scale(1.2); opacity: 1; }
+}
+
+.app-frame {
+  width: 100%;
+  max-width: 430px;
+  background: var(--bg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 860px;
+  z-index: 1;
+  /* animated gradient background mesh */
+  background-image:
+    radial-gradient(ellipse at 30% 0%, rgba(0,230,118,0.06) 0%, transparent 40%),
+    radial-gradient(ellipse at 70% 100%, rgba(0,200,83,0.04) 0%, transparent 40%);
+}
+
+@media (min-width: 600px) {
+  .app-frame {
+    border-radius: 44px;
+    box-shadow:
+      0 0 0 10px #0A1A0F,
+      0 0 0 13px #1A3A24,
+      0 40px 100px rgba(0,0,0,0.9),
+      0 0 80px rgba(0,230,118,0.12);
+    overflow: hidden;
+    min-height: 860px;
+  }
+}
+
+@media (max-width: 599px) {
+  body { padding: 0; }
+  .app-frame { min-height: 100vh; border-radius: 0; }
+  .phone-notch { display: none; }
+}
+
+/* PHONE NOTCH */
+.phone-notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 28px;
+  background: #0A1A0F;
+  border-radius: 0 0 18px 18px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-notch-cam {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #0D2A1A;
+  border: 1.5px solid #1A4A28;
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.8), 0 0 4px rgba(0,230,118,0.15);
+  position: relative;
+}
+.phone-notch-cam::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: rgba(0,230,118,0.3);
+}
+
+/* STATUS BAR */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 22px 6px;
+  background: linear-gradient(180deg, rgba(5,12,8,0.98) 0%, transparent 100%);
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.status-time {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: 0.5px;
+}
+
+.status-icons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.signal-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.signal-bars span {
+  display: block;
+  width: 3px;
+  background: var(--white);
+  border-radius: 1px;
+}
+.signal-bars span:nth-child(1) { height: 3px; }
+.signal-bars span:nth-child(2) { height: 6px; }
+.signal-bars span:nth-child(3) { height: 9px; }
+.signal-bars span:nth-child(4) { height: 12px; opacity: 0.4; }
+
+.status-battery {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--white);
+}
+
+.battery-icon {
+  width: 22px;
+  height: 11px;
+  border: 1.5px solid rgba(255,255,255,0.7);
+  border-radius: 2px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 1.5px;
+}
+.battery-icon::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 5px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 0 1px 1px 0;
+}
+.battery-fill {
+  height: 100%;
+  width: 70%;
+  background: var(--white);
+  border-radius: 1px;
+}
+
+/* APP HEADER */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  background: var(--bg);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text2);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition: color 0.2s;
+  min-height: 44px;
+}
+.header-back:hover { color: var(--green); }
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-logo-text {
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.parent-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--green);
+  background: rgba(0,230,118,0.15);
+  border: 1px solid #00E676;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notif-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.notif-btn:hover {
+  border-color: rgba(0,230,118,0.4);
+  box-shadow: 0 0 12px var(--glow);
+}
+
+.notif-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  background: var(--red);
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 800;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--bg);
+}
+
+/* LOGO */
+.nav-logo-icon { display:flex; align-items:center; justify-content:center; }
+.logo-svg { overflow:visible; filter:drop-shadow(0 0 6px rgba(0,230,118,0.3)); transition:filter .3s; }
+
+/* MAIN CONTENT */
+.app-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  padding-bottom: 80px;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+.app-content::-webkit-scrollbar { display: none; }
+
+/* TAB SECTIONS */
+.tab-section {
+  display: none;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.tab-section.active {
+  display: block;
+  animation: tabFadeIn 0.3s ease forwards;
+}
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* MAP TAB */
+#leaflet-map {
+  width: 100%;
+  height: 340px;
+  position: relative;
+  z-index: 1;
+}
+
+.map-top-bar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+}
+
+.map-pill {
+  background: rgba(5,12,8,0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.4); }
+}
+
+/* FAMILY STRIP */
+.family-strip-wrap {
+  padding: 14px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.family-strip-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 0 16px 10px;
+}
+.family-strip {
+  display: flex;
+  gap: 10px;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.family-strip::-webkit-scrollbar { display: none; }
+
+.member-mini-card {
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 80px;
+  min-height: 44px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+  position: relative;
+}
+.member-mini-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(0,230,118,0.3);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.member-mini-avatar {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+.member-mini-avatar img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid;
+}
+.member-mini-status {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+}
+.member-mini-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--white);
+  text-align: center;
+  white-space: nowrap;
+}
+.member-mini-dist {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text2);
+  text-align: center;
+}
+
+/* MAP INFO SECTION */
+.map-info-section {
+  padding: 14px 16px;
+}
+.section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text2);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+/* FAMILY TAB */
+.family-list {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.member-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+  position: relative;
+  overflow: hidden;
+  min-height: 44px;
+}
+.member-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 18px 0 0 18px;
+}
+.member-card:hover {
+  transform: translateX(3px);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+}
+/* Ripple */
+.member-card .ripple-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  pointer-events: none;
+}
+.ripple-wave {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(0,230,118,0.15);
+  transform: scale(0);
+  animation: rippleAnim 0.6s linear;
+  pointer-events: none;
+}
+@keyframes rippleAnim {
+  to { transform: scale(4); opacity: 0; }
+}
+
+.member-avatar {
+  position: relative;
+  flex-shrink: 0;
+}
+.member-avatar img {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2.5px solid;
+}
+
+.member-info { flex: 1; min-width: 0; }
+.member-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.member-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--white);
+}
+.member-role {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text2);
+  background: rgba(94,139,110,0.15);
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.member-location {
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+.member-lastseen {
+  font-size: 10px;
+  color: var(--text2);
+  opacity: 0.7;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+/* Member action buttons */
+.member-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.member-btn {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.member-btn-call {
+  background: rgba(0,230,118,0.15);
+  color: var(--green);
+  border: 1px solid rgba(0,230,118,0.3);
+}
+.member-btn-call:hover { background: rgba(0,230,118,0.25); }
+.member-btn-msg {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.member-btn-msg:hover { background: rgba(255,255,255,0.05); color: var(--white); }
+
+.battery-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.battery-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.battery-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+}
+.battery-pct {
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.member-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.status-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+.status-active {
+  color: var(--green);
+  background: rgba(0,230,118,0.12);
+  border: 1px solid rgba(0,230,118,0.25);
+}
+.status-away {
+  color: var(--orange);
+  background: rgba(255,179,0,0.12);
+  border: 1px solid rgba(255,179,0,0.25);
+}
+.status-sos {
+  color: var(--red);
+  background: rgba(255,82,82,0.12);
+  border: 1px solid rgba(255,82,82,0.4);
+  animation: sosPulse 1s ease-in-out infinite;
+}
+@keyframes sosPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,82,82,0.4); }
+  50% { box-shadow: 0 0 0 5px rgba(255,82,82,0); }
+}
+.chevron-icon { color: var(--text2); opacity: 0.6; font-size: 16px; }
+
+/* ALERTS TAB */
+.alerts-header-bar {
+  padding: 16px 16px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.alerts-count-title { font-size: 16px; font-weight: 800; color: var(--white); }
+.alerts-count-badge {
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.alert-list {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alert-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  transition: all 0.4s cubic-bezier(0.16,1,0.3,1);
+  overflow: hidden;
+}
+.alert-card.dismissing {
+  opacity: 0;
+  transform: translateX(30px) scale(0.95);
+  max-height: 0;
+  padding: 0;
+  margin: 0;
+  border-width: 0;
+}
+
+/* SOS pulsing border animation */
+.alert-card-sos {
+  border-left: 3px solid var(--red);
+  box-shadow: inset 0 0 30px rgba(255,82,82,0.05);
+  animation: sosBorderPulse 1.5s ease-in-out infinite;
+}
+@keyframes sosBorderPulse {
+  0%, 100% { border-left-color: var(--red); box-shadow: inset 0 0 30px rgba(255,82,82,0.05); }
+  50% { border-left-color: #FF8A80; box-shadow: inset 0 0 40px rgba(255,82,82,0.12), 0 0 20px rgba(255,82,82,0.08); }
+}
+
+.alert-card-geo {
+  border-left: 3px solid var(--orange);
+  box-shadow: inset 0 0 30px rgba(255,179,0,0.05);
+}
+.alert-card-batt {
+  border-left: 3px solid var(--orange);
+  box-shadow: inset 0 0 30px rgba(255,179,0,0.05);
+}
+
+.alert-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.alert-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+.alert-icon-sos { background: rgba(255,82,82,0.15); }
+.alert-icon-geo { background: rgba(255,179,0,0.15); }
+.alert-icon-batt { background: rgba(255,179,0,0.15); }
+.alert-text-wrap { flex: 1; min-width: 0; }
+.alert-title { font-size: 13px; font-weight: 800; color: var(--white); margin-bottom: 3px; line-height: 1.4; }
+.alert-subtitle { font-size: 11px; color: var(--text2); margin-bottom: 2px; line-height: 1.4; }
+.alert-time { font-size: 10px; color: var(--text2); opacity: 0.6; }
+
+.alert-actions { display: flex; gap: 8px; }
+.alert-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  min-height: 44px;
+}
+.alert-btn-primary {
+  background: rgba(0,230,118,0.15);
+  color: var(--green);
+  border: 1px solid rgba(0,230,118,0.3);
+}
+.alert-btn-primary:hover { background: rgba(0,230,118,0.25); }
+.alert-btn-ghost {
+  background: rgba(255,255,255,0.05);
+  color: var(--text2);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.alert-btn-ghost:hover { background: rgba(255,255,255,0.1); }
+.alert-btn-red {
+  background: rgba(255,82,82,0.15);
+  color: var(--red);
+  border: 1px solid rgba(255,82,82,0.3);
+}
+
+.alerts-history-section {
+  padding: 20px 16px 0;
+}
+.alerts-history-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.alert-hist-card {
+  background: var(--card);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+.alert-hist-icon { font-size: 15px; }
+.alert-hist-text { flex: 1; }
+.alert-hist-title { font-size: 12px; font-weight: 700; color: var(--white); line-height: 1.4; }
+.alert-hist-time { font-size: 10px; color: var(--text2); }
+.alert-hist-dismissed {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text2);
+  background: rgba(255,255,255,0.05);
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* GEOFENCE TAB */
+.geofence-header {
+  padding: 16px 16px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.geofence-title { font-size: 16px; font-weight: 800; color: var(--white); }
+.geofence-subtitle { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+.geo-add-btn {
+  background: rgba(0,230,118,0.1);
+  border: 1px solid rgba(0,230,118,0.3);
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green);
+  cursor: pointer;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  transition: all 0.2s;
+  min-height: 44px;
+}
+.geo-add-btn:hover { background: rgba(0,230,118,0.2); }
+
+.zone-list {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.zone-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+}
+.zone-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+
+.zone-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.zone-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(0,230,118,0.1);
+  border: 1px solid rgba(0,230,118,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.zone-info { flex: 1; }
+.zone-name { font-size: 14px; font-weight: 800; color: var(--white); margin-bottom: 2px; }
+.zone-address { font-size: 11px; color: var(--text2); line-height: 1.4; }
+
+.zone-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toggle-label { font-size: 10px; font-weight: 700; color: var(--text2); }
+
+/* TOGGLE SWITCH - proper CSS toggle */
+.toggle-switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  cursor: pointer;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.toggle-switch input[type="checkbox"] {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.1);
+  border-radius: 26px;
+  transition: background 0.3s cubic-bezier(0.16,1,0.3,1), border-color 0.3s, box-shadow 0.3s;
+  border: 1px solid rgba(255,255,255,0.12);
+  cursor: pointer;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 50%;
+  transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), background 0.3s, box-shadow 0.3s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.toggle-switch input[type="checkbox"]:checked + .toggle-slider {
+  background: rgba(0,230,118,0.3);
+  border-color: rgba(0,230,118,0.6);
+  box-shadow: 0 0 12px rgba(0,230,118,0.25);
+}
+.toggle-switch input[type="checkbox"]:checked + .toggle-slider::before {
+  transform: translateX(20px);
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(0,230,118,0.5);
+}
+
+.zone-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.zone-radius-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  background: rgba(41,182,246,0.1);
+  border: 1px solid rgba(41,182,246,0.2);
+  padding: 3px 10px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.zone-actions { display: flex; gap: 6px; }
+.zone-action-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  color: var(--text2);
+  min-height: 44px;
+}
+.zone-action-btn:hover { background: rgba(255,255,255,0.1); color: var(--white); }
+
+.add-zone-card {
+  background: transparent;
+  border: 2px dashed rgba(0,230,118,0.25);
+  border-radius: 18px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 44px;
+}
+.add-zone-card:hover {
+  border-color: rgba(0,230,118,0.5);
+  background: rgba(0,230,118,0.05);
+}
+
+/* SETTINGS TAB */
+.settings-profile {
+  margin: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.settings-avatar-wrap { position: relative; }
+.settings-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--green);
+  box-shadow: 0 0 16px var(--glow);
+}
+.settings-avatar-edit {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  background: var(--green);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  border: 2px solid var(--bg);
+}
+.settings-user-name { font-size: 17px; font-weight: 800; color: var(--white); margin-bottom: 2px; }
+.settings-user-email { font-size: 12px; color: var(--text2); margin-bottom: 8px; line-height: 1.4; }
+.settings-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--green);
+  background: rgba(0,230,118,0.1);
+  border: 1px solid rgba(0,230,118,0.25);
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+}
+
+.settings-groups {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.settings-group {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.settings-group-header {
+  padding: 10px 16px 6px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text2);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.2s;
+  cursor: pointer;
+  min-height: 44px;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row:hover { background: rgba(255,255,255,0.03); }
+.settings-row-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-row-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  background: rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+.settings-row-label { font-size: 13px; font-weight: 600; color: var(--white); line-height: 1.4; }
+.settings-row-value { font-size: 12px; color: var(--text2); }
+
+.settings-danger-group {
+  background: rgba(255,82,82,0.05);
+  border-color: rgba(255,82,82,0.2);
+}
+.settings-danger-row { color: var(--red); }
+.settings-danger-row .settings-row-label { color: var(--red); }
+
+.segmented-control {
+  display: flex;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.seg-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text2);
+  border: none;
+  background: transparent;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  min-height: 44px;
+}
+.seg-btn.active { background: rgba(0,230,118,0.2); color: var(--green); }
+
+.child-panel-link {
+  margin: 0 16px 16px;
+  padding: 14px;
+  background: rgba(41,182,246,0.08);
+  border: 1px solid rgba(41,182,246,0.25);
+  border-radius: 16px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s;
+  min-height: 44px;
+}
+.child-panel-link:hover { background: rgba(41,182,246,0.15); }
+.child-panel-link-text { font-size: 13px; font-weight: 700; color: var(--blue); }
+.child-panel-link-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+/* BOTTOM NAV */
+.bottom-nav {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(5,12,8,0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+}
+
+.nav-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 0;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+  border: none;
+  background: none;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  min-height: 44px;
+}
+
+/* Active tab indicator dot above icon */
+.nav-tab::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: 20px;
+  height: 3px;
+  background: var(--green);
+  border-radius: 3px;
+  transition: transform 0.3s cubic-bezier(0.16,1,0.3,1);
+}
+.nav-tab.active::before {
+  transform: translateX(-50%) scaleX(1);
+}
+
+.nav-tab-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+  position: relative;
+}
+/* Active tab glow background */
+.nav-tab.active .nav-tab-icon {
+  background:
+    radial-gradient(circle at center, rgba(0,230,118,0.18) 0%, rgba(0,230,118,0.06) 60%, transparent 100%),
+    rgba(0,230,118,0.08);
+  box-shadow: 0 0 14px rgba(0,230,118,0.2);
+}
+
+.nav-tab-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text2);
+  transition: color 0.3s;
+  text-transform: uppercase;
+}
+.nav-tab.active .nav-tab-label { color: var(--green); }
+
+.nav-tab-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 14px;
+  height: 14px;
+  background: var(--red);
+  border-radius: 50%;
+  font-size: 8px;
+  font-weight: 800;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--bg);
+}
+
+.nav-tab svg path, .nav-tab svg circle, .nav-tab svg rect, .nav-tab svg polyline, .nav-tab svg polygon, .nav-tab svg line {
+  transition: stroke 0.3s, fill 0.3s;
+}
+.nav-tab.active svg path,
+.nav-tab.active svg circle,
+.nav-tab.active svg polyline,
+.nav-tab.active svg line { stroke: var(--green); }
+.nav-tab.active svg rect { fill: var(--green); }
+
+/* LEAFLET CUSTOM MARKERS */
+.custom-marker { position: relative; }
+.marker-photo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+.marker-photo img { width: 100%; height: 100%; object-fit: cover; }
+.marker-tail {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid;
+  margin: -1px auto 0;
+}
+.marker-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  animation: markerPulse 2s ease-out infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+@keyframes markerPulse {
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.7; }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+}
+
+/* SCROLL REVEAL */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s cubic-bezier(0.16,1,0.3,1), transform 0.5s cubic-bezier(0.16,1,0.3,1);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* LEAFLET OVERRIDES */
+.leaflet-container { background: var(--bg); }
+.leaflet-control-attribution { display: none !important; }
+/* Animated connection lines */
+.conn-line { stroke-dasharray: 10 7 !important; animation: dashFlow 1.4s linear infinite; }
+@keyframes dashFlow { to { stroke-dashoffset: -17; } }
+/* Custom popup */
+.leaflet-popup-content-wrapper { background: #0D1F13 !important; border: 1px solid rgba(0,230,118,0.2) !important; border-radius: 12px !important; box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important; padding: 0 !important; }
+.leaflet-popup-tip { background: #0D1F13 !important; }
+.leaflet-popup-content { margin: 0 !important; }
+/* ── MAP TYPE SWITCHER ── */
+.map-type-switcher {
+  position:absolute; bottom:14px; right:12px; z-index:1000;
+  display:flex; gap:3px;
+  background:rgba(5,12,8,0.9); border:1px solid rgba(0,230,118,0.22);
+  border-radius:14px; padding:5px;
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  box-shadow:0 4px 24px rgba(0,0,0,0.6);
+}
+.map-type-btn {
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:7px 9px; border-radius:9px; border:1px solid transparent;
+  background:transparent; color:#5E8B6E;
+  font-size:9px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+  cursor:pointer; transition:all .2s; font-family:'Plus Jakarta Sans',sans-serif;
+  min-width:42px; line-height:1;
+}
+.map-type-btn .mti { font-size:15px; margin-bottom:2px; display:block; }
+.map-type-btn.active { background:rgba(0,230,118,.15); color:#00E676; border-color:rgba(0,230,118,.35); }
+.map-type-btn:hover:not(.active) { background:rgba(255,255,255,.06); color:#ccc; }
+/* Light tile overrides */
+.map-light-mode .leaflet-container { background:#e8e0d8; }
+/* ── ZOOM CONTROLS ── */
+.map-zoom-ctrl {
+  position:absolute; bottom:14px; left:12px; z-index:1000;
+  display:flex; flex-direction:column; gap:4px;
+}
+.map-zoom-btn {
+  width:38px; height:38px;
+  background:rgba(5,12,8,0.9); border:1px solid rgba(0,230,118,0.22);
+  border-radius:11px; color:#00E676;
+  font-size:22px; font-weight:300; line-height:1;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  backdrop-filter:blur(14px); transition:all .2s;
+  font-family:system-ui,sans-serif;
+}
+.map-zoom-btn:hover { background:rgba(0,230,118,.15); border-color:rgba(0,230,118,.4); }
+.map-zoom-btn:active { transform:scale(.9); }
+.leaflet-control-zoom {
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+  background: rgba(5,12,8,0.9) !important;
+  color: var(--green) !important;
+  border: none !important;
+  font-size: 16px !important;
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+}
+.leaflet-control-zoom-in:hover,
+.leaflet-control-zoom-out:hover { background: rgba(0,230,118,0.15) !important; }
+
+/* Distance badge on polylines */
+.dist-label {
+  background: rgba(5,12,8,0.85);
+  border: 1px solid rgba(0,230,118,0.4);
+  border-radius: 10px;
+  padding: 3px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+/* EMPTY STATE */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text2);
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.6; }
+.empty-title { font-size: 14px; font-weight: 700; color: var(--white); margin-bottom: 6px; }
+.empty-sub { font-size: 12px; line-height: 1.5; }
+
+/* Scrollbar */
+* { scrollbar-width: thin; scrollbar-color: rgba(0,230,118,0.2) transparent; }
+
+/* Toast notifications */
+.toast {
+  position: fixed; top: 72px; left: 50%; transform: translateX(-50%) translateY(-10px);
+  background: #0D1F13; border: 1px solid var(--green); border-radius: 14px;
+  padding: 12px 20px; font-size: 13px; font-weight: 600; color: #fff;
+  z-index: 9999; opacity: 0; transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+  white-space: nowrap; pointer-events: none;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 16px rgba(0,230,118,0.2);
+  max-width: calc(100% - 32px);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.toast-call { border-color: var(--blue); box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 16px rgba(41,182,246,0.2); }
+.toast.toast-msg  { border-color: var(--accent); }
+.toast.toast-error{ border-color: var(--red); box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 16px rgba(255,82,82,0.2); }
+</style>
+</head>
+<body>
+
+<!-- Floating background orbs (desktop only) -->
+<div class="bg-orb bg-orb-1"></div>
+<div class="bg-orb bg-orb-2"></div>
+<div class="bg-orb bg-orb-3"></div>
+
+<div class="app-frame" id="appFrame">
+
+  <!-- PHONE NOTCH (desktop) -->
+  <div class="phone-notch">
+    <div class="phone-notch-cam"></div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span class="status-time">9:41</span>
+    <div class="status-icons">
+      <div class="signal-bars">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <svg width="15" height="11" viewBox="0 0 15 11" fill="none" style="margin:0 2px">
+        <path d="M7.5 2.5C9.5 2.5 11.3 3.3 12.6 4.6L14 3.2C12.3 1.5 10 0.5 7.5 0.5C5 0.5 2.7 1.5 1 3.2L2.4 4.6C3.7 3.3 5.5 2.5 7.5 2.5Z" fill="white"/>
+        <path d="M7.5 5.5C8.8 5.5 9.9 6 10.7 6.8L12.1 5.4C10.9 4.2 9.3 3.5 7.5 3.5C5.7 3.5 4.1 4.2 2.9 5.4L4.3 6.8C5.1 6 6.2 5.5 7.5 5.5Z" fill="white"/>
+        <circle cx="7.5" cy="9.5" r="1.5" fill="white"/>
+      </svg>
+      <div class="status-battery">
+        <div class="battery-icon"><div class="battery-fill"></div></div>
+        <span style="font-size:11px;font-weight:700;">79</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP HEADER -->
+  <div class="app-header">
+    <div class="header-left">
+      <a href="index.html" class="header-back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+        Home
+      </a>
+      <div class="header-brand">
+        <div class="nav-logo-icon">
+          <svg class="logo-svg" width="28" height="28" viewBox="0 0 40 40" fill="none">
+            <defs>
+              <linearGradient id="pinGradP" x1="12" y1="4" x2="28" y2="26" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#00FFB2"/>
+                <stop offset="100%" stop-color="#00C853"/>
+              </linearGradient>
+            </defs>
+            <path d="M20 4C14.48 4 10 8.48 10 14c0 8.5 10 22 10 22s10-13.5 10-22c0-5.52-4.48-10-10-10z" fill="url(#pinGradP)"/>
+            <circle cx="20" cy="13.5" r="3.5" fill="rgba(5,12,8,0.85)"/>
+          </svg>
+        </div>
+        <span class="nav-logo-text">GRAVITY</span>
+        <span class="parent-badge">Parent</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="notif-btn" onclick="switchTab('alerts')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <div class="notif-badge" id="headerNotifBadge" style="display:none;">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="app-content" id="appContent">
+
+    <!-- TAB 1: MAP -->
+    <div class="tab-section active" id="tab-map">
+      <div style="position:relative;">
+        <div id="leaflet-map"></div>
+        <!-- Map type switcher overlay -->
+        <div class="map-type-switcher" id="mapTypeSwitcher">
+          <button class="map-type-btn active" onclick="switchMapType('dark')" data-type="dark"><span class="mti">🌙</span>Dark</button>
+          <button class="map-type-btn" onclick="switchMapType('light')" data-type="light"><span class="mti">☀️</span>Light</button>
+          <button class="map-type-btn" onclick="switchMapType('satellite')" data-type="satellite"><span class="mti">🛰️</span>Sat</button>
+          <button class="map-type-btn" onclick="switchMapType('street')" data-type="street"><span class="mti">🗺️</span>Street</button>
+        </div>
+        <!-- Custom zoom controls -->
+        <div class="map-zoom-ctrl" id="mapZoomCtrl">
+          <button class="map-zoom-btn" onclick="mapZoomIn()">+</button>
+          <button class="map-zoom-btn" onclick="mapZoomOut()">−</button>
+        </div>
+        <div class="map-top-bar">
+          <div class="map-pill">
+            <div class="live-dot"></div>
+            LIVE TRACKING
+          </div>
+          <div class="map-pill" style="color:var(--blue);">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Updated now
+          </div>
+        </div>
+      </div>
+
+      <div class="family-strip-wrap">
+        <div class="family-strip-label">Family Members</div>
+        <div class="family-strip" id="familyStrip"></div>
+      </div>
+
+      <div class="map-info-section">
+        <div class="section-title">Location Overview</div>
+        <div id="memberOverviewList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+    </div>
+
+    <!-- TAB 2: FAMILY -->
+    <div class="tab-section" id="tab-family">
+      <div style="padding:16px 16px 8px;">
+        <div style="font-size:16px;font-weight:800;color:var(--white);margin-bottom:4px;">Family Circle</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;" id="familyMemberCount">Loading...</div>
+      </div>
+      <div class="family-list" id="familyList"></div>
+    </div>
+
+    <!-- TAB 3: ALERTS -->
+    <div class="tab-section" id="tab-alerts">
+      <div class="alerts-header-bar">
+        <div>
+          <div class="alerts-count-title">Active Alerts</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">Requires your attention</div>
+        </div>
+        <div class="alerts-count-badge" id="alertBadgeCount">0</div>
+      </div>
+      <div class="alert-list" id="alertList">
+        <div id="alertEmpty" style="text-align:center;color:var(--text2);padding:40px 20px;font-size:13px;">Loading alerts...</div>
+      </div>
+    </div>
+
+    <!-- TAB 4: GEOFENCE -->
+    <div class="tab-section" id="tab-geofence">
+      <div class="geofence-header">
+        <div>
+          <div class="geofence-title">Safe Zones</div>
+          <div class="geofence-subtitle" id="zoneSubtitle">Loading...</div>
+        </div>
+        <button class="geo-add-btn" onclick="addNewZone()">+ Add Zone</button>
+      </div>
+
+      <div class="zone-list" id="zoneList">
+        <div id="zoneEmpty" style="text-align:center;color:var(--text2);padding:40px 20px;font-size:13px;">Loading zones...</div>
+      </div>
+
+      <!-- Add Zone Modal -->
+      <div id="addZoneModal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;width:calc(100% - 48px);max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+          <div style="font-size:16px;font-weight:800;color:var(--white);margin-bottom:16px;">New Safe Zone</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Zone Name</div>
+              <input id="znName" type="text" placeholder="e.g. Home, School" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--white);font-size:13px;outline:none;box-sizing:border-box;">
+            </div>
+            <div style="display:flex;gap:8px;">
+              <div style="flex:1;">
+                <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Latitude</div>
+                <input id="znLat" type="number" step="any" placeholder="28.6139" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--white);font-size:13px;outline:none;box-sizing:border-box;">
+              </div>
+              <div style="flex:1;">
+                <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Longitude</div>
+                <input id="znLng" type="number" step="any" placeholder="77.2090" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--white);font-size:13px;outline:none;box-sizing:border-box;">
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Radius (meters)</div>
+              <input id="znRadius" type="number" placeholder="200" min="50" max="5000" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--white);font-size:13px;outline:none;box-sizing:border-box;">
+            </div>
+            <div style="font-size:11px;color:var(--text2);">
+              Tip: Open Google Maps, long-press a location and copy the coordinates.
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:20px;">
+            <button onclick="closeZoneModal()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>
+            <button onclick="submitNewZone()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--green);color:#000;font-size:13px;font-weight:800;cursor:pointer;">Create Zone</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: SETTINGS -->
+    <div class="tab-section" id="tab-settings">
+      <div class="settings-profile">
+        <div class="settings-avatar-wrap">
+          <img src="https://picsum.photos/seed/gravity-parent/60/60" alt="Profile" class="settings-avatar" id="settingsAvatar">
+          <div class="settings-avatar-edit">✏️</div>
+        </div>
+        <div>
+          <div class="settings-user-name" id="settingsUserName">Loading...</div>
+          <div class="settings-user-email" id="settingsUserEmail"></div>
+          <div class="settings-plan-badge">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            PRO PLAN
+          </div>
+        </div>
+      </div>
+
+      <a href="child-panel.html" class="child-panel-link" id="childPanelLink">
+        <div>
+          <div class="child-panel-link-text">View Child Panel</div>
+          <div class="child-panel-link-sub">Switch to child view</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#29B6F6" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+
+      <div class="settings-groups">
+
+        <!-- NOTIFICATIONS -->
+        <div class="settings-group reveal">
+          <div class="settings-group-header">Notifications</div>
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(255,82,82,0.15);">🚨</div>
+              <div class="settings-row-label">SOS Alerts</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(255,179,0,0.15);">🏠</div>
+              <div class="settings-row-label">Geofence exits</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(255,179,0,0.15);">🔋</div>
+              <div class="settings-row-label">Battery low</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(0,230,118,0.15);">📍</div>
+              <div class="settings-row-label">Arrival alerts</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- PRIVACY -->
+        <div class="settings-group reveal" style="transition-delay:0.06s;">
+          <div class="settings-group-header">Privacy</div>
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(41,182,246,0.15);">🔒</div>
+              <div class="settings-row-label">Share my location</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row" style="cursor:default;">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(171,71,188,0.15);">🎯</div>
+              <div class="settings-row-label">Location precision</div>
+            </div>
+            <div class="segmented-control">
+              <button class="seg-btn active" onclick="setSegment(this,'Exact')">Exact</button>
+              <button class="seg-btn" onclick="setSegment(this,'Approx')">Approx</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAMILY -->
+        <div class="settings-group reveal" style="transition-delay:0.12s;">
+          <div class="settings-group-header">Family</div>
+          <div class="settings-row" onclick="">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(0,230,118,0.15);">👨‍👩‍👧‍👦</div>
+              <div class="settings-row-label">Manage Family Circle</div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="settings-row" onclick="">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(0,230,118,0.15);">➕</div>
+              <div class="settings-row-label">Invite Member</div>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:var(--green);background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);padding:3px 10px;border-radius:10px;">Invite</div>
+          </div>
+        </div>
+
+        <!-- APP -->
+        <div class="settings-group reveal" style="transition-delay:0.18s;">
+          <div class="settings-group-header">App</div>
+          <div class="settings-row" style="cursor:default;">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(5,12,8,0.5);">🌙</div>
+              <div class="settings-row-label">Dark theme</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row" style="cursor:default;">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(41,182,246,0.15);">🌐</div>
+              <div class="settings-row-label">Language</div>
+            </div>
+            <div class="settings-row-value">English</div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(0,230,118,0.15);">ℹ️</div>
+              <div class="settings-row-label">About Gravity</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="settings-row-value">v2.4.1</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- DANGER ZONE -->
+        <div class="settings-group settings-danger-group reveal" style="transition-delay:0.24s;">
+          <div class="settings-group-header" style="color:var(--red);">Danger Zone</div>
+          <div class="settings-row settings-danger-row" onclick="doLogout()">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(255,82,82,0.15);">🚪</div>
+              <div>
+                <div class="settings-row-label">Logout</div>
+                <div class="settings-row-sub" style="font-size:11px;color:var(--text2);">Sign out of Gravity</div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-row settings-danger-row" onclick="confirmLeave()">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(255,82,82,0.15);">🚪</div>
+              <div class="settings-row-label">Leave Family Circle</div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="settings-row settings-danger-row" onclick="confirmDelete()">
+            <div class="settings-row-left">
+              <div class="settings-row-icon" style="background:rgba(255,82,82,0.15);">🗑️</div>
+              <div class="settings-row-label">Delete Account</div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <div style="height:16px;"></div>
+      </div>
+    </div>
+
+  </div><!-- /app-content -->
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-tab active" onclick="switchTab('map')" id="navMap">
+      <div class="nav-tab-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+      <span class="nav-tab-label">Map</span>
+    </button>
+    <button class="nav-tab" onclick="switchTab('family')" id="navFamily">
+      <div class="nav-tab-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <span class="nav-tab-label">Family</span>
+    </button>
+    <button class="nav-tab" onclick="switchTab('alerts')" id="navAlerts">
+      <div class="nav-tab-icon" style="position:relative;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <div class="nav-tab-badge" id="navAlertBadge">3</div>
+      </div>
+      <span class="nav-tab-label">Alerts</span>
+    </button>
+    <button class="nav-tab" onclick="switchTab('geofence')" id="navGeofence">
+      <div class="nav-tab-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <span class="nav-tab-label">Geofence</span>
+    </button>
+    <button class="nav-tab" onclick="switchTab('settings')" id="navSettings">
+      <div class="nav-tab-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </div>
+      <span class="nav-tab-label">Settings</span>
+    </button>
+  </nav>
+
+</div><!-- /app-frame -->
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── API CONFIG ──
+const API_BASE = window.location.origin + '/api/v1'
+
+const gravityToken = localStorage.getItem('gravity_token')
+const gravityUser = JSON.parse(localStorage.getItem('gravity_user') || 'null')
+
+// Auth guard — redirect to login if not logged in
+if (!gravityToken) {
+  localStorage.setItem('gravity_redirect', 'parent-panel.html')
+  window.location.href = 'login.html'
+}
+
+async function apiGet(path) {
+  const res = await fetch(API_BASE + path, { headers: { 'Authorization': 'Bearer ' + gravityToken } })
+  if (res.status === 401) { localStorage.clear(); window.location.href = 'login.html'; return null }
+  return res.json()
+}
+
+async function apiPost(path, body) {
+  const res = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + gravityToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  return res.json()
+}
+
+let currentCircleId = null
+
+// ============================================================
+// FAMILY DATA
+// ============================================================
+let members = [];  // populated from API in loadMembers()
+
+// ============================================================
+// REAL DATA LOADERS
+// ============================================================
+async function loadRealData() {
+  try {
+    const data = await apiGet('/circles')
+    if (!data || !data.circles || !data.circles.length) {
+      const countEl = document.getElementById('familyMemberCount')
+      if (countEl) countEl.textContent = 'No circle yet'
+      return
+    }
+    currentCircleId = data.circles[0].id
+    await loadMembers()
+    await loadAlerts()
+    await loadGeofences()
+    connectSSE()
+  } catch(e) { console.error('loadRealData error', e) }
+}
+
+async function loadMembers() {
+  if (!currentCircleId) return
+  const data = await apiGet('/circles/' + currentCircleId + '/members')
+  if (!data) return
+  const colors = ['#00E676','#00C853','#29B6F6','#FFB300','#AB47BC','#5E8B6E']
+  members = (data.members || []).map((m, i) => ({
+    id: m.id,
+    name: m.name,
+    lat: m.latitude ? parseFloat(m.latitude) : null,
+    lng: m.longitude ? parseFloat(m.longitude) : null,
+    status: m.location_updated_at ? 'active' : 'offline',
+    battery: m.battery_level != null ? Math.round(m.battery_level) : 50,
+    color: colors[i % colors.length],
+    avatar: m.avatar_url || ('https://picsum.photos/seed/' + encodeURIComponent(m.name) + '/56/56'),
+    role: m.role || 'Member',
+    lastSeen: m.location_updated_at ? new Date(m.location_updated_at).toLocaleTimeString() : 'Unknown'
+  }))
+  // Update family count badge
+  const countEl = document.getElementById('familyMemberCount')
+  if (countEl) {
+    const active = members.filter(m => m.status === 'active').length
+    countEl.textContent = members.length + ' member' + (members.length !== 1 ? 's' : '') + ' · ' + active + ' active'
+  }
+  buildFamilyStrip()
+  buildOverviewList()
+  buildFamilyList()
+  if (map) initMapMarkers()
+}
+
+async function loadAlerts() {
+  if (!currentCircleId) return
+  const container = document.getElementById('alertList')
+  const emptyEl = document.getElementById('alertEmpty')
+  const data = await apiGet('/geofences/events/' + currentCircleId)
+  if (!data || !data.events) {
+    if (emptyEl) emptyEl.textContent = 'No alerts yet'
+    return
+  }
+  if (!data.events.length) {
+    if (emptyEl) emptyEl.textContent = 'No alerts yet'
+    return
+  }
+  // Remove loading placeholder
+  if (emptyEl) emptyEl.remove()
+  const icons = { exit: '🚨', entry: '📍', sos: '🆘' }
+  const labels = {
+    exit: z => 'Left ' + z,
+    entry: z => 'Arrived at ' + z,
+    sos: () => 'SOS Alert'
+  }
+  container.innerHTML = data.events.slice(0, 10).map(e => `
+    <div class="alert-card alert-card-geo reveal" id="alert-${e.id}">
+      <div class="alert-top">
+        <div class="alert-icon alert-icon-geo">${icons[e.event_type] || '📍'}</div>
+        <div class="alert-text-wrap">
+          <div class="alert-title">${e.user_name || 'Member'} — ${(labels[e.event_type] || (() => e.event_type))(e.zone_name || '')}</div>
+          <div class="alert-time">${new Date(e.created_at).toLocaleString()}</div>
+        </div>
+      </div>
+      <div class="alert-actions">
+        <button class="alert-btn alert-btn-ghost" onclick="dismissAlert('alert-${e.id}')">Dismiss</button>
+      </div>
+    </div>
+  `).join('')
+  updateAlertBadges()
+}
+
+async function loadGeofences() {
+  if (!currentCircleId) return
+  const container = document.getElementById('zoneList')
+  const emptyEl = document.getElementById('zoneEmpty')
+  const subtitle = document.getElementById('zoneSubtitle')
+  const data = await apiGet('/geofences/circle/' + currentCircleId)
+  if (!data || !data.safe_zones) {
+    if (emptyEl) emptyEl.textContent = 'Could not load zones'
+    return
+  }
+  if (!data.safe_zones.length) {
+    if (emptyEl) emptyEl.textContent = 'No safe zones yet — tap + Add Zone'
+    if (subtitle) subtitle.textContent = '0 zones · tap + to add'
+    return
+  }
+  if (emptyEl) emptyEl.remove()
+  if (subtitle) subtitle.textContent = data.safe_zones.length + ' zone' + (data.safe_zones.length !== 1 ? 's' : '') + ' active'
+  container.innerHTML = data.safe_zones.map((z, i) => `
+    <div class="zone-card reveal" style="transition-delay:${i * 0.08}s;">
+      <div class="zone-top">
+        <div class="zone-icon-wrap">📍</div>
+        <div class="zone-info">
+          <div class="zone-name">${z.name}</div>
+          <div class="zone-address">Radius: ${z.radius_meters}m</div>
+        </div>
+        <div class="zone-toggle-wrap">
+          <label class="toggle-switch">
+            <input type="checkbox" checked onchange="toggleZone(this,'${z.id}')">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="zone-bottom">
+        <div class="zone-radius-tag">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+          ${z.radius_meters}m radius
+        </div>
+        <div class="zone-actions">
+          <button class="zone-action-btn" title="Delete" onclick="deleteZone('${z.id}')">🗑️</button>
+        </div>
+      </div>
+    </div>
+  `).join('') + `
+    <div class="add-zone-card reveal" style="transition-delay:${data.safe_zones.length * 0.08}s;" onclick="addNewZone()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add New Safe Zone
+    </div>
+  `
+}
+
+function connectSSE() {
+  if (!currentCircleId || !gravityToken) return
+  const url = API_BASE + '/sse/stream'
+  const evtSource = new EventSource(url + '?token=' + gravityToken)
+  evtSource.addEventListener('location_update', e => {
+    const d = JSON.parse(e.data)
+    const member = members.find(m => m.id === d.userId)
+    if (member) {
+      member.lat = d.latitude
+      member.lng = d.longitude
+      member.battery = d.battery_level || member.battery
+      if (window.memberMarkers && window.memberMarkers[d.userId]) {
+        window.memberMarkers[d.userId].setLatLng([d.latitude, d.longitude])
+      }
+    }
+  })
+  evtSource.addEventListener('sos_alert', e => {
+    const d = JSON.parse(e.data)
+    showToast('🆘 SOS from ' + (d.userName || 'Member') + '!', 'error')
+    // Inject SOS card into alert list
+    const container = document.getElementById('alertList')
+    const emptyEl = document.getElementById('alertEmpty')
+    if (emptyEl) emptyEl.remove()
+    const card = document.createElement('div')
+    card.className = 'alert-card alert-card-sos reveal visible'
+    card.id = 'alert-sos-' + Date.now()
+    card.innerHTML = `
+      <div class="alert-top">
+        <div class="alert-icon alert-icon-sos">🆘</div>
+        <div class="alert-text-wrap">
+          <div class="alert-title">${d.userName || 'Member'} sent SOS alert</div>
+          <div class="alert-time">Just now${d.latitude ? ' · ' + d.latitude.toFixed(4) + ', ' + d.longitude.toFixed(4) : ''}</div>
+        </div>
+      </div>
+      <div class="alert-actions">
+        <button class="alert-btn alert-btn-ghost" onclick="dismissAlert('${card.id}')">Dismiss</button>
+      </div>`
+    container.prepend(card)
+    updateAlertBadges()
+    switchTab('alerts')
+  })
+  evtSource.onerror = () => evtSource.close()
+}
+
+function initMapMarkers() {
+  if (!map) return
+  // Clear existing member markers
+  if (window.memberMarkers) {
+    Object.values(window.memberMarkers).forEach(mk => map.removeLayer(mk))
+  }
+  window.memberMarkers = {}
+  const located = members.filter(m => m.lat && m.lng)
+  if (!located.length) return
+  located.forEach(m => {
+    const color = m.color || '#00E676'
+    const icon = L.divIcon({
+      className: '',
+      html: `
+        <div style="position:relative;text-align:center;width:46px;">
+          <div style="
+            position:absolute;
+            top:50%;left:50%;
+            transform:translate(-50%,-60%);
+            width:56px;height:56px;
+            border-radius:50%;
+            border:2.5px solid ${color};
+            opacity:0.6;
+            animation:markerPulse 2s ease-out infinite;
+            z-index:0;
+            pointer-events:none;
+          "></div>
+          <div style="
+            position:relative;z-index:1;
+            width:40px;height:40px;
+            border-radius:50%;
+            overflow:hidden;
+            border:3px solid ${color};
+            box-shadow:0 4px 14px rgba(0,0,0,0.7),0 0 14px ${color}55;
+            margin:0 auto;
+          ">
+            <img src="${m.avatar}" width="40" height="40" style="display:block;object-fit:cover;"/>
+          </div>
+          <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid ${color};margin:-1px auto 0;position:relative;z-index:1;"></div>
+        </div>
+      `,
+      iconSize: [46, 56],
+      iconAnchor: [23, 56]
+    });
+    const marker = L.marker([m.lat, m.lng], { icon }).addTo(map);
+    marker.bindPopup(`
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border:1px solid rgba(0,230,118,0.2);border-radius:10px;padding:10px;min-width:140px;">
+        <div style="font-weight:800;font-size:13px;color:${color};margin-bottom:4px;">${m.name}</div>
+        <div style="font-size:11px;color:#5E8B6E;margin-bottom:2px;">${m.role || ''}</div>
+        <div style="font-size:10px;color:#5E8B6E;margin-top:4px;">🔋 ${m.battery}%</div>
+      </div>
+    `, { className: 'custom-popup' });
+    window.memberMarkers[m.id] = marker
+  })
+  // Fit map to located members
+  const bounds = located.map(m => [m.lat, m.lng])
+  if (bounds.length >= 2) map.fitBounds(bounds, { padding: [40, 40] })
+  else if (bounds.length === 1) map.setView(bounds[0], 14)
+  setTimeout(() => map.invalidateSize(), 100)
+}
+
+// ============================================================
+// ============================================================
+// MAP TILE LAYERS + SWITCHER
+// ============================================================
+const TILE_LAYERS = {
+  dark:      { url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',          opts:{subdomains:'abcd',maxZoom:19} },
+  light:     { url:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',         opts:{subdomains:'abcd',maxZoom:19} },
+  satellite: { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts:{maxZoom:19} },
+  street:    { url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',opts:{subdomains:'abcd',maxZoom:19} }
+};
+let activeTileLayer = null;
+let currentMapType = 'dark';
+
+function switchMapType(type) {
+  if (!map) return;
+  if (activeTileLayer) map.removeLayer(activeTileLayer);
+  const t = TILE_LAYERS[type];
+  activeTileLayer = L.tileLayer(t.url, t.opts).addTo(map);
+  activeTileLayer.bringToBack();
+  currentMapType = type;
+  document.querySelectorAll('#mapTypeSwitcher .map-type-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.type === type)
+  );
+}
+
+function mapZoomIn()  { if (map) map.setZoom(map.getZoom() + 1, {animate:true}); }
+function mapZoomOut() { if (map) map.setZoom(map.getZoom() - 1, {animate:true}); }
+
+// ============================================================
+// LEAFLET MAP
+// ============================================================
+let map = null;
+let mapInited = false;
+
+function initMap() {
+  if (mapInited) return;
+  mapInited = true;
+
+  // Default center (India) — will refit once real member locations load
+  map = L.map('leaflet-map', {
+    center: [20.5937, 78.9629],
+    zoom: 5,
+    zoomControl: false,
+    attributionControl: false
+  });
+
+  activeTileLayer = L.tileLayer(TILE_LAYERS.dark.url, TILE_LAYERS.dark.opts).addTo(map);
+
+  // Plot any members that already have real locations
+  if (members.length) initMapMarkers();
+
+  setTimeout(() => map.invalidateSize(), 100);
+}
+
+// ============================================================
+// FAMILY STRIP
+// ============================================================
+function buildFamilyStrip() {
+  const strip = document.getElementById('familyStrip');
+  strip.innerHTML = '';
+  if (!members.length) return;
+  members.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'member-mini-card';
+    card.onclick = () => { if(map && m.lat && m.lng) map.setView([m.lat, m.lng], 15); };
+    const statusColor = m.status === 'active' ? '#00E676' : '#5E8B6E';
+    card.innerHTML = `
+      <div class="member-mini-avatar">
+        <img src="${m.avatar}" alt="${m.name}" style="border-color:${m.color};">
+        <div class="member-mini-status" style="background:${statusColor};"></div>
+      </div>
+      <div class="member-mini-name">${m.name.split(' ')[0]}</div>
+      <div class="member-mini-dist">${m.status === 'active' ? 'Online' : 'Offline'}</div>
+    `;
+    strip.appendChild(card);
+  });
+}
+
+// ============================================================
+// MEMBER OVERVIEW LIST
+// ============================================================
+function buildOverviewList() {
+  const list = document.getElementById('memberOverviewList');
+  list.innerHTML = '';
+  if (!members.length) {
+    list.innerHTML = '<p style="color:var(--text2);text-align:center;padding:16px;font-size:13px;">No members yet</p>';
+    return;
+  }
+  members.forEach(m => {
+    const battColor = m.battery > 60 ? '#00E676' : m.battery > 20 ? '#FFB300' : '#FF5252';
+    const statusText = m.status === 'active' ? 'Active' : m.status === 'sos' ? 'SOS' : 'Offline';
+    const statusColor = m.status === 'active' ? '#00E676' : m.status === 'sos' ? '#FF5252' : '#5E8B6E';
+    const item = document.createElement('div');
+    item.className = 'reveal';
+    item.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;align-items:center;gap:10px;';
+    item.innerHTML = `
+      <img src="${m.avatar}" style="width:36px;height:36px;border-radius:50%;border:2px solid ${m.color};flex-shrink:0;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:800;color:#fff;margin-bottom:2px;line-height:1.4;">${m.name} <span style="font-size:10px;font-weight:600;color:var(--text2);">${m.role}</span></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="flex:1;height:3px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${m.battery}%;background:${battColor};border-radius:3px;"></div>
+          </div>
+          <span style="font-size:9px;font-weight:700;color:${battColor};">${m.battery}%</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+        <div style="font-size:9px;font-weight:800;color:${statusColor};background:${statusColor}18;border:1px solid ${statusColor}44;padding:2px 7px;border-radius:10px;">${statusText}</div>
+        <div style="font-size:9px;color:var(--text2);">${m.lastSeen !== 'Unknown' ? '🕐 ' + m.lastSeen : '—'}</div>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+// ============================================================
+// FAMILY LIST (TAB 2) — with Call/Message buttons + ripple
+// ============================================================
+function buildFamilyList() {
+  const list = document.getElementById('familyList');
+  list.innerHTML = '';
+  if (!members.length) {
+    list.innerHTML = '<p style="color:var(--text2);text-align:center;padding:24px;font-size:13px;">No family members yet</p>';
+    return;
+  }
+  members.forEach((m, idx) => {
+    const battColor = m.battery > 60 ? '#00E676' : m.battery > 20 ? '#FFB300' : '#FF5252';
+    const statusText = m.status === 'active' ? 'Active' : m.status === 'sos' ? 'SOS' : 'Offline';
+    const statusClass = m.status === 'active' ? 'status-active' : m.status === 'sos' ? 'status-sos' : 'status-away';
+
+    const card = document.createElement('div');
+    card.className = 'member-card reveal';
+    card.style.transitionDelay = (idx * 0.06) + 's';
+    card.innerHTML = `
+      <div class="ripple-container"></div>
+      <div style="position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:18px 0 0 18px;background:${m.color};"></div>
+      <div class="member-avatar">
+        <img src="${m.avatar}" alt="${m.name}" style="border-color:${m.color};">
+      </div>
+      <div class="member-info">
+        <div class="member-name-row">
+          <div class="member-name">${m.name}</div>
+          <div class="member-role">${m.role}</div>
+        </div>
+        <div class="member-location">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          ${m.lat ? 'Location tracked' : 'No location yet'}
+        </div>
+        <div class="member-lastseen">Last seen: ${m.lastSeen}</div>
+        <div class="battery-row">
+          <div class="battery-bar-wrap">
+            <div class="battery-bar" style="width:${m.battery}%;background:${battColor};"></div>
+          </div>
+          <span class="battery-pct" style="color:${battColor};">${m.battery}%</span>
+        </div>
+        <div class="member-actions">
+          <button class="member-btn member-btn-call" onclick="event.stopPropagation();callMember('${m.name}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.7 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.61 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            Call
+          </button>
+          <button class="member-btn member-btn-msg" onclick="event.stopPropagation();msgMember('${m.name}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Message
+          </button>
+        </div>
+      </div>
+      <div class="member-right">
+        <div class="status-badge ${statusClass}">${statusText}</div>
+        <span class="chevron-icon">›</span>
+      </div>
+    `;
+
+    // Ripple on click
+    card.addEventListener('click', function(e) {
+      const container = card.querySelector('.ripple-container');
+      const rect = card.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height);
+      const x = e.clientX - rect.left - size/2;
+      const y = e.clientY - rect.top - size/2;
+      const ripple = document.createElement('span');
+      ripple.className = 'ripple-wave';
+      ripple.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px;`;
+      container.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 700);
+    });
+
+    list.appendChild(card);
+  });
+}
+
+function showToast(message, type = 'success') {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = message;
+  const frame = document.getElementById('appFrame') || document.body;
+  frame.appendChild(toast);
+  requestAnimationFrame(() => { requestAnimationFrame(() => toast.classList.add('show')); });
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 320);
+  }, 3000);
+}
+
+function callMember(name) {
+  showToast('📞 Calling ' + name + '...', 'call');
+}
+function msgMember(name) {
+  showToast('💬 Message sent to ' + name, 'msg');
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+const tabIds = ['map', 'family', 'alerts', 'geofence', 'settings'];
+
+function switchTab(tab) {
+  tabIds.forEach(t => {
+    document.getElementById('tab-' + t).classList.remove('active');
+    document.getElementById('nav' + capitalize(t)).classList.remove('active');
+  });
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('nav' + capitalize(tab)).classList.add('active');
+
+  if (tab === 'map') {
+    initMap();
+    setTimeout(() => { if(map) map.invalidateSize(); }, 150);
+  }
+
+  // Scroll to top of content
+  const content = document.getElementById('appContent');
+  if (content) content.scrollTop = 0;
+
+  // Trigger reveal for newly visible tab
+  setTimeout(revealCards, 60);
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// ============================================================
+// ALERT DISMISS — updates all badges
+// ============================================================
+function dismissAlert(id) {
+  const card = document.getElementById(id);
+  if (!card) return;
+  card.classList.add('dismissing');
+  setTimeout(() => { card.remove(); updateAlertBadges(); }, 450);
+}
+
+function updateAlertBadges() {
+  const count = document.querySelectorAll('#alertList .alert-card').length;
+  const alertBadge = document.getElementById('alertBadgeCount');
+  const navBadge = document.getElementById('navAlertBadge');
+  const headerBadge = document.getElementById('headerNotifBadge');
+  if (alertBadge) alertBadge.textContent = count;
+  if (navBadge) { navBadge.textContent = count; navBadge.style.display = count > 0 ? 'flex' : 'none'; }
+  if (headerBadge) { headerBadge.textContent = count; headerBadge.style.display = count > 0 ? 'flex' : 'none'; }
+}
+
+function viewAlertLocation(name) {
+  const member = members.find(m => m.name === name);
+  if (member) {
+    switchTab('map');
+    setTimeout(() => { if(map) map.setView([member.lat, member.lng], 15); }, 300);
+  } else {
+    switchTab('map');
+  }
+}
+
+// ============================================================
+// GEOFENCE TOGGLE
+// ============================================================
+function toggleZone(checkbox, zone) {
+  const card = checkbox.closest('.zone-card');
+  card.style.opacity = checkbox.checked ? '1' : '0.6';
+}
+
+function addNewZone() {
+  const modal = document.getElementById('addZoneModal')
+  modal.style.display = 'flex'
+  // Pre-fill with current map center if available
+  if (map) {
+    const c = map.getCenter()
+    document.getElementById('znLat').value = c.lat.toFixed(6)
+    document.getElementById('znLng').value = c.lng.toFixed(6)
+  }
+  document.getElementById('znRadius').value = '200'
+  document.getElementById('znName').value = ''
+  document.getElementById('znName').focus()
+}
+
+function closeZoneModal() {
+  document.getElementById('addZoneModal').style.display = 'none'
+}
+
+async function submitNewZone() {
+  const name = document.getElementById('znName').value.trim()
+  const lat = parseFloat(document.getElementById('znLat').value)
+  const lng = parseFloat(document.getElementById('znLng').value)
+  const radius = parseInt(document.getElementById('znRadius').value)
+  if (!name) { showToast('Zone name required', 'error'); return }
+  if (isNaN(lat) || isNaN(lng)) { showToast('Valid coordinates required', 'error'); return }
+  if (!radius || radius < 50) { showToast('Radius must be at least 50m', 'error'); return }
+  if (!currentCircleId) { showToast('No circle selected', 'error'); return }
+  try {
+    const res = await apiPost('/geofences', {
+      circle_id: currentCircleId,
+      name,
+      center_lat: lat,
+      center_lng: lng,
+      radius_meters: radius
+    })
+    if (res && res.safe_zone) {
+      closeZoneModal()
+      showToast('Safe zone created!', 'success')
+      await loadGeofences()
+    } else {
+      showToast(res?.error || 'Failed to create zone', 'error')
+    }
+  } catch(e) {
+    showToast('Network error', 'error')
+  }
+}
+
+async function deleteZone(zoneId) {
+  if (!confirm('Delete this safe zone?')) return
+  try {
+    const res = await fetch(API_BASE + '/geofences/' + zoneId, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + gravityToken }
+    })
+    if (res.ok) {
+      showToast('Zone deleted', 'success')
+      await loadGeofences()
+    } else {
+      showToast('Failed to delete zone', 'error')
+    }
+  } catch(e) {
+    showToast('Network error', 'error')
+  }
+}
+
+// ============================================================
+// SETTINGS ACTIONS
+// ============================================================
+function setSegment(btn, value) {
+  const group = btn.closest('.segmented-control');
+  group.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function doLogout() {
+  if (confirm('Logout se?')) {
+    localStorage.removeItem('gravity_token')
+    localStorage.removeItem('gravity_user')
+    window.location.href = 'login.html'
+  }
+}
+
+function confirmLeave() {
+  if (confirm('Are you sure you want to leave the Family Circle? You will lose access to all family member tracking.')) {
+    alert('You have left the Family Circle.');
+  }
+}
+
+function confirmDelete() {
+  if (confirm('Are you sure you want to permanently delete your account? This action cannot be undone.')) {
+    alert('Account deletion initiated. A confirmation email will be sent.');
+  }
+}
+
+// ============================================================
+// SCROLL REVEAL — IntersectionObserver + DOMContentLoaded fallback
+// ============================================================
+function revealCards() {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.05, rootMargin: '0px 0px -10px 0px' });
+
+  document.querySelectorAll('.reveal:not(.visible)').forEach(el => observer.observe(el));
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  // Populate settings profile from real user data
+  if (gravityUser) {
+    const nameEl = document.getElementById('settingsUserName')
+    const emailEl = document.getElementById('settingsUserEmail')
+    if (nameEl) nameEl.textContent = gravityUser.name || 'User'
+    if (emailEl) emailEl.textContent = gravityUser.email || ''
+    if (gravityUser.avatar_url) {
+      const avatarEl = document.getElementById('settingsAvatar')
+      if (avatarEl) { avatarEl.src = gravityUser.avatar_url; avatarEl.alt = gravityUser.name || 'User'; }
+    }
+  }
+
+  initMap();
+
+  // Load real data from backend
+  loadRealData();
+
+  // Immediate fallback: make all .reveal visible after short delay
+  setTimeout(() => {
+    document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible'));
+  }, 300);
+
+  // Also run IntersectionObserver
+  setTimeout(revealCards, 100);
+});
+</script>
+</body>
+</html>
