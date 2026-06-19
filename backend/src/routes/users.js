@@ -92,6 +92,14 @@ router.get('/me', authenticate, async (req, res) => {
   res.json({ user: req.user })
 })
 
+// POST /api/v1/users/me/push-token — store Expo push token
+router.post("/me/push-token", authenticate, async (req, res) => {
+  const { token } = req.body
+  if (!token) return res.status(400).json({ error: "token required" })
+  await query("UPDATE users SET push_token = $1 WHERE id = $2", [token, req.user.id]).catch(() => {})
+  res.json({ ok: true })
+})
+
 router.patch('/me', authenticate, validate(updateSchema), async (req, res) => {
   const { name, email, push_token } = req.body
   try {

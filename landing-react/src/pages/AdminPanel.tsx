@@ -313,6 +313,9 @@ export default function AdminPanel() {
   const [usersTotal, setUsersTotal] = useState(0)
   const [usersPage, setUsersPage] = useState(1)
   const [usersSearch, setUsersSearch] = useState('')
+  const [userRoleFilter, setUserRoleFilter] = useState("all")
+  const [userStatusFilter, setUserStatusFilter] = useState("all")
+  const [showUserFilter, setShowUserFilter] = useState(false)
   const [usersLoading, setUsersLoading] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
@@ -326,6 +329,10 @@ export default function AdminPanel() {
   const [selectedCircle, setSelectedCircle] = useState<Circle | null>(null)
   const [circleMenuOpen, setCircleMenuOpen] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [showCreateCircle, setShowCreateCircle] = useState(false)
+  const [newCircleName, setNewCircleName] = useState("")
+  const [newCirclePhone, setNewCirclePhone] = useState("")
+  const [creating, setCreating] = useState(false)
 
   /* ── SOS ── */
   const [sosEvents, setSosEvents] = useState<SosEvent[]>([])
@@ -411,7 +418,7 @@ export default function AdminPanel() {
      ════════════════════════════════════════════════════════════ */
   const loadUsers = useCallback(async (page: number = 1, search: string = '') => {
     setUsersLoading(true)
-    const data = await apiCall(`/users?page=${page}&search=${encodeURIComponent(search)}&limit=20`)
+    const data = await apiCall(`/users?page=${page}&search=${encodeURIComponent(search)}&role=${userRoleFilter}&status=${userStatusFilter}&limit=20`)
     if (data) {
       if (page === 1) setUsers(data.users || [])
       else setUsers(prev => [...prev, ...(data.users || [])])
@@ -491,6 +498,15 @@ export default function AdminPanel() {
     } else {
       showToast('Failed to regenerate code', 'error')
     }
+  }
+
+  const handleCreateCircle = async () => {
+    if (!newCircleName.trim() || !newCirclePhone.trim()) return
+    setCreating(true)
+    const data = await apiCall("/circles", "POST", { name: newCircleName, ownerPhone: newCirclePhone })
+    if (data?.circle) { showToast("Circle created!", "success"); setShowCreateCircle(false); setNewCircleName(""); setNewCirclePhone(""); loadCircles() }
+    else showToast("Failed — check phone number", "error")
+    setCreating(false)
   }
 
   const copyInviteCode = (code: string) => {
@@ -947,8 +963,29 @@ export default function AdminPanel() {
                   <input type="text" placeholder="Search users by name or phone..." value={usersSearch} onChange={e => handleSearchChange(e.target.value)} className={styles.searchInput} />
                   {usersSearch && <button onClick={() => { setUsersSearch(''); loadUsers(1, '') }} className={styles.clearBtn}>✕</button>}
                 </div>
-                <button className={styles.filterBtn} onClick={() => loadUsers(1, usersSearch)}>⚙</button>
+                <button className={styles.filterBtn} onClick={() => setShowUserFilter(v => !v)}>⚙</button>
               </div>
+
+              {showUserFilter && (
+                <div className={styles.filterPanel}>
+                  <div className={styles.filterGroup}>
+                    <span className={styles.filterGroupLabel}>Role</span>
+                    <div className={styles.filterChips}>
+                      {[["all","All"],["parent","Parent"],["child","Child"]].map(([v,l]) => (
+                        <button key={v} className={`${styles.filterChip} ${userRoleFilter===v ? styles.filterChipActive : ""}`} onClick={() => { setUserRoleFilter(v); loadUsers(1, usersSearch) }}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className={styles.filterGroup}>
+                    <span className={styles.filterGroupLabel}>Status</span>
+                    <div className={styles.filterChips}>
+                      {[["all","All"],["active","Active"],["banned","Banned"]].map(([v,l]) => (
+                        <button key={v} className={`${styles.filterChip} ${userStatusFilter===v ? styles.filterChipActive : ""}`} onClick={() => { setUserStatusFilter(v); loadUsers(1, usersSearch) }}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {usersLoading && users.length === 0 ? (
@@ -1120,6 +1157,30 @@ export default function AdminPanel() {
               })}
 
               {circleMenuOpen && <div style={{ position: 'fixed', inset: 0, zIndex: 50 }} onClick={() => setCircleMenuOpen(null)} />}
+
+              <button className={styles.fabBtn} onClick={() => setShowCreateCircle(true)}>+</button>
+
+              {showCreateCircle && (
+                <div className={styles.modalOverlay} onClick={() => setShowCreateCircle(false)}>
+                  <div className={styles.bottomSheet} onClick={e => e.stopPropagation()}>
+                    <div className={styles.sheetHandle} />
+                    <div className={styles.sheetTitle}>Create New Circle</div>
+                    <div className={styles.sheetSubtitle}>Set up a new family group</div>
+                    <div className={styles.sheetField}>
+                      <label className={styles.sheetLabel}>Circle Name</label>
+                      <input className={styles.sheetInput} placeholder="e.g. My Family" value={newCircleName} onChange={e => setNewCircleName(e.target.value)} />
+                    </div>
+                    <div className={styles.sheetField}>
+                      <label className={styles.sheetLabel}>Owner Phone Number</label>
+                      <input className={styles.sheetInput} placeholder="+91XXXXXXXXXX" value={newCirclePhone} onChange={e => setNewCirclePhone(e.target.value)} />
+                    </div>
+                    <button className={styles.sheetSubmitBtn} onClick={handleCreateCircle} disabled={creating || !newCircleName.trim() || !newCirclePhone.trim()}>
+                      {creating ? "Creating..." : "Create Circle"}
+                    </button>
+                    <button className={styles.sheetCancelBtn} onClick={() => setShowCreateCircle(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -116,6 +116,18 @@ router.get('/circles', adminAuth, async (req, res) => {
   res.json({ circles: r.rows })
 })
 
+// POST /api/v1/admin/circles — create circle
+router.post("/circles", adminAuth, async (req, res) => {
+  const { name, ownerPhone } = req.body
+  if (!name || !ownerPhone) return res.status(400).json({ error: "name and ownerPhone required" })
+  const owner = await query("SELECT id FROM users WHERE phone = $1", [ownerPhone])
+  if (!owner.rows.length) return res.status(404).json({ error: "Owner not found with that phone" })
+  const code = crypto.randomBytes(6).toString("hex").toUpperCase()
+  const r = await query("INSERT INTO circles (name, created_by, invite_code) VALUES ($1,$2,$3) RETURNING id,name,invite_code,created_at", [name, owner.rows[0].id, code])
+  await query("INSERT INTO circle_members (circle_id, user_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [r.rows[0].id, owner.rows[0].id, "admin"])
+  res.status(201).json({ circle: r.rows[0] })
+})
+
 // DELETE /api/v1/admin/circles/:id
 router.delete('/circles/:id', adminAuth, async (req, res) => {
   const r = await query('DELETE FROM circles WHERE id = $1 RETURNING id, name', [req.params.id])

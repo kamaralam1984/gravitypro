@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { BlurView } from 'expo-blur'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import HomeScreen from '../screens/HomeScreen'
+import MapScreen from '../screens/MapScreen'
 import CirclesScreen from '../screens/CirclesScreen'
 import SafeZonesScreen from '../screens/SafeZonesScreen'
 import AlertsScreen from '../screens/AlertsScreen'
@@ -67,7 +67,7 @@ export default function TabNavigator() {
           )
         },
       })}>
-      <Tab.Screen name="Map" component={HomeScreen} options={{ tabBarLabel: 'Map' }} />
+      <Tab.Screen name="Map" component={MapScreen} options={{ tabBarLabel: 'Map' }} />
       <Tab.Screen name="Circles" component={CirclesScreen} options={{ tabBarLabel: 'Circles' }} />
       <Tab.Screen name="Zones" component={SafeZonesScreen} options={{ tabBarLabel: 'Zones' }} />
       <Tab.Screen name="Alerts" component={AlertsScreen} options={{ tabBarLabel: 'Alerts' }} />

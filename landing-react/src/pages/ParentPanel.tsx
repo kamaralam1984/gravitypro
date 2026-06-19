@@ -90,6 +90,7 @@ export default function ParentPanel() {
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const [zones, setZones] = useState<Zone[]>([])
   const [circleId, setCircleId] = useState<string | null>(null)
+  const [allCircles, setAllCircles] = useState<{ id: string; name: string; invite_code?: string }[]>([])
   const [familyCount, setFamilyCount] = useState('Loading...')
   const [zoneSubtitle, setZoneSubtitle] = useState('Loading...')
   const [userName, setUserName] = useState('Loading...')
@@ -122,6 +123,10 @@ export default function ParentPanel() {
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [profileName, setProfileName] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyPoints, setHistoryPoints] = useState<{ latitude: number; longitude: number }[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [, setHistoryMemberId] = useState<string | null>(null)
   const avatarFileInputRef = useRef<HTMLInputElement>(null)
   const sseRef = useRef<EventSource | null>(null)
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -276,6 +281,7 @@ export default function ParentPanel() {
     try {
       const data = await apiGet('/circles')
       if (!data?.circles?.length) { setFamilyCount('No circle yet'); return }
+      setAllCircles(data.circles)
       const cid = data.circles[0].id
       setCircleId(cid)
       setCircleInviteCode(data.circles[0].invite_code || '')
@@ -512,6 +518,32 @@ export default function ParentPanel() {
     await loadRealData()
   }
 
+  // ── RELOAD DATA WHEN circleId CHANGES ──
+  useEffect(() => {
+    if (circleId) {
+      loadMembers(circleId)
+      loadGeofences(circleId)
+      loadAlerts(circleId)
+    }
+  }, [circleId])
+
+  // ── LOAD HISTORY ──
+  const loadHistory = async (userId: string) => {
+    setHistoryLoading(true)
+    setHistoryMemberId(userId)
+    setShowHistory(true)
+    const data = await apiGet('/users/me/location-history?limit=50')
+    if (data?.locations) {
+      setHistoryPoints(data.locations)
+      if (leafletMapRef.current && data.locations.length > 1) {
+        const coords = data.locations.map((p: { latitude: number; longitude: number }) => [p.latitude, p.longitude])
+        const L2 = (window as unknown as { L: typeof import('leaflet') }).L
+        L2 && L2.polyline(coords, { color: '#00E676', weight: 3, opacity: 0.8, dashArray: '6,4' }).addTo(leafletMapRef.current)
+      }
+    }
+    setHistoryLoading(false)
+  }
+
   async function createCircle() {
     const name = newCircleName.trim()
     if (!name) { showToast('Circle name required', 'error'); return }
@@ -713,6 +745,19 @@ export default function ParentPanel() {
           </div>
         </div>
 
+        {/* CIRCLE SWITCHER */}
+        {allCircles.length > 1 && (
+          <div className={styles.circleSwitcher}>
+            {allCircles.map(c => (
+              <button key={c.id}
+                className={`${styles.circleTab} ${circleId === c.id ? styles.circleTabActive : ''}`}
+                onClick={() => setCircleId(c.id)}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* MAIN CONTENT */}
         <div className={styles.appContent} id="appContent">
 
@@ -733,6 +778,9 @@ export default function ParentPanel() {
                     {t.charAt(0).toUpperCase() + t.slice(1, 3)}
                   </button>
                 ))}
+                <button className={styles.historyBtn} onClick={() => showHistory ? setShowHistory(false) : loadHistory('me')}>
+                  {showHistory ? 'Live' : 'History'}
+                </button>
               </div>
 
               {/* Custom zoom controls */}
@@ -754,6 +802,20 @@ export default function ParentPanel() {
                 </div>
               </div>
             </div>
+
+            {showHistory && (
+              <div className={styles.historyBar}>
+                {historyLoading ? (
+                  <span className={styles.historyLoading}>Loading path...</span>
+                ) : (
+                  <>
+                    <span className={styles.historyCount}>{historyPoints.length} location points</span>
+                    <span className={styles.historyRange}>Last 24 hours</span>
+                    <button className={styles.historyClose} onClick={() => setShowHistory(false)}>Back to Live</button>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className={styles.familyStripWrap}>
               <div className={styles.familyStripLabel}>Family Members</div>

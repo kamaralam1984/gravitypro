@@ -1354,3 +1354,26 @@
   .sidebarNav { flex-direction: row; flex: 1; gap: 0; padding: 8px; overflow-x: auto; }
   .sidebarFooter { display: none; }
 }
+
+.fabBtn { position: fixed; bottom: 90px; right: 20px; width: 56px; height: 56px; border-radius: 28px; background: linear-gradient(135deg,#00E676,#00C853); border: none; color: #050C08; font-size: 28px; font-weight: 300; cursor: pointer; box-shadow: 0 4px 20px rgba(0,230,118,0.5); transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; z-index: 50; animation: fadeIn 0.3s ease; }
+.fabBtn:hover { transform: scale(1.1) rotate(90deg); box-shadow: 0 6px 28px rgba(0,230,118,0.7); }
+.modalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: flex-end; justify-content: center; animation: fadeIn 0.2s ease; backdrop-filter: blur(4px); }
+.bottomSheet { background: #0A1A0F; border: 1px solid rgba(0,230,118,0.15); border-radius: 28px 28px 0 0; padding: 12px 24px 32px; width: 100%; max-width: 480px; animation: slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+.sheetHandle { width: 40px; height: 4px; background: rgba(0,230,118,0.3); border-radius: 2px; margin: 0 auto 20px; }
+.sheetTitle { font-size: 20px; font-weight: 700; color: #E8F5E9; margin-bottom: 4px; }
+.sheetSubtitle { font-size: 13px; color: #5E8B6E; margin-bottom: 24px; }
+.sheetField { margin-bottom: 16px; }
+.sheetLabel { display: block; font-size: 12px; font-weight: 600; color: #5E8B6E; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+.sheetInput { width: 100%; background: rgba(0,230,118,0.05); border: 1px solid rgba(0,230,118,0.2); border-radius: 12px; padding: 12px 16px; font-size: 15px; color: #E8F5E9; outline: none; transition: border-color 0.2s; box-sizing: border-box; font-family: inherit; }
+.sheetInput:focus { border-color: rgba(0,230,118,0.5); background: rgba(0,230,118,0.08); }
+.sheetSubmitBtn { width: 100%; padding: 15px; background: linear-gradient(135deg,#00E676,#00C853); border: none; border-radius: 14px; font-size: 16px; font-weight: 700; color: #050C08; cursor: pointer; margin-top: 8px; transition: all 0.2s; font-family: inherit; }
+.sheetSubmitBtn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,230,118,0.4); }
+.sheetSubmitBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.sheetCancelBtn { width: 100%; padding: 13px; background: transparent; border: 1px solid rgba(0,230,118,0.15); border-radius: 14px; font-size: 15px; font-weight: 500; color: #5E8B6E; cursor: pointer; margin-top: 10px; transition: all 0.2s; font-family: inherit; }
+.sheetCancelBtn:hover { border-color: rgba(0,230,118,0.3); color: #A0C8AA; }
+.filterPanel { background: rgba(0,230,118,0.04); border: 1px solid rgba(0,230,118,0.1); border-radius: 14px; padding: 16px; margin: 0 16px 12px; animation: fadeIn 0.2s ease; }
+.filterGroup { margin-bottom: 12px; }
+.filterGroup:last-child { margin-bottom: 0; }
+.filterGroupLabel { font-size: 11px; font-weight: 700; color: #3E6B4E; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px; }
+.filterChips { display: flex; gap: 8px; flex-wrap: wrap; }
+.filterChipActive { background: rgba(0,230,118,0.15) !important; border-color: rgba(0,230,118,0.4) !important; color: #00E676 !important; font-weight: 700 !important; }

@@ -23,6 +23,32 @@ router.post('/', authenticate, async (req, res) => {
   for (const row of circles.rows) {
     await sendToCircleMembers(row.circle_id, 'sos_alert', sosData)
   }
+  // Send push notifications to all circle members
+  try {
+    const tokens = await query(
+      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2",
+      [circles.rows.map(r => r.circle_id), userId]
+    )
+    if (tokens.rows.length) {
+      const messages = tokens.rows.map(t => ({
+        to: t.push_token,
+        title: "🆘 SOS Alert",
+        body: (sosData.userName || "Family member") + " needs help! " + sosData.message,
+        data: { type: "sos", latitude: sosData.latitude, longitude: sosData.longitude },
+        sound: "default",
+        priority: "high",
+      }))
+      const chunks = []
+      for (let i = 0; i < messages.length; i += 100) chunks.push(messages.slice(i, i+100))
+      for (const chunk of chunks) {
+        fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify(chunk)
+        }).catch(() => {})
+      }
+    }
+  } catch {}
   // Log SOS to DB
   for (const row of circles.rows) {
     await query(
