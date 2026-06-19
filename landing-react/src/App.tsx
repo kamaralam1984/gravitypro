@@ -5,6 +5,8 @@ import Parent from './pages/Parent'
 import ParentPanel from './pages/ParentPanel'
 import Child from './pages/Child'
 import ChildPanel from './pages/ChildPanel'
+import AdminLogin from './pages/AdminLogin'
+import AdminPanel from './pages/AdminPanel'
 
 function App() {
   return (
@@ -18,6 +20,9 @@ function App() {
         <Route path="/child/panel" element={<ChildPanel />} />
         <Route path="/parent-panel" element={<Navigate to="/parent/panel" replace />} />
         <Route path="/child-panel" element={<Navigate to="/child/panel" replace />} />
+        <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/panel" element={<AdminPanel />} />
       </Routes>
     </BrowserRouter>
   )
