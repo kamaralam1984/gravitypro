@@ -268,6 +268,15 @@ export default function ChildPanel() {
     return () => observer.disconnect()
   }, [activeTab])
 
+  // Re-run reveal when async data (members) loads — cards rendered after tab switch need this
+  useEffect(() => {
+    setTimeout(() => {
+      document.querySelectorAll(`.${styles.reveal}:not(.visible)`).forEach(el => {
+        el.classList.add('visible')
+      })
+    }, 80)
+  }, [displayMembers, hasCircle])
+
   // Clock
   useEffect(() => {
     updateTime()

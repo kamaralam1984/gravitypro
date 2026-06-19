@@ -65,8 +65,10 @@ const server = http.createServer((req, res) => {
       }
     })
 
-    // Keep SSE proxy alive when client disconnects
-    req.on('close', () => proxy.destroy())
+    // For SSE: destroy proxy when client disconnects to free resources
+    if (isSSE) {
+      req.on('close', () => proxy.destroy())
+    }
 
     req.pipe(proxy, { end: true })
     return
