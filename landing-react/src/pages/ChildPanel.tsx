@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import styles from './ChildPanel.module.css'
 
@@ -102,8 +102,8 @@ export default function ChildPanel() {
   const toastCounterRef = useRef(0)
 
   // Auth check
-  const gravityToken = localStorage.getItem('gravity_token')
-  const gravityUser = JSON.parse(localStorage.getItem('gravity_user') || 'null')
+  const gravityToken = useMemo(() => localStorage.getItem('gravity_token'), [])
+  const gravityUser = useMemo(() => { try { return JSON.parse(localStorage.getItem('gravity_user') || 'null') } catch { return null } }, [])
 
   useEffect(() => {
     if (!gravityToken) {
