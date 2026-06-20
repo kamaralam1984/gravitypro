@@ -2084,13 +2084,139 @@
   .footerBottom { flex-direction: column; text-align: center; }
 }
 
-/* ADDITIONAL MOBILE */
+/* ===== COMPREHENSIVE MOBILE RESPONSIVE FIX ===== */
 @media (max-width: 768px) {
   .featuresGrid { grid-template-columns: 1fr !important; }
+  /* Testimonials */
+  .testimonialsSection { padding: 60px 20px; }
+  .testimonialsGrid { grid-template-columns: 1fr; }
+  /* Countries */
+  .countriesSection { padding: 60px 20px; }
+  .countriesGrid { flex-direction: column; align-items: stretch; }
+  .countryCard { width: 100%; }
+  /* For Whom */
+  .forWhomSection { padding: 60px 20px; }
+  .forWhomGrid { grid-template-columns: 1fr; }
+  /* Pain section */
+  .painSection { padding: 60px 20px; }
+  .painGrid { grid-template-columns: 1fr; }
+  /* Screenshots */
+  .screenshotsSection { padding: 60px 20px; }
+  .screenshotsScroll { justify-content: flex-start; flex-wrap: nowrap; }
+  /* Download */
+  .downloadSection { padding: 70px 20px; }
+  .storeBadges { flex-direction: column; align-items: stretch; }
+  .storeBadge { width: 100%; justify-content: center; }
+  /* Footer */
+  .footerSection { padding: 48px 20px 24px; }
+  .footerTop { flex-direction: column; gap: 32px; }
+  .footerBottom { flex-direction: column; text-align: center; }
+  /* SOS section */
+  .sosSpotlightSection { padding: 60px 20px; }
+  .sosStepsGrid { grid-template-columns: 1fr; }
+  /* Pricing */
+  .pricingSection { padding: 60px 20px; }
+  .pricingGrid { grid-template-columns: 1fr; }
+  .pricingCard.popular { transform: scale(1); }
 }
+
 @media (max-width: 480px) {
-  .btnPrimaryHero, .btnSecondaryHero { width: 100%; justify-content: center; }
-  .heroBtns { flex-direction: column; align-items: stretch; }
+  /* ---- HERO SECTION FULL FIX ---- */
+  .hero {
+    overflow-x: hidden;
+    width: 100%;
+  }
+  .heroLeft {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 88px 18px 40px;
+  }
+  /* Badge — allow text to wrap */
+  .heroBadgeLive {
+    max-width: 100%;
+    width: auto;
+    padding: 6px 14px;
+    font-size: 12px;
+    white-space: normal;
+    line-height: 1.4;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  /* Headline */
+  .heroHeadline {
+    font-size: clamp(34px, 8vw, 48px);
+    letter-spacing: -1px;
+    word-break: break-word;
+  }
+  /* Sub text */
+  .heroSub {
+    font-size: 15px;
+    max-width: 100%;
+    line-height: 1.65;
+  }
+  /* CTA Buttons — full width, stack */
+  .heroBtns {
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+  .btnPrimaryHero, .btnSecondaryHero {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+    box-sizing: border-box;
+    padding: 14px 20px;
+  }
+  /* Panel links — full width */
+  .panelLinks {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  .panelLink {
+    width: 100%;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 10px 16px;
+  }
+  /* Family avatars — smaller on mobile */
+  .familyStrip { margin-top: 24px; }
+  .familyAvatarsRow { gap: 6px; }
+  .familyAvatarImgWrapper { width: 44px; height: 44px; }
+  /* Stats */
+  .statsBar { padding: 36px 18px; }
+  .statNumber { font-size: 38px; }
+  .statItem { padding: 8px 12px; }
+  /* Features section */
+  .featuresSection { padding: 60px 18px; }
+  .featuresTitle { font-size: clamp(30px, 7vw, 44px); }
+  .featuresSubtitle { font-size: 15px; }
+  /* How it works */
+  .howSection { padding: 60px 18px; }
+  .howSubtitle { font-size: 15px; }
+  /* Section titles */
+  .sectionTitle { font-size: clamp(28px, 7vw, 40px); }
+  .sectionSubtitle { font-size: 15px; }
+  /* SOS */
+  .sosBtnDemo { width: 120px; height: 120px; }
+  .sosBtnLabel { font-size: 22px; }
+  /* For Whom cards */
+  .forWhomCard { padding: 28px 22px; }
+  /* Download section */
+  .downloadHeadline { font-size: clamp(32px, 8vw, 48px); letter-spacing: -1px; }
+  .downloadSubtext { font-size: 16px; }
+  /* Testimonials */
+  .testimonialCard { padding: 24px 18px; }
+  .testimonialQuote { font-size: 14px; }
+  /* Pricing cards */
+  .pricingCard { padding: 28px 20px; }
+  /* Nav */
+  .nav { padding: 0 16px; }
+  /* Footer */
+  .footerSection { padding: 40px 18px 20px; }
+  .footerBrand { min-width: unset; width: 100%; }
 }
 
 /* MAP SWITCHER */
