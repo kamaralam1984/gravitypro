@@ -1,6 +1,6 @@
 import styles from './AdminPanel.module.css'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 const API = window.location.origin + '/api/v1/admin'
 
@@ -300,7 +300,6 @@ export default function AdminPanel() {
 
   /* ── Global UI state ── */
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard')
-  const [menuOpen, setMenuOpen] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   /* ── Dashboard ── */
@@ -812,51 +811,12 @@ export default function AdminPanel() {
 
         {/* ── HEADER (mobile) ── */}
         <div className={styles.appHeader}>
-          <button className={styles.iconBtn} onClick={() => setMenuOpen(o => !o)} aria-label="Menu">
-            <span className={styles.hamburger}>☰</span>
-          </button>
           <div className={styles.headerTitle}>{sectionTitles[activeTab]}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button className={styles.toggleViewBtn} onClick={toggleViewMode} style={{ padding: '5px 10px', fontSize: 11 }}>🖥 Desktop</button>
-            <button className={styles.iconBtn} aria-label="Notifications">
-              <span style={{ fontSize: 18 }}>🔔</span>
-              {unresolvedCount > 0 && <span className={styles.bellDot} />}
-            </button>
-          </div>
+          <button className={styles.iconBtn} aria-label="Notifications">
+            <span style={{ fontSize: 18 }}>🔔</span>
+            {unresolvedCount > 0 && <span className={styles.bellDot} />}
+          </button>
         </div>
-
-        {/* ── SLIDE MENU ── */}
-        {menuOpen && viewMode !== 'desktop' && (
-          <>
-            <div className={styles.menuOverlay} onClick={() => setMenuOpen(false)} />
-            <div className={styles.slideMenu}>
-              <div className={styles.slideMenuHeader}>
-                <span className={styles.slideMenuLogo}>🛡️ GRAVITY ADMIN</span>
-              </div>
-              {navItems.map(item => (
-                <button
-                  key={item.key}
-                  className={`${styles.slideMenuItem} ${activeTab === item.key ? styles.slideMenuItemActive : ''}`}
-                  onClick={() => { setActiveTab(item.key); setMenuOpen(false) }}
-                >
-                  <span className={styles.slideMenuIcon}>{item.icon}</span>
-                  {sectionTitles[item.key]}
-                </button>
-              ))}
-              <Link to="/" className={styles.slideMenuItem} onClick={() => setMenuOpen(false)}>
-                <span className={styles.slideMenuIcon}>🏠</span>
-                Back to Site
-              </Link>
-              <button
-                className={styles.slideMenuItem}
-                onClick={() => { localStorage.removeItem('admin_token'); navigate('/admin/login') }}
-              >
-                <span className={styles.slideMenuIcon}>🚪</span>
-                Logout
-              </button>
-            </div>
-          </>
-        )}
 
         {/* ── TOAST ── */}
         {toast && (
@@ -872,8 +832,36 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* ── TAB CONTENT ── */}
-        <div className={styles.tabContent}>
+        {/* ── FRAME BODY: mini sidebar + scrollable content ── */}
+        <div className={styles.frameBody}>
+
+          {/* Mini sidebar — always visible in mobile mode */}
+          {viewMode !== 'desktop' && (
+            <nav className={styles.miniSidebar}>
+              <div className={styles.miniLogo}>🛡</div>
+              {navItems.map(item => (
+                <button
+                  key={item.key}
+                  className={`${styles.miniNavBtn} ${activeTab === item.key ? styles.miniNavBtnActive : ''}`}
+                  onClick={() => setActiveTab(item.key)}
+                  title={item.label}
+                >
+                  <span className={styles.miniNavIcon}>{item.icon}</span>
+                  {item.key === 'sos' && unresolvedCount > 0 && <span className={styles.miniBadge} />}
+                </button>
+              ))}
+              <div className={styles.miniSpacer} />
+              <button
+                className={styles.miniSignOutBtn}
+                onClick={() => { localStorage.removeItem('admin_token'); navigate('/admin/login') }}
+                title="Sign Out"
+              >🚪</button>
+            </nav>
+          )}
+
+          <div className={styles.frameMain}>
+            {/* ── TAB CONTENT ── */}
+            <div className={styles.tabContent}>
 
           {/* ════════ DASHBOARD ════════ */}
           <div className={`${styles.tabPane} ${activeTab === 'dashboard' ? styles.active : ''}`}>
@@ -1624,19 +1612,8 @@ export default function AdminPanel() {
             </div>
           </div>
 
-        </div>
-
-        {/* ── BOTTOM NAV ── */}
-        <div className={styles.bottomNav}>
-          {navItems.map(item => (
-            <button key={item.key} className={`${styles.navTab} ${activeTab === item.key ? styles.navTabActive : ''}`} onClick={() => setActiveTab(item.key)}>
-              <span className={styles.navIcon}>
-                {item.icon}
-                {item.key === 'sos' && unresolvedCount > 0 && <span className={styles.navBadge} />}
-              </span>
-              <span className={styles.navLabel}>{item.label}</span>
-            </button>
-          ))}
+            </div>
+          </div>
         </div>
 
       </div>

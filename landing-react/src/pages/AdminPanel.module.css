@@ -210,13 +210,113 @@
 }
 
 /* ── SCROLLABLE CONTENT ── */
+/* ── FRAME BODY: wraps mini sidebar + scrollable content ── */
+.frameBody {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.frameMain {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+}
+.frameMain::-webkit-scrollbar { display: none; }
+
+/* ── MINI LEFT SIDEBAR (mobile mode) ── */
+.miniSidebar {
+  width: 54px;
+  min-width: 54px;
+  background: #060E09;
+  border-right: 1px solid rgba(0, 230, 118, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 12px;
+  gap: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.miniLogo {
+  font-size: 18px;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid rgba(0, 230, 118, 0.08);
+  width: 100%;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.miniNavBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: background 0.18s;
+  padding: 0;
+  font-family: inherit;
+}
+
+.miniNavBtn:hover { background: rgba(0, 230, 118, 0.08); }
+
+.miniNavBtnActive {
+  background: rgba(0, 230, 118, 0.16) !important;
+  box-shadow: 0 0 0 1px rgba(0, 230, 118, 0.28);
+}
+
+.miniNavIcon { font-size: 19px; line-height: 1; }
+
+.miniBadge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  background: #FF5252;
+  border-radius: 50%;
+  border: 2px solid #060E09;
+}
+
+.miniSpacer { flex: 1; }
+
+.miniSignOutBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s;
+  font-family: inherit;
+}
+
+.miniSignOutBtn:hover { background: rgba(255, 82, 82, 0.1); }
+
 .tabContent {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  padding-bottom: 90px;
+  padding-bottom: 24px;
 }
 .tabContent::-webkit-scrollbar { display: none; }
 .tabPane { display: none; }
@@ -1181,9 +1281,18 @@
 .desktopMode .statusBar { display: none; }
 .desktopMode .appHeader { display: none; }
 .desktopMode .bottomNav { display: none; }
-.desktopMode .tabContent {
+.desktopMode .frameBody {
+  flex: 1;
+  overflow: hidden;
+  flex-direction: column;
+}
+.desktopMode .frameMain {
   flex: 1;
   overflow-y: auto;
+}
+.desktopMode .tabContent {
+  flex: 1;
+  overflow-y: visible;
   padding-bottom: 24px;
 }
 .desktopMode .tabPane {
