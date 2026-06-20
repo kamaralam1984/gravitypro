@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import styles from './Login.module.css'
 
@@ -9,72 +9,85 @@ function validatePhone(phone: string): boolean {
   return clean.length >= 8 && /^[+\d]/.test(clean)
 }
 
+function validateEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function validateName(name: string): boolean {
+  return name.trim().length >= 2
+}
+
+type Tab = 'login' | 'register'
+type LoginStep = 1 | 2
+type RegStep = 1 | 2 | 3 | 4
+
+const COUNTRIES = [
+  { code: 'IN', label: 'India' },
+  { code: 'KE', label: 'Kenya' },
+  { code: 'UG', label: 'Uganda' },
+  { code: 'TZ', label: 'Tanzania' },
+  { code: 'GB', label: 'UK' },
+  { code: 'US', label: 'USA' },
+  { code: 'AE', label: 'UAE' },
+  { code: 'PK', label: 'Pakistan' },
+  { code: 'OT', label: 'Other' },
+]
+
+function loadRazorpay(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (window.Razorpay) { resolve(true); return }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
+}
+
 export default function Login() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
 
-  // Login form state
+  const [activeTab, setActiveTab] = useState<Tab>('login')
+
+  // ── LOGIN STATE ──────────────────────────────────────────────
+  const [loginStep, setLoginStep] = useState<LoginStep>(1)
   const [loginPhone, setLoginPhone] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
-  const [loginShowPassword, setLoginShowPassword] = useState(false)
-  const [loginError, setLoginError] = useState('')
-  const [loginPhoneError, setLoginPhoneError] = useState(false)
-  const [loginPasswordError, setLoginPasswordError] = useState(false)
-  const [loginLoading, setLoginLoading] = useState(false)
-
-  // Login OTP step state
-  const [loginStep, setLoginStep] = useState<1 | 2>(1)
   const [loginOtp, setLoginOtp] = useState('')
-  const [loginSendingOtp, setLoginSendingOtp] = useState(false)
-  const [devOtpBanner, setDevOtpBanner] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [loginError, setLoginError] = useState('')
+  const [loginDevBanner, setLoginDevBanner] = useState('')
 
-  // Register form state
-  const [regName, setRegName] = useState('')
+  // ── REGISTER STATE ───────────────────────────────────────────
+  const [regStep, setRegStep] = useState<RegStep>(1)
   const [regPhone, setRegPhone] = useState('')
-  const [regEmail, setRegEmail] = useState('')
-  const [regPassword, setRegPassword] = useState('')
-  const [regCountry, setRegCountry] = useState('IN')
-  const [regShowPassword, setRegShowPassword] = useState(false)
-  const [registerError, setRegisterError] = useState('')
-  const [registerSuccess, setRegisterSuccess] = useState(false)
-  const [regNameError, setRegNameError] = useState(false)
-  const [regPhoneError, setRegPhoneError] = useState(false)
-  const [regEmailError, setRegEmailError] = useState(false)
-  const [regPasswordError, setRegPasswordError] = useState(false)
-  const [registerLoading, setRegisterLoading] = useState(false)
-
-  // Register OTP step state
-  const [regStep, setRegStep] = useState<1 | 2>(1)
   const [regOtp, setRegOtp] = useState('')
-  const [regSendingOtp, setRegSendingOtp] = useState(false)
-  const [regDevOtpBanner, setRegDevOtpBanner] = useState('')
+  const [regPhoneToken, setRegPhoneToken] = useState('')
+  const [regDevBanner, setRegDevBanner] = useState('')
 
-  // Role selector
-  const [accountType, setAccountType] = useState<'parent' | 'child'>('parent')
+  // Step 3 — details
+  const [regName, setRegName] = useState('')
+  const [regEmail, setRegEmail] = useState('')
+  const [regAccountType, setRegAccountType] = useState<'parent' | 'child'>('parent')
+  const [regCountry, setRegCountry] = useState('IN')
 
-  // Google fallback visibility
-  const [showGoogleFallback, setShowGoogleFallback] = useState(false)
-  const [googleLoginLoading, setGoogleLoginLoading] = useState(false)
-  const [googleRegisterLoading, setGoogleRegisterLoading] = useState(false)
+  // Step 3 — touched state for live validation
+  const [nameTouched, setNameTouched] = useState(false)
+  const [emailTouched, setEmailTouched] = useState(false)
 
-  const GOOGLE_CLIENT_ID = localStorage.getItem('gravity_google_client_id') || ''
-  const hasGoogleClientId = GOOGLE_CLIENT_ID.length > 20
+  // Derived real-time validity
+  const nameValid = validateName(regName)
+  const emailValid = validateEmail(regEmail)
+  const detailsAllValid = nameValid && emailValid
 
-  // Load Google GSI script only when client ID is configured
-  useEffect(() => {
-    if (!hasGoogleClientId) return
-    const script = document.createElement('script')
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    document.head.appendChild(script)
-    return () => {
-      if (document.head.contains(script)) document.head.removeChild(script)
-    }
-  }, [hasGoogleClientId])
+  const [regLoading, setRegLoading] = useState(false)
+  const [regError, setRegError] = useState('')
 
-  // Check if already logged in
+  // OTP input ref for auto-focus
+  const loginOtpRef = useRef<HTMLInputElement>(null)
+  const regOtpRef = useRef<HTMLInputElement>(null)
+
+  // ── REDIRECT IF ALREADY LOGGED IN ────────────────────────────
   useEffect(() => {
     const token = localStorage.getItem('gravity_token')
     if (token) {
@@ -85,119 +98,68 @@ export default function Login() {
           const savedRedirect = localStorage.getItem('gravity_redirect')
           localStorage.removeItem('gravity_redirect')
           const dest = urlRedirect || savedRedirect
-          if (dest) {
-            navigate(dest)
-          } else {
-            const storedUser = JSON.parse(localStorage.getItem('gravity_user') || 'null')
-            navigate(storedUser?.account_type === 'child' ? '/child/panel' : '/parent/panel')
-          }
+          if (dest) { navigate(dest); return }
+          const storedUser = JSON.parse(localStorage.getItem('gravity_user') || 'null')
+          navigate(storedUser?.account_type === 'child' ? '/child/panel' : '/parent/panel')
         }
       } catch {
         localStorage.removeItem('gravity_token')
         localStorage.removeItem('gravity_user')
       }
     }
-  }, [searchParams])
-
-  // Auto-detect tab from URL hash
-  useEffect(() => {
-    if (window.location.hash === '#register') {
-      setActiveTab('register')
-    }
   }, [])
 
-  // Show fallback Google buttons if GSI doesn't render within 2s
+  // ── AUTO-DETECT HASH ─────────────────────────────────────────
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const gButtons = document.querySelectorAll('.g_id_signin')
-      gButtons.forEach((btn) => {
-        const rendered = btn.querySelector('iframe')
-        if (!rendered) {
-          setShowGoogleFallback(true)
-        }
-      })
-    }, 2000)
-    return () => clearTimeout(timer)
+    if (window.location.hash === '#register') setActiveTab('register')
   }, [])
 
-  // Expose handleGoogleCredential to window for GSI callback
+  // ── FOCUS OTP INPUTS WHEN STEP CHANGES ───────────────────────
   useEffect(() => {
-    const win = window as Window & typeof globalThis & {
-      handleGoogleCredential?: (r: { credential: string }) => void
-    }
-    win.handleGoogleCredential = async (response: { credential: string }) => {
-      try {
-        const res = await fetch(API + '/auth/google', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id_token: response.credential, account_type: accountType }),
-        })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || 'Google login failed')
-        onLoginSuccess(data)
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Google login failed'
-        setLoginError(msg)
-        setRegisterError(msg)
-      }
-    }
-    return () => {
-      delete win.handleGoogleCredential
-    }
-  }, [])
+    if (loginStep === 2) setTimeout(() => loginOtpRef.current?.focus(), 80)
+  }, [loginStep])
 
-  function onLoginSuccess(data: { token: string; user: Record<string, string> }) {
+  useEffect(() => {
+    if (regStep === 2) setTimeout(() => regOtpRef.current?.focus(), 80)
+  }, [regStep])
+
+  // ── HELPERS ──────────────────────────────────────────────────
+  function onLoginSuccess(data: { token: string; user: Record<string, unknown> }) {
     localStorage.setItem('gravity_token', data.token)
     localStorage.setItem('gravity_user', JSON.stringify(data.user))
     const urlRedirect = searchParams.get('redirect')
     const savedRedirect = localStorage.getItem('gravity_redirect')
     localStorage.removeItem('gravity_redirect')
     const dest = urlRedirect || savedRedirect
-    if (dest) {
-      navigate(dest)
-    } else {
-      const type = data.user?.account_type || accountType
-      navigate(type === 'child' ? '/child/panel' : '/parent/panel')
-    }
+    if (dest) { navigate(dest); return }
+    const type = (data.user?.account_type as string) || 'parent'
+    navigate(type === 'child' ? '/child/panel' : '/parent/panel')
   }
 
-  function switchTab(tab: 'login' | 'register') {
+  function switchTab(tab: Tab) {
     setActiveTab(tab)
     setLoginError('')
-    setRegisterError('')
-    setLoginPhoneError(false)
-    setLoginPasswordError(false)
-    setRegNameError(false)
-    setRegPhoneError(false)
-    setRegEmailError(false)
-    setRegPasswordError(false)
-    // Reset login OTP step
+    setRegError('')
     setLoginStep(1)
     setLoginOtp('')
-    setDevOtpBanner('')
-    // Reset register OTP step
+    setLoginDevBanner('')
     setRegStep(1)
     setRegOtp('')
-    setRegDevOtpBanner('')
+    setRegDevBanner('')
+    setRegPhoneToken('')
+    setNameTouched(false)
+    setEmailTouched(false)
   }
 
+  // ── LOGIN ACTIONS ────────────────────────────────────────────
   async function doLoginSendOtp() {
     setLoginError('')
-    setLoginPhoneError(false)
-
     const phone = loginPhone.trim()
-    if (!phone) {
-      setLoginPhoneError(true)
-      setLoginError('Please enter your phone number.')
-      return
-    }
-    if (!validatePhone(phone)) {
-      setLoginPhoneError(true)
+    if (!phone || !validatePhone(phone)) {
       setLoginError('Please enter a valid phone number.')
       return
     }
-
-    setLoginSendingOtp(true)
+    setLoginLoading(true)
     try {
       const res = await fetch(API + '/auth/send-otp', {
         method: 'POST',
@@ -207,95 +169,52 @@ export default function Login() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to send OTP')
       if (data.dev_otp) {
-        setLoginOtp(String(data.dev_otp))
-        setDevOtpBanner(String(data.dev_otp))
+        const otp = String(data.dev_otp)
+        setLoginOtp(otp)
+        setLoginDevBanner(otp)
       }
       setLoginStep(2)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to send OTP'
-      setLoginError(msg)
-      setLoginPhoneError(true)
-    } finally {
-      setLoginSendingOtp(false)
-    }
-  }
-
-  async function doLoginSubmit() {
-    setLoginError('')
-    setLoginPasswordError(false)
-
-    const phone = loginPhone.trim()
-    const password = loginPassword
-    const otp = loginOtp.trim()
-
-    if (!otp || otp.length < 6) {
-      setLoginError('Please enter the 6-digit OTP.')
-      return
-    }
-    if (!password) {
-      setLoginPasswordError(true)
-      setLoginError('Please enter your password.')
-      return
-    }
-
-    setLoginLoading(true)
-    try {
-      const res = await fetch(API + '/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, password, otp }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Login failed')
-      onLoginSuccess(data)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Login failed'
-      setLoginError(msg)
-      setLoginPasswordError(true)
+      setLoginError(err instanceof Error ? err.message : 'Failed to send OTP')
     } finally {
       setLoginLoading(false)
     }
   }
 
+  async function doLoginVerify() {
+    setLoginError('')
+    const phone = loginPhone.trim()
+    const otp = loginOtp.trim()
+    if (!otp || otp.length < 6) {
+      setLoginError('Please enter the 6-digit OTP.')
+      return
+    }
+    setLoginLoading(true)
+    try {
+      const res = await fetch(API + '/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Login failed')
+      onLoginSuccess(data)
+    } catch (err: unknown) {
+      setLoginError(err instanceof Error ? err.message : 'Login failed')
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  // ── REGISTER ACTIONS ─────────────────────────────────────────
   async function doRegSendOtp() {
-    setRegisterError('')
-    setRegNameError(false)
-    setRegPhoneError(false)
-    setRegEmailError(false)
-    setRegPasswordError(false)
-
-    const name = regName.trim()
+    setRegError('')
     const phone = regPhone.trim()
-    const email = regEmail.trim()
-    const password = regPassword
-
-    if (!name || name.length < 2) {
-      setRegNameError(true)
-      setRegisterError('Please enter your full name (at least 2 characters).')
+    if (!phone || !validatePhone(phone)) {
+      setRegError('Please enter a valid phone number.')
       return
     }
-    if (!phone) {
-      setRegPhoneError(true)
-      setRegisterError('Please enter your phone number.')
-      return
-    }
-    if (!validatePhone(phone)) {
-      setRegPhoneError(true)
-      setRegisterError('Please enter a valid phone number.')
-      return
-    }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setRegEmailError(true)
-      setRegisterError('Please enter a valid email address.')
-      return
-    }
-    if (!password || password.length < 8) {
-      setRegPasswordError(true)
-      setRegisterError('Password must be at least 8 characters.')
-      return
-    }
-
-    setRegSendingOtp(true)
+    setRegLoading(true)
     try {
       const res = await fetch(API + '/auth/send-otp', {
         method: 'POST',
@@ -305,103 +224,252 @@ export default function Login() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to send OTP')
       if (data.dev_otp) {
-        setRegOtp(String(data.dev_otp))
-        setRegDevOtpBanner(String(data.dev_otp))
+        const otp = String(data.dev_otp)
+        setRegOtp(otp)
+        setRegDevBanner(otp)
       }
       setRegStep(2)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to send OTP'
-      setRegisterError(msg)
-      setRegPhoneError(true)
+      setRegError(err instanceof Error ? err.message : 'Failed to send OTP')
     } finally {
-      setRegSendingOtp(false)
+      setRegLoading(false)
     }
   }
 
-  async function doRegisterSubmit() {
-    setRegisterError('')
-
-    const name = regName.trim()
+  async function doRegVerifyPhone() {
+    setRegError('')
     const phone = regPhone.trim()
-    const email = regEmail.trim()
-    const password = regPassword
-    const country_code = regCountry
     const otp = regOtp.trim()
-
     if (!otp || otp.length < 6) {
-      setRegisterError('Please enter the 6-digit OTP.')
+      setRegError('Please enter the 6-digit OTP.')
       return
     }
-
-    setRegisterLoading(true)
+    setRegLoading(true)
     try {
-      const body: Record<string, string> = { name, phone, password, country_code, account_type: accountType, otp }
-      if (email) body.email = email
-      const res = await fetch(API + '/auth/register', {
+      const res = await fetch(API + '/auth/verify-phone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ phone, otp }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'OTP verification failed')
+      if (data.already_registered) {
+        // Switch to login tab
+        switchTab('login')
+        setLoginPhone(phone)
+        return
+      }
+      setRegPhoneToken(data.phone_token)
+      setRegStep(3)
+    } catch (err: unknown) {
+      setRegError(err instanceof Error ? err.message : 'OTP verification failed')
+    } finally {
+      setRegLoading(false)
+    }
+  }
+
+  function doGoToPlan() {
+    if (!detailsAllValid) return
+    setRegStep(4)
+  }
+
+  async function doRegisterFree() {
+    setRegError('')
+    setRegLoading(true)
+    try {
+      const res = await fetch(API + '/auth/register-free', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone_token: regPhoneToken,
+          name: regName.trim(),
+          email: regEmail.trim(),
+          account_type: regAccountType,
+          country_code: regCountry,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Registration failed')
-
-      setRegisterSuccess(true)
-      setTimeout(() => {
-        onLoginSuccess(data)
-      }, 1000)
+      onLoginSuccess(data)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Registration failed'
-      setRegisterError(msg)
+      setRegError(err instanceof Error ? err.message : 'Registration failed')
+      setRegStep(3)
     } finally {
-      setRegisterLoading(false)
+      setRegLoading(false)
     }
   }
 
-  function triggerGoogleSignIn(setLoading: (v: boolean) => void) {
-    setLoading(true)
-    const win = window as Window & typeof globalThis & {
-      google?: { accounts?: { id?: { prompt?: () => void } } }
+  async function doRegisterPaid(plan: 'family' | 'premium') {
+    setRegError('')
+    setRegLoading(true)
+    try {
+      const ok = await loadRazorpay()
+      if (!ok) throw new Error('Failed to load payment gateway. Please try again.')
+
+      const orderRes = await fetch(API + '/payments/create-order-anon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone_token: regPhoneToken,
+          plan,
+          gateway: 'razorpay',
+          currency: 'INR',
+          name: regName.trim(),
+          email: regEmail.trim(),
+        }),
+      })
+      const orderData = await orderRes.json()
+      if (!orderRes.ok) throw new Error(orderData.error || 'Failed to create payment order')
+
+      const { orderId, clientData } = orderData
+
+      await new Promise<void>((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key: clientData?.key,
+          order_id: orderId,
+          name: 'Gravity Family Safety',
+          description: plan === 'family' ? 'Family Plan — ₹299/mo' : 'Premium Plan — ₹499/mo',
+          image: '/favicon.ico',
+          prefill: {
+            name: regName.trim(),
+            email: regEmail.trim(),
+          },
+          theme: { color: '#00E676' },
+          handler: async (response: {
+            razorpay_order_id: string
+            razorpay_payment_id: string
+            razorpay_signature: string
+          }) => {
+            try {
+              const regRes = await fetch(API + '/auth/register-with-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  phone_token: regPhoneToken,
+                  name: regName.trim(),
+                  email: regEmail.trim(),
+                  account_type: regAccountType,
+                  country_code: regCountry,
+                  plan,
+                  gateway: 'razorpay',
+                  gatewayOrderId: response.razorpay_order_id,
+                  gatewayPaymentId: response.razorpay_payment_id,
+                  signature: response.razorpay_signature,
+                }),
+              })
+              const regData = await regRes.json()
+              if (!regRes.ok) throw new Error(regData.error || 'Registration failed after payment')
+              onLoginSuccess(regData)
+              resolve()
+            } catch (e) {
+              reject(e)
+            }
+          },
+          modal: {
+            ondismiss: () => reject(new Error('Payment cancelled')),
+          },
+        })
+        rzp.open()
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Payment failed'
+      if (msg !== 'Payment cancelled') setRegError(msg)
+    } finally {
+      setRegLoading(false)
     }
-    if (win.google?.accounts?.id?.prompt) {
-      win.google.accounts.id.prompt()
-    } else {
-      setLoading(false)
-      setLoginError('Google Sign-In is not available. Please use phone/password.')
-    }
+  }
+
+  // ── RENDER HELPERS ───────────────────────────────────────────
+  function DevBanner({ otp }: { otp: string }) {
+    return (
+      <div className={styles.devBanner}>
+        <span>🔧 Dev mode — OTP:</span>
+        <span className={styles.devOtpCode}>{otp}</span>
+      </div>
+    )
+  }
+
+  function OtpInput({
+    value,
+    onChange,
+    inputRef,
+  }: {
+    value: string
+    onChange: (v: string) => void
+    inputRef?: RefObject<HTMLInputElement | null>
+  }) {
+    return (
+      <div className={styles.otpBox}>
+        <div className={styles.otpLabel}>ENTER 6-DIGIT OTP</div>
+        <input
+          ref={inputRef}
+          type="tel"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={6}
+          className={styles.otpInput}
+          value={value}
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          placeholder="••••••"
+          autoComplete="one-time-code"
+        />
+        <div className={styles.otpDots}>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div
+              key={i}
+              className={`${styles.otpDot} ${value.length > i ? styles.otpDotFilled : ''}`}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  function ValidationIcon({ valid, touched }: { valid: boolean; touched: boolean }) {
+    if (!touched) return null
+    return valid ? (
+      <span className={styles.validIcon}>✓</span>
+    ) : (
+      <span className={styles.invalidIcon}>✗</span>
+    )
+  }
+
+  // ── REGISTER PROGRESS DOTS ────────────────────────────────────
+  function RegDots() {
+    // steps 2, 3, 4 show progress; step 1 = phone entry (no dots yet)
+    if (regStep === 1) return null
+    const dots = [2, 3, 4] as RegStep[]
+    return (
+      <div className={styles.progressDots}>
+        {dots.map((s) => (
+          <div
+            key={s}
+            className={`${styles.progressDot} ${regStep === s ? styles.progressDotActive : ''} ${regStep > s ? styles.progressDotDone : ''}`}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  // ── PLAN STEP LABELS ─────────────────────────────────────────
+  const regStepLabel: Record<RegStep, string> = {
+    1: 'Phone Number',
+    2: 'Verify Phone',
+    3: 'Your Details',
+    4: 'Choose Plan',
   }
 
   return (
-    <div
-      style={{
-        fontFamily: "'Plus Jakarta Sans', sans-serif",
-        background: 'var(--bg)',
-        color: 'var(--text)',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflowX: 'hidden',
-        WebkitFontSmoothing: 'antialiased',
-        padding: '24px 16px 48px',
-        backgroundImage: [
-          'radial-gradient(ellipse 900px 600px at 50% -100px, rgba(0,230,118,0.07) 0%, transparent 70%)',
-          'radial-gradient(ellipse 600px 600px at 80% 80%, rgba(0,200,83,0.04) 0%, transparent 60%)',
-          'repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,230,118,0.022) 39px, rgba(0,230,118,0.022) 40px)',
-          'repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,230,118,0.022) 39px, rgba(0,230,118,0.022) 40px)',
-        ].join(', '),
-      }}
-    >
+    <div className={styles.page}>
       <div className={styles.pageWrap}>
 
         {/* LOGO */}
         <Link to="/" className={styles.logoArea}>
           <div className={styles.logoMark}>
-            <svg width="52" height="56" viewBox="0 0 52 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg width="36" height="40" viewBox="0 0 52 56" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M26 2C15.507 2 7 10.507 7 21C7 35.5 26 54 26 54C26 54 45 35.5 45 21C45 10.507 36.493 2 26 2Z" fill="url(#pin_grad)" stroke="rgba(0,230,118,0.3)" strokeWidth="0.5"/>
               <circle cx="26" cy="21" r="9" fill="#020C05" opacity="0.8"/>
               <circle cx="26" cy="21" r="4.5" fill="url(#dot_grad)"/>
-              <circle cx="26" cy="21" r="13" stroke="rgba(0,230,118,0.2)" strokeWidth="1.5" fill="none"/>
               <defs>
                 <linearGradient id="pin_grad" x1="26" y1="2" x2="26" y2="54" gradientUnits="userSpaceOnUse">
                   <stop offset="0%" stopColor="#00E676"/>
@@ -414,21 +482,8 @@ export default function Login() {
               </defs>
             </svg>
           </div>
-          <div>
-            <div className={styles.logoText}>Gravity</div>
-            <div className={styles.logoSub}>Family Safety</div>
-          </div>
+          <span className={styles.logoText}>📍 GRAVITY</span>
         </Link>
-
-        {/* Google one-tap init — rendered once */}
-        {hasGoogleClientId && (
-          <div
-            id="g_id_onload"
-            data-client_id={GOOGLE_CLIENT_ID}
-            data-callback="handleGoogleCredential"
-            data-auto_prompt="false"
-          ></div>
-        )}
 
         {/* AUTH CARD */}
         <div className={styles.authCard}>
@@ -436,102 +491,42 @@ export default function Login() {
           {/* TAB BAR */}
           <div className={styles.tabBar}>
             <button
-              className={`${styles.tabBtn}${activeTab === 'login' ? ' ' + styles.active : ''}`}
+              className={`${styles.tabBtn} ${activeTab === 'login' ? styles.tabBtnActive : ''}`}
               onClick={() => switchTab('login')}
             >
               Sign In
             </button>
             <button
-              className={`${styles.tabBtn}${activeTab === 'register' ? ' ' + styles.active : ''}`}
+              className={`${styles.tabBtn} ${activeTab === 'register' ? styles.tabBtnActive : ''}`}
               onClick={() => switchTab('register')}
             >
               Create Account
             </button>
-            <div className={`${styles.tabIndicator}${activeTab === 'register' ? ' ' + styles.register : ''}`}></div>
+            <div className={`${styles.tabIndicator} ${activeTab === 'register' ? styles.tabIndicatorRight : ''}`} />
           </div>
 
-          {/* ===== LOGIN PANEL ===== */}
-          <div className={`${styles.formPanel}${activeTab === 'login' ? ' ' + styles.active : ''}`}>
-          <form onSubmit={(e) => { e.preventDefault(); loginStep === 1 ? doLoginSendOtp() : doLoginSubmit() }} autoComplete="on">
+          {/* ═══════════════════════════════════════════════════
+              LOGIN PANEL
+          ═══════════════════════════════════════════════════ */}
+          <div className={`${styles.panel} ${activeTab === 'login' ? styles.panelActive : ''}`}>
 
-            <div className={styles.panelHeading}>
-              <h2>Welcome back</h2>
-              <p>Sign in to keep your family connected</p>
+            <div className={styles.panelHead}>
+              <h2 className={styles.panelTitle}>Welcome back</h2>
+              <p className={styles.panelSub}>Sign in to keep your family connected</p>
             </div>
 
-            {/* Google Sign-In — only shown when client ID is configured */}
-            {hasGoogleClientId && loginStep === 1 && (
-              <div className={styles.googleBtnWrap}>
-                <div
-                  className="g_id_signin"
-                  data-type="standard"
-                  data-theme="filled_black"
-                  data-text="signin_with"
-                  data-shape="rectangular"
-                  data-logo_alignment="left"
-                  data-width="384"
-                ></div>
-                {showGoogleFallback && (
-                  <button
-                    className={`${styles.googleBtn}${googleLoginLoading ? ' ' + styles.loading : ''}`}
-                    onClick={() => triggerGoogleSignIn(setGoogleLoginLoading)}
-                    type="button"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                    Continue with Google
-                  </button>
-                )}
+            {loginError && (
+              <div className={styles.errorBanner}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {loginError}
               </div>
             )}
 
-            {/* Divider — only shown when Google is available */}
-            {hasGoogleClientId && loginStep === 1 && (
-              <div className={styles.divider}>
-                <div className={styles.dividerLine}></div>
-                <span className={styles.dividerText}>OR</span>
-                <div className={styles.dividerLine}></div>
-              </div>
-            )}
-
-            {/* Role Selector — step 1 only */}
+            {/* STEP 1 — Phone */}
             {loginStep === 1 && (
-              <div className={styles.roleSelector}>
-                <button
-                  type="button"
-                  className={`${styles.roleBtn} ${accountType === 'parent' ? styles.roleActive : ''}`}
-                  onClick={() => setAccountType('parent')}
-                >
-                  <span className={styles.roleIcon}>👨‍👩‍👧</span>
-                  <span>I'm a Parent</span>
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.roleBtn} ${accountType === 'child' ? styles.roleActive : ''}`}
-                  onClick={() => setAccountType('child')}
-                >
-                  <span className={styles.roleIcon}>👦</span>
-                  <span>I'm a Child</span>
-                </button>
-              </div>
-            )}
-
-            {/* Error message */}
-            <div className={`${styles.errorMsg}${loginError ? ' ' + styles.visible : ''}`}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              <span>{loginError}</span>
-            </div>
-
-            {/* ---- STEP 1: Phone + Send OTP ---- */}
-            {loginStep === 1 && (
-              <>
-                {/* Phone field */}
+              <form onSubmit={(e) => { e.preventDefault(); doLoginSendOtp() }}>
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel} htmlFor="login-phone">Phone Number</label>
                   <div className={styles.fieldWrap}>
@@ -542,287 +537,107 @@ export default function Login() {
                     </span>
                     <input
                       type="tel"
-                      className={`${styles.fieldInput}${loginPhoneError ? ' ' + styles.error : ''}`}
                       id="login-phone"
+                      className={styles.fieldInput}
                       placeholder="+91 98765 43210"
                       autoComplete="tel"
                       inputMode="tel"
                       value={loginPhone}
-                      onChange={(e) => { setLoginPhone(e.target.value); setLoginError(''); setLoginPhoneError(false) }}
+                      onChange={(e) => { setLoginPhone(e.target.value); setLoginError('') }}
                     />
                   </div>
                 </div>
-
-                {/* Send OTP button */}
                 <button
-                  className={`${styles.btnPrimary}${loginSendingOtp ? ' ' + styles.loading : ''}`}
-                  type="submit"
-                  disabled={loginSendingOtp}
-                >
-                  <div className={styles.spinner}></div>
-                  <span className={styles.btnText}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }}>
-                      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-                    </svg>
-                    Send OTP
-                  </span>
-                </button>
-              </>
-            )}
-
-            {/* ---- STEP 2: OTP + Password + Sign In ---- */}
-            {loginStep === 2 && (
-              <>
-                {/* Dev OTP banner */}
-                {devOtpBanner && (
-                  <div style={{
-                    background: 'rgba(255,183,0,0.1)',
-                    border: '1px solid rgba(255,183,0,0.3)',
-                    borderRadius: 10,
-                    padding: '10px 14px',
-                    marginBottom: 14,
-                    fontSize: 12,
-                    color: '#FFB300',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8
-                  }}>
-                    🔧 Dev mode — OTP: <span style={{ fontFamily: 'monospace', fontSize: 16, color: '#FFD54F' }}>{devOtpBanner}</span>
-                  </div>
-                )}
-
-                {/* OTP input */}
-                <div style={{
-                  background: '#111E16',
-                  border: '2px solid rgba(0,230,118,0.3)',
-                  borderRadius: 14,
-                  padding: '16px',
-                  textAlign: 'center',
-                  marginBottom: 16
-                }}>
-                  <div style={{ fontSize: 12, color: '#5E8B6E', marginBottom: 8, letterSpacing: 1 }}>
-                    ENTER 6-DIGIT OTP
-                  </div>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    value={loginOtp}
-                    onChange={e => setLoginOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      outline: 'none',
-                      color: '#00E676',
-                      fontSize: 32,
-                      fontWeight: 900,
-                      letterSpacing: 8,
-                      textAlign: 'center',
-                      width: '100%',
-                      fontFamily: 'monospace'
-                    }}
-                    placeholder="──────"
-                    autoFocus
-                  />
-                </div>
-
-                {/* Password field */}
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel} htmlFor="login-password">Password</label>
-                  <div className={styles.fieldWrap}>
-                    <span className={styles.fieldIcon}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                        <path d="M7 11V7a5 5 0 0110 0v4"/>
-                      </svg>
-                    </span>
-                    <input
-                      type={loginShowPassword ? 'text' : 'password'}
-                      className={`${styles.fieldInput} ${styles.hasSuffix}${loginPasswordError ? ' ' + styles.error : ''}`}
-                      id="login-password"
-                      placeholder="Enter your password"
-                      autoComplete="current-password"
-                      value={loginPassword}
-                      onChange={(e) => { setLoginPassword(e.target.value); setLoginError(''); setLoginPasswordError(false) }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') doLoginSubmit() }}
-                    />
-                    <span className={styles.fieldSuffix}>
-                      <button
-                        className={styles.eyeBtn}
-                        onClick={() => setLoginShowPassword(!loginShowPassword)}
-                        type="button"
-                        aria-label="Toggle password visibility"
-                      >
-                        {!loginShowPassword ? (
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                          </svg>
-                        ) : (
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                            <line x1="1" y1="1" x2="23" y2="23"/>
-                          </svg>
-                        )}
-                      </button>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Sign In button */}
-                <button
-                  className={`${styles.btnPrimary}${loginLoading ? ' ' + styles.loading : ''}`}
+                  className={`${styles.btnPrimary} ${loginLoading ? styles.btnLoading : ''}`}
                   type="submit"
                   disabled={loginLoading}
                 >
-                  <div className={styles.spinner}></div>
-                  <span className={styles.btnText}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }}>
-                      <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
-                    </svg>
-                    Sign In
-                  </span>
+                  {loginLoading ? <span className={styles.spinner} /> : (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                      </svg>
+                      Send OTP
+                    </>
+                  )}
                 </button>
+              </form>
+            )}
 
-                {/* Resend OTP */}
-                <div style={{ textAlign: 'center', marginTop: 12, fontSize: 13, color: '#5E8B6E' }}>
-                  Didn&apos;t receive the OTP?{' '}
-                  <a
-                    href="#"
-                    style={{ color: '#00E676', textDecoration: 'none', fontWeight: 600 }}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setLoginStep(1)
-                      setLoginOtp('')
-                      setDevOtpBanner('')
-                      setLoginError('')
-                    }}
+            {/* STEP 2 — OTP + Sign In */}
+            {loginStep === 2 && (
+              <form onSubmit={(e) => { e.preventDefault(); doLoginVerify() }}>
+                {loginDevBanner && <DevBanner otp={loginDevBanner} />}
+                <p className={styles.stepHint}>
+                  OTP sent to <strong>{loginPhone}</strong>
+                </p>
+                <OtpInput
+                  value={loginOtp}
+                  onChange={(v) => { setLoginOtp(v); setLoginError('') }}
+                  inputRef={loginOtpRef}
+                />
+                <button
+                  className={`${styles.btnPrimary} ${loginLoading ? styles.btnLoading : ''}`}
+                  type="submit"
+                  disabled={loginLoading || loginOtp.length < 6}
+                >
+                  {loginLoading ? <span className={styles.spinner} /> : (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+                      </svg>
+                      Verify &amp; Sign In
+                    </>
+                  )}
+                </button>
+                <div className={styles.resendRow}>
+                  Didn&apos;t receive it?{' '}
+                  <button
+                    type="button"
+                    className={styles.resendBtn}
+                    onClick={() => { setLoginStep(1); setLoginOtp(''); setLoginDevBanner(''); setLoginError('') }}
                   >
                     Resend OTP
-                  </a>
+                  </button>
                 </div>
-              </>
+              </form>
             )}
 
             <div className={styles.formFooter}>
               Don&apos;t have an account?{' '}
-              <a href="#" onClick={(e) => { e.preventDefault(); switchTab('register') }}>Create one free</a>
+              <button type="button" className={styles.switchTabBtn} onClick={() => switchTab('register')}>
+                Create one free
+              </button>
             </div>
-
-          </form>
           </div>
           {/* /LOGIN PANEL */}
 
-          {/* ===== REGISTER PANEL ===== */}
-          <div className={`${styles.formPanel}${activeTab === 'register' ? ' ' + styles.active : ''}`}>
-          <form onSubmit={(e) => { e.preventDefault(); regStep === 1 ? doRegSendOtp() : doRegisterSubmit() }} autoComplete="on">
+          {/* ═══════════════════════════════════════════════════
+              REGISTER PANEL
+          ═══════════════════════════════════════════════════ */}
+          <div className={`${styles.panel} ${activeTab === 'register' ? styles.panelActive : ''}`}>
 
-            <div className={styles.panelHeading}>
-              <h2>Create your account</h2>
-              <p>Join thousands of families staying connected</p>
+            <div className={styles.panelHead}>
+              <h2 className={styles.panelTitle}>Create your account</h2>
+              <p className={styles.panelSub}>
+                {activeTab === 'register' ? regStepLabel[regStep] : ''}
+              </p>
             </div>
 
-            {/* Google Sign-Up — only when client ID configured, step 1 only */}
-            {hasGoogleClientId && regStep === 1 && (
-              <div className={styles.googleBtnWrap}>
-                <div
-                  className="g_id_signin"
-                  data-type="standard"
-                  data-theme="filled_black"
-                  data-text="signup_with"
-                  data-shape="rectangular"
-                  data-logo_alignment="left"
-                  data-width="384"
-                ></div>
-                {showGoogleFallback && (
-                  <button
-                    className={`${styles.googleBtn}${googleRegisterLoading ? ' ' + styles.loading : ''}`}
-                    onClick={() => triggerGoogleSignIn(setGoogleRegisterLoading)}
-                    type="button"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                    Continue with Google
-                  </button>
-                )}
-              </div>
-            )}
-            {hasGoogleClientId && regStep === 1 && (
-              <div className={styles.divider}>
-                <div className={styles.dividerLine}></div>
-                <span className={styles.dividerText}>OR</span>
-                <div className={styles.dividerLine}></div>
+            <RegDots />
+
+            {regError && (
+              <div className={styles.errorBanner}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {regError}
               </div>
             )}
 
-            {/* Error message */}
-            <div className={`${styles.errorMsg}${registerError ? ' ' + styles.visible : ''}`}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              <span>{registerError}</span>
-            </div>
-
-            {/* Success message */}
-            <div className={`${styles.successMsg}${registerSuccess ? ' ' + styles.visible : ''}`}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              <span>Account created! Signing you in...</span>
-            </div>
-
-            {/* ---- REGISTER STEP 1: Full form ---- */}
+            {/* REG STEP 1 — Phone */}
             {regStep === 1 && (
-              <>
-                {/* Role Selector */}
-                <div className={styles.roleSelector}>
-                  <button
-                    type="button"
-                    className={`${styles.roleBtn} ${accountType === 'parent' ? styles.roleActive : ''}`}
-                    onClick={() => setAccountType('parent')}
-                  >
-                    <span className={styles.roleIcon}>👨‍👩‍👧</span>
-                    <span>I'm a Parent</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.roleBtn} ${accountType === 'child' ? styles.roleActive : ''}`}
-                    onClick={() => setAccountType('child')}
-                  >
-                    <span className={styles.roleIcon}>👦</span>
-                    <span>I'm a Child</span>
-                  </button>
-                </div>
-
-                {/* Full Name */}
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel} htmlFor="reg-name">Full Name</label>
-                  <div className={styles.fieldWrap}>
-                    <span className={styles.fieldIcon}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                        <circle cx="12" cy="7" r="4"/>
-                      </svg>
-                    </span>
-                    <input
-                      type="text"
-                      className={`${styles.fieldInput}${regNameError ? ' ' + styles.error : ''}`}
-                      id="reg-name"
-                      placeholder="Priya Sharma"
-                      autoComplete="name"
-                      value={regName}
-                      onChange={(e) => { setRegName(e.target.value); setRegisterError(''); setRegNameError(false) }}
-                    />
-                  </div>
-                </div>
-
-                {/* Phone */}
+              <form onSubmit={(e) => { e.preventDefault(); doRegSendOtp() }}>
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel} htmlFor="reg-phone">Phone Number</label>
                   <div className={styles.fieldWrap}>
@@ -833,22 +648,110 @@ export default function Login() {
                     </span>
                     <input
                       type="tel"
-                      className={`${styles.fieldInput}${regPhoneError ? ' ' + styles.error : ''}`}
                       id="reg-phone"
+                      className={styles.fieldInput}
                       placeholder="+91 98765 43210"
                       autoComplete="tel"
                       inputMode="tel"
                       value={regPhone}
-                      onChange={(e) => { setRegPhone(e.target.value); setRegisterError(''); setRegPhoneError(false) }}
+                      onChange={(e) => { setRegPhone(e.target.value); setRegError('') }}
                     />
                   </div>
                 </div>
+                <button
+                  className={`${styles.btnPrimary} ${regLoading ? styles.btnLoading : ''}`}
+                  type="submit"
+                  disabled={regLoading}
+                >
+                  {regLoading ? <span className={styles.spinner} /> : (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                      </svg>
+                      Send OTP
+                    </>
+                  )}
+                </button>
+                <div className={styles.termsText}>
+                  By continuing you agree to our{' '}
+                  <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> and{' '}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+                </div>
+              </form>
+            )}
 
-                {/* Email (optional) */}
+            {/* REG STEP 2 — OTP Verify */}
+            {regStep === 2 && (
+              <form onSubmit={(e) => { e.preventDefault(); doRegVerifyPhone() }}>
+                {regDevBanner && <DevBanner otp={regDevBanner} />}
+                <p className={styles.stepHint}>
+                  OTP sent to <strong>{regPhone}</strong>
+                </p>
+                <OtpInput
+                  value={regOtp}
+                  onChange={(v) => { setRegOtp(v); setRegError('') }}
+                  inputRef={regOtpRef}
+                />
+                <button
+                  className={`${styles.btnPrimary} ${regLoading ? styles.btnLoading : ''}`}
+                  type="submit"
+                  disabled={regLoading || regOtp.length < 6}
+                >
+                  {regLoading ? <span className={styles.spinner} /> : (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      Verify Phone
+                    </>
+                  )}
+                </button>
+                <div className={styles.resendRow}>
+                  Didn&apos;t receive it?{' '}
+                  <button
+                    type="button"
+                    className={styles.resendBtn}
+                    onClick={() => { setRegStep(1); setRegOtp(''); setRegDevBanner(''); setRegError('') }}
+                  >
+                    Resend OTP
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* REG STEP 3 — Details */}
+            {regStep === 3 && (
+              <form onSubmit={(e) => { e.preventDefault(); doGoToPlan() }}>
+
+                {/* Full Name */}
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel} htmlFor="reg-email">
-                    Email Address <span className={styles.optionalBadge}>Optional</span>
-                  </label>
+                  <label className={styles.fieldLabel} htmlFor="reg-name">Full Name</label>
+                  <div className={styles.fieldWrap}>
+                    <span className={styles.fieldIcon}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                      </svg>
+                    </span>
+                    <input
+                      type="text"
+                      id="reg-name"
+                      className={`${styles.fieldInput} ${nameTouched && !nameValid ? styles.fieldInputError : ''} ${nameTouched && nameValid ? styles.fieldInputValid : ''}`}
+                      placeholder="Priya Sharma"
+                      autoComplete="name"
+                      value={regName}
+                      onChange={(e) => { setRegName(e.target.value); setNameTouched(true) }}
+                      onBlur={() => setNameTouched(true)}
+                    />
+                    <ValidationIcon valid={nameValid} touched={nameTouched} />
+                  </div>
+                  {nameTouched && !nameValid && (
+                    <p className={styles.fieldError}>Please enter your full name (min 2 characters)</p>
+                  )}
+                </div>
+
+                {/* Email */}
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel} htmlFor="reg-email">Email Address</label>
                   <div className={styles.fieldWrap}>
                     <span className={styles.fieldIcon}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -858,56 +761,42 @@ export default function Login() {
                     </span>
                     <input
                       type="email"
-                      className={`${styles.fieldInput}${regEmailError ? ' ' + styles.error : ''}`}
                       id="reg-email"
+                      className={`${styles.fieldInput} ${emailTouched && !emailValid ? styles.fieldInputError : ''} ${emailTouched && emailValid ? styles.fieldInputValid : ''}`}
                       placeholder="priya@example.com"
                       autoComplete="email"
                       inputMode="email"
                       value={regEmail}
-                      onChange={(e) => { setRegEmail(e.target.value); setRegisterError(''); setRegEmailError(false) }}
+                      onChange={(e) => { setRegEmail(e.target.value); setEmailTouched(true) }}
+                      onBlur={() => setEmailTouched(true)}
                     />
+                    <ValidationIcon valid={emailValid} touched={emailTouched} />
                   </div>
+                  {emailTouched && !emailValid && (
+                    <p className={styles.fieldError}>Please enter a valid email address</p>
+                  )}
                 </div>
 
-                {/* Password */}
+                {/* Account Type */}
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel} htmlFor="reg-password">Password</label>
-                  <div className={styles.fieldWrap}>
-                    <span className={styles.fieldIcon}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                        <path d="M7 11V7a5 5 0 0110 0v4"/>
-                      </svg>
-                    </span>
-                    <input
-                      type={regShowPassword ? 'text' : 'password'}
-                      className={`${styles.fieldInput} ${styles.hasSuffix}${regPasswordError ? ' ' + styles.error : ''}`}
-                      id="reg-password"
-                      placeholder="Min. 8 characters"
-                      autoComplete="new-password"
-                      value={regPassword}
-                      onChange={(e) => { setRegPassword(e.target.value); setRegisterError(''); setRegPasswordError(false) }}
-                    />
-                    <span className={styles.fieldSuffix}>
-                      <button
-                        className={styles.eyeBtn}
-                        onClick={() => setRegShowPassword(!regShowPassword)}
-                        type="button"
-                        aria-label="Toggle password visibility"
-                      >
-                        {!regShowPassword ? (
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                          </svg>
-                        ) : (
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                            <line x1="1" y1="1" x2="23" y2="23"/>
-                          </svg>
-                        )}
-                      </button>
-                    </span>
+                  <label className={styles.fieldLabel}>Account Type</label>
+                  <div className={styles.accountTypeRow}>
+                    <button
+                      type="button"
+                      className={`${styles.accountTypeBtn} ${regAccountType === 'parent' ? styles.accountTypeBtnActive : ''}`}
+                      onClick={() => setRegAccountType('parent')}
+                    >
+                      <span className={styles.accountTypeIcon}>👨‍👩‍👧‍👦</span>
+                      <span>Parent</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.accountTypeBtn} ${regAccountType === 'child' ? styles.accountTypeBtnActive : ''}`}
+                      onClick={() => setRegAccountType('child')}
+                    >
+                      <span className={styles.accountTypeIcon}>👦</span>
+                      <span>Child</span>
+                    </button>
                   </div>
                 </div>
 
@@ -917,158 +806,128 @@ export default function Login() {
                   <div className={styles.fieldWrap}>
                     <span className={styles.fieldIcon}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="2" y1="12" x2="22" y2="12"/>
+                        <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
                         <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
                       </svg>
                     </span>
                     <select
-                      className={styles.fieldSelect}
                       id="reg-country"
+                      className={styles.fieldSelect}
                       value={regCountry}
                       onChange={(e) => setRegCountry(e.target.value)}
                     >
-                      <option value="IN">India</option>
-                      <option value="PK">Pakistan</option>
-                      <option value="AE">UAE</option>
-                      <option value="GB">United Kingdom</option>
-                      <option value="US">United States</option>
+                      {COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code}>{c.label}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
 
-                {/* Send OTP button */}
                 <button
-                  className={`${styles.btnPrimary}${regSendingOtp ? ' ' + styles.loading : ''}`}
+                  className={`${styles.btnPrimary} ${!detailsAllValid ? styles.btnDisabled : ''}`}
                   type="submit"
-                  disabled={regSendingOtp}
+                  disabled={!detailsAllValid}
                 >
-                  <div className={styles.spinner}></div>
-                  <span className={styles.btnText}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }}>
-                      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-                    </svg>
-                    Send OTP
-                  </span>
+                  Continue to Plan →
                 </button>
-              </>
+              </form>
             )}
 
-            {/* ---- REGISTER STEP 2: OTP + Create Account ---- */}
-            {regStep === 2 && (
-              <>
-                {/* Dev OTP banner */}
-                {regDevOtpBanner && (
-                  <div style={{
-                    background: 'rgba(255,183,0,0.1)',
-                    border: '1px solid rgba(255,183,0,0.3)',
-                    borderRadius: 10,
-                    padding: '10px 14px',
-                    marginBottom: 14,
-                    fontSize: 12,
-                    color: '#FFB300',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8
-                  }}>
-                    🔧 Dev mode — OTP: <span style={{ fontFamily: 'monospace', fontSize: 16, color: '#FFD54F' }}>{regDevOtpBanner}</span>
-                  </div>
-                )}
+            {/* REG STEP 4 — Plan Selection */}
+            {regStep === 4 && (
+              <div>
+                <div className={styles.planGrid}>
 
-                {/* OTP input */}
-                <div style={{
-                  background: '#111E16',
-                  border: '2px solid rgba(0,230,118,0.3)',
-                  borderRadius: 14,
-                  padding: '16px',
-                  textAlign: 'center',
-                  marginBottom: 16
-                }}>
-                  <div style={{ fontSize: 12, color: '#5E8B6E', marginBottom: 8, letterSpacing: 1 }}>
-                    ENTER 6-DIGIT OTP
+                  {/* FREE */}
+                  <div className={styles.planCard}>
+                    <div className={styles.planName}>Free Forever</div>
+                    <div className={styles.planPrice}>
+                      <span className={styles.planCurrency}>₹</span>0
+                      <span className={styles.planPer}>/month</span>
+                    </div>
+                    <ul className={styles.planFeatures}>
+                      <li>Up to 2 family members</li>
+                      <li>Real-time location</li>
+                      <li>Basic SOS alerts</li>
+                    </ul>
+                    <button
+                      className={`${styles.planBtn} ${regLoading ? styles.btnLoading : ''}`}
+                      onClick={doRegisterFree}
+                      disabled={regLoading}
+                    >
+                      {regLoading ? <span className={styles.spinner} /> : 'Create Free Account'}
+                    </button>
                   </div>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    value={regOtp}
-                    onChange={e => setRegOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      outline: 'none',
-                      color: '#00E676',
-                      fontSize: 32,
-                      fontWeight: 900,
-                      letterSpacing: 8,
-                      textAlign: 'center',
-                      width: '100%',
-                      fontFamily: 'monospace'
-                    }}
-                    placeholder="──────"
-                    autoFocus
-                  />
+
+                  {/* FAMILY — highlighted */}
+                  <div className={`${styles.planCard} ${styles.planCardFeatured}`}>
+                    <div className={styles.planBadge}>Most Popular</div>
+                    <div className={styles.planName}>Family</div>
+                    <div className={styles.planPrice}>
+                      <span className={styles.planCurrency}>₹</span>299
+                      <span className={styles.planPer}>/month</span>
+                    </div>
+                    <ul className={styles.planFeatures}>
+                      <li>Up to 6 family members</li>
+                      <li>Geofence alerts</li>
+                      <li>Location history 30 days</li>
+                      <li>Priority support</li>
+                    </ul>
+                    <button
+                      className={`${styles.planBtn} ${styles.planBtnPrimary} ${regLoading ? styles.btnLoading : ''}`}
+                      onClick={() => doRegisterPaid('family')}
+                      disabled={regLoading}
+                    >
+                      {regLoading ? <span className={styles.spinner} /> : 'Pay ₹299 & Create Account'}
+                    </button>
+                  </div>
+
+                  {/* PREMIUM */}
+                  <div className={styles.planCard}>
+                    <div className={styles.planName}>Premium</div>
+                    <div className={styles.planPrice}>
+                      <span className={styles.planCurrency}>₹</span>499
+                      <span className={styles.planPer}>/month</span>
+                    </div>
+                    <ul className={styles.planFeatures}>
+                      <li>Unlimited members</li>
+                      <li>Advanced analytics</li>
+                      <li>Location history 90 days</li>
+                      <li>24/7 dedicated support</li>
+                    </ul>
+                    <button
+                      className={`${styles.planBtn} ${regLoading ? styles.btnLoading : ''}`}
+                      onClick={() => doRegisterPaid('premium')}
+                      disabled={regLoading}
+                    >
+                      {regLoading ? <span className={styles.spinner} /> : 'Pay ₹499 & Create Account'}
+                    </button>
+                  </div>
+
                 </div>
 
-                {/* Create Account button */}
                 <button
-                  className={`${styles.btnPrimary}${registerLoading ? ' ' + styles.loading : ''}`}
-                  type="submit"
-                  disabled={registerLoading}
+                  type="button"
+                  className={styles.backBtn}
+                  onClick={() => { setRegStep(3); setRegError('') }}
                 >
-                  <div className={styles.spinner}></div>
-                  <span className={styles.btnText}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }}>
-                      <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                      <line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
-                    </svg>
-                    Create Account
-                  </span>
+                  ← Back to details
                 </button>
-
-                {/* Resend OTP */}
-                <div style={{ textAlign: 'center', marginTop: 12, fontSize: 13, color: '#5E8B6E' }}>
-                  Didn&apos;t receive the OTP?{' '}
-                  <a
-                    href="#"
-                    style={{ color: '#00E676', textDecoration: 'none', fontWeight: 600 }}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setRegStep(1)
-                      setRegOtp('')
-                      setRegDevOtpBanner('')
-                      setRegisterError('')
-                    }}
-                  >
-                    Resend OTP
-                  </a>
-                </div>
-              </>
-            )}
-
-            {regStep === 1 && (
-              <div className={styles.termsText}>
-                By creating an account you agree to our{' '}
-                <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
-                Your location data is encrypted and never sold.
               </div>
             )}
 
             <div className={styles.formFooter}>
               Already have an account?{' '}
-              <a href="#" onClick={(e) => { e.preventDefault(); switchTab('login') }}>Sign in</a>
+              <button type="button" className={styles.switchTabBtn} onClick={() => switchTab('login')}>
+                Sign in
+              </button>
             </div>
-
-          </form>
           </div>
           {/* /REGISTER PANEL */}
 
         </div>
         {/* /AUTH CARD */}
 
-        {/* Back link */}
         <Link to="/" className={styles.backHome}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="15 18 9 12 15 6"/>

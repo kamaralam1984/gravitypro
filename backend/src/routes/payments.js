@@ -3,6 +3,7 @@ const express = require('express')
 const { query } = require('../config/db')
 const { authenticate } = require('../middleware/auth')
 const { v4: uuidv4 } = require('uuid')
+const jwt = require('jsonwebtoken')
 
 const PLANS = {
   free:    { id:'free',    name:'Free Forever', price:{ USD:0,    INR:0,   KES:0,   EUR:0,    GBP:0    }, max_members:4,  max_circles:1,  history_days:1  },
@@ -183,6 +184,63 @@ router.post('/callback/pesapal', async (req, res) => {
     }
     res.sendStatus(200)
   } catch(e) { console.error('pesapal callback:', e); res.sendStatus(200) }
+})
+
+// POST /api/v1/payments/create-order-anon
+// Creates a payment order without a logged-in user — used during signup flow before account creation.
+router.post('/create-order-anon', async (req, res) => {
+  try {
+    const { phone_token, plan: planId, gateway, currency, name, email } = req.body
+    if (!phone_token) return res.status(400).json({ error: 'phone_token required' })
+    if (!planId || !gateway) return res.status(400).json({ error: 'plan and gateway required' })
+
+    // Verify phone_token JWT
+    let decoded
+    try {
+      decoded = jwt.verify(phone_token, process.env.JWT_SECRET)
+    } catch(e) {
+      return res.status(401).json({ error: 'Invalid or expired phone_token' })
+    }
+    if (decoded.type !== 'phone_verified') return res.status(401).json({ error: 'phone_token must be of type phone_verified' })
+    const phone = decoded.phone || decoded.phoneNumber || ''
+
+    const plan = PLANS[planId]
+    if (!plan) return res.status(400).json({ error: 'Invalid plan: ' + planId })
+    if (planId === 'free') return res.status(400).json({ error: 'Free plan requires no payment' })
+
+    const cur = (currency || 'USD').toUpperCase()
+    const planPrice = plan.price[cur]
+    if (planPrice === undefined || planPrice === 0) return res.status(400).json({ error: 'Currency ' + cur + ' not supported for this plan' })
+
+    // Amount in smallest unit (paise for INR, cents for USD/EUR/GBP; whole units for KES etc.)
+    const amountSmallest = ['KES', 'TZS', 'UGX', 'RWF', 'ZMW'].includes(cur) ? planPrice : Math.round(planPrice * 100)
+
+    const orderId = uuidv4()
+    const metadata = { name: name || '', email: email || '', phone }
+    await query(
+      'INSERT INTO payment_orders (id,user_id,plan_id,gateway,amount,currency,status,phone,metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [orderId, null, planId, gateway, planPrice, cur, 'pending', phone, JSON.stringify(metadata)]
+    ).catch(() => {})
+
+    const service = getSvc()
+    if (!service) return res.status(503).json({ error: 'Payment services not ready. Run: npm install razorpay stripe axios in /backend' })
+    const gw = service.getGateway(gateway)
+    if (!gw) return res.status(400).json({ error: 'Unknown gateway: ' + gateway })
+    if (!gw.isConfigured) return res.status(503).json({ error: gateway + ' credentials not configured. Add to .env and restart.' })
+
+    const APP_URL = process.env.APP_URL || 'https://gravitypro.kvlbusinesssolutions.com'
+    const result = await gw.createOrder({
+      orderId, planId, planName: plan.name,
+      amount: amountSmallest, currency: cur,
+      userId: null, userEmail: email || '', userPhone: phone,
+      callbackUrl: APP_URL + '/api/v1/payments/callback/' + gateway,
+      returnUrl: APP_URL + '/checkout',
+    })
+
+    if (!result.success) return res.status(500).json({ error: result.error || 'Gateway error' })
+    await query('UPDATE payment_orders SET gateway_order_id=$1 WHERE id=$2', [result.gatewayOrderId, orderId]).catch(() => {})
+    res.json({ success: true, orderId, gatewayOrderId: result.gatewayOrderId, checkoutUrl: result.checkoutUrl, clientData: result.clientData })
+  } catch(e) { console.error('create-order-anon:', e); res.status(500).json({ error: e.message }) }
 })
 
 // ── Helper: activate subscription ──

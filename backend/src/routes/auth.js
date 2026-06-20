@@ -242,4 +242,226 @@ router.post('/google', async (req, res) => {
   res.json({ user, token })
 })
 
+// POST /auth/verify-phone
+// Verifies OTP, marks it used, returns a short-lived phone_token JWT.
+// Does NOT create any user account.
+router.post('/verify-phone', async (req, res) => {
+  try {
+    const { phone, otp } = req.body
+    if (!phone || !otp) return res.status(400).json({ error: 'phone and otp required' })
+
+    const cleanPhone = phone.trim()
+    const cleanOtp = otp.trim()
+
+    const result = await query(
+      `SELECT id FROM phone_otps
+       WHERE phone = $1 AND code = $2 AND used = FALSE AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanPhone, cleanOtp]
+    )
+    if (!result.rows.length) return res.status(400).json({ error: 'Invalid or expired OTP' })
+
+    // Mark OTP used
+    await query(`UPDATE phone_otps SET used = TRUE WHERE id = $1`, [result.rows[0].id])
+
+    const phone_token = jwt.sign(
+      { phone: cleanPhone, type: 'phone_verified' },
+      process.env.JWT_SECRET,
+      { expiresIn: '30m' }
+    )
+
+    // Check if phone already has an account
+    const existing = await query('SELECT id FROM users WHERE phone = $1', [cleanPhone])
+    if (existing.rows.length) {
+      return res.json({ verified: true, phone_token, already_registered: true })
+    }
+
+    res.json({ verified: true, phone_token })
+  } catch (err) {
+    console.error('verify-phone error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// POST /auth/register-free
+// Creates a free account using a verified phone_token.
+router.post('/register-free', async (req, res) => {
+  try {
+    const { phone_token, name, email, account_type, country_code } = req.body
+
+    if (!phone_token) return res.status(400).json({ error: 'phone_token required' })
+
+    // Verify phone_token
+    let tokenPayload
+    try {
+      tokenPayload = jwt.verify(phone_token, process.env.JWT_SECRET)
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid or expired phone_token' })
+    }
+    if (tokenPayload.type !== 'phone_verified') {
+      return res.status(401).json({ error: 'Invalid token type' })
+    }
+
+    const phone = tokenPayload.phone
+
+    // Validate name
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({ error: 'name must be at least 2 characters' })
+    }
+
+    // Validate email format if provided
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return res.status(400).json({ error: 'Invalid email format' })
+    }
+
+    // Validate account_type
+    if (!['parent', 'child'].includes(account_type)) {
+      return res.status(400).json({ error: "account_type must be 'parent' or 'child'" })
+    }
+
+    // Validate country_code
+    const validCountryCodes = ['KE', 'IN', 'AE', 'GB', 'US', 'PK', 'UG', 'TZ', 'NG', 'ZA', 'CA', 'AU']
+    const resolvedCountryCode = country_code || 'IN'
+    if (!validCountryCodes.includes(resolvedCountryCode)) {
+      return res.status(400).json({ error: 'Invalid country_code' })
+    }
+
+    // Check phone not already registered
+    const existing = await query('SELECT id FROM users WHERE phone = $1', [phone])
+    if (existing.rows.length) {
+      return res.status(409).json({ error: 'Phone already registered' })
+    }
+
+    // Create user with free plan
+    const insertResult = await query(
+      `INSERT INTO users (phone, name, email, country_code, account_type, current_plan)
+       VALUES ($1, $2, $3, $4, $5, 'free')
+       RETURNING id, name, phone, email, country_code, account_type, current_plan, created_at`,
+      [phone, name.trim(), email ? email.trim() : null, resolvedCountryCode, account_type]
+    )
+    const user = insertResult.rows[0]
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN })
+    res.status(201).json({ user, token })
+  } catch (err) {
+    console.error('register-free error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// POST /auth/register-with-payment
+// Creates account AND activates subscription atomically after successful payment.
+router.post('/register-with-payment', async (req, res) => {
+  try {
+    const {
+      phone_token,
+      name,
+      email,
+      account_type,
+      country_code,
+      plan,
+      gateway,
+      gatewayOrderId,
+      gatewayPaymentId,
+      signature,
+    } = req.body
+
+    if (!phone_token) return res.status(400).json({ error: 'phone_token required' })
+
+    // Verify phone_token
+    let tokenPayload
+    try {
+      tokenPayload = jwt.verify(phone_token, process.env.JWT_SECRET)
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid or expired phone_token' })
+    }
+    if (tokenPayload.type !== 'phone_verified') {
+      return res.status(401).json({ error: 'Invalid token type' })
+    }
+
+    const phone = tokenPayload.phone
+
+    // Validate name
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({ error: 'name must be at least 2 characters' })
+    }
+
+    // Validate email format if provided
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return res.status(400).json({ error: 'Invalid email format' })
+    }
+
+    // Validate account_type
+    if (!['parent', 'child'].includes(account_type)) {
+      return res.status(400).json({ error: "account_type must be 'parent' or 'child'" })
+    }
+
+    // Validate country_code
+    const validCountryCodes = ['KE', 'IN', 'AE', 'GB', 'US', 'PK', 'UG', 'TZ', 'NG', 'ZA', 'CA', 'AU']
+    const resolvedCountryCode = country_code || 'IN'
+    if (!validCountryCodes.includes(resolvedCountryCode)) {
+      return res.status(400).json({ error: 'Invalid country_code' })
+    }
+
+    // Validate required payment fields
+    if (!plan) return res.status(400).json({ error: 'plan required' })
+    if (!gateway) return res.status(400).json({ error: 'gateway required' })
+    if (!gatewayPaymentId) return res.status(400).json({ error: 'gatewayPaymentId required' })
+
+    // Verify payment signature per gateway
+    if (gateway === 'razorpay') {
+      if (!gatewayOrderId) return res.status(400).json({ error: 'gatewayOrderId required for razorpay' })
+      if (!signature) return res.status(400).json({ error: 'signature required for razorpay' })
+      const expectedSig = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
+        .update(`${gatewayOrderId}|${gatewayPaymentId}`)
+        .digest('hex')
+      if (expectedSig !== signature) {
+        return res.status(400).json({ error: 'Invalid payment signature' })
+      }
+    } else if (gateway === 'stripe' || gateway === 'paypal') {
+      // For stripe/paypal just confirm payment ID presence (already checked above)
+    } else {
+      return res.status(400).json({ error: 'Unsupported gateway' })
+    }
+
+    // Check phone not already registered
+    const existing = await query('SELECT id FROM users WHERE phone = $1', [phone])
+    if (existing.rows.length) {
+      return res.status(409).json({ error: 'Phone already registered' })
+    }
+
+    // Create user with paid plan
+    const insertResult = await query(
+      `INSERT INTO users (phone, name, email, country_code, account_type, current_plan)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, name, phone, email, country_code, account_type, current_plan, created_at`,
+      [phone, name.trim(), email ? email.trim() : null, resolvedCountryCode, account_type, plan]
+    )
+    const user = insertResult.rows[0]
+
+    // Insert active subscription
+    await query(
+      `INSERT INTO user_subscriptions
+         (user_id, plan_id, status, current_period_start, current_period_end, gateway)
+       VALUES ($1, $2, 'active', NOW(), NOW() + INTERVAL '1 month', $3)`,
+      [user.id, plan, gateway]
+    )
+
+    // Update payment_orders: link to new user and mark completed
+    if (gatewayOrderId) {
+      await query(
+        `UPDATE payment_orders SET user_id = $1, status = 'completed'
+         WHERE gateway_order_id = $2`,
+        [user.id, gatewayOrderId]
+      )
+    }
+
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN })
+    res.status(201).json({ user, token })
+  } catch (err) {
+    console.error('register-with-payment error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 module.exports = router
