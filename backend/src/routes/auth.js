@@ -332,12 +332,15 @@ router.post('/register-free', async (req, res) => {
       return res.status(409).json({ error: 'Phone already registered' })
     }
 
+    // Generate a random password hash (user has no password — OTP-only auth)
+    const randomHash = await bcrypt.hash(require('crypto').randomBytes(32).toString('hex'), 10)
+
     // Create user with free plan
     const insertResult = await query(
-      `INSERT INTO users (phone, name, email, country_code, account_type, current_plan)
-       VALUES ($1, $2, $3, $4, $5, 'free')
+      `INSERT INTO users (phone, name, email, country_code, account_type, current_plan, password_hash)
+       VALUES ($1, $2, $3, $4, $5, 'free', $6)
        RETURNING id, name, phone, email, country_code, account_type, current_plan, created_at`,
-      [phone, name.trim(), email ? email.trim() : null, resolvedCountryCode, account_type]
+      [phone, name.trim(), email ? email.trim() : null, resolvedCountryCode, account_type, randomHash]
     )
     const user = insertResult.rows[0]
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN })
@@ -430,12 +433,15 @@ router.post('/register-with-payment', async (req, res) => {
       return res.status(409).json({ error: 'Phone already registered' })
     }
 
+    // Generate a random password hash (OTP-only auth)
+    const randomHash2 = await bcrypt.hash(require('crypto').randomBytes(32).toString('hex'), 10)
+
     // Create user with paid plan
     const insertResult = await query(
-      `INSERT INTO users (phone, name, email, country_code, account_type, current_plan)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO users (phone, name, email, country_code, account_type, current_plan, password_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, name, phone, email, country_code, account_type, current_plan, created_at`,
-      [phone, name.trim(), email ? email.trim() : null, resolvedCountryCode, account_type, plan]
+      [phone, name.trim(), email ? email.trim() : null, resolvedCountryCode, account_type, plan, randomHash2]
     )
     const user = insertResult.rows[0]
 
