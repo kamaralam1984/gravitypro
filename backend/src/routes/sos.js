@@ -69,6 +69,45 @@ router.post('/', authenticate, async (req, res) => {
   res.json({ success: true, message: 'SOS sent to all circle members' })
 })
 
+// POST /api/v1/sos/safe — notify circle that user is safe
+router.post('/safe', authenticate, async (req, res) => {
+  const { message } = req.body
+  const userId = req.user.id
+  const circles = await query('SELECT circle_id FROM circle_members WHERE user_id = $1', [userId])
+  if (!circles.rows.length) return res.status(400).json({ error: 'Not in any circle' })
+  const safeData = {
+    userId,
+    userName: req.user.name,
+    userAvatar: req.user.avatar_url,
+    message: message || "I'm safe!",
+    timestamp: new Date().toISOString(),
+  }
+  for (const row of circles.rows) {
+    await sendToCircleMembers(row.circle_id, 'sos_safe', safeData)
+  }
+  try {
+    const tokens = await query(
+      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2",
+      [circles.rows.map(r => r.circle_id), userId]
+    )
+    if (tokens.rows.length) {
+      const messages = tokens.rows.map(t => ({
+        to: t.push_token,
+        title: "✅ Safe",
+        body: (safeData.userName || "Family member") + " is safe. " + safeData.message,
+        data: { type: "sos_safe" },
+        sound: "default",
+      }))
+      fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(messages)
+      }).catch(() => {})
+    }
+  } catch {}
+  res.json({ success: true, message: 'Safe notification sent' })
+})
+
 // GET /api/v1/sos/history — get SOS history
 router.get('/history', authenticate, async (req, res) => {
   await query(`CREATE TABLE IF NOT EXISTS sos_events (
