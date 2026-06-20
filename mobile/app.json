@@ -45,6 +45,12 @@
       ["expo-notifications", { "sounds": ["./assets/notification.wav"] }]
     ],
     "scheme": "gravity",
-    "platforms": ["ios", "android"]
+    "platforms": ["ios", "android"],
+    "extra": {
+      "eas": {
+        "projectId": "aacddc46-fdbb-45a7-9f01-2dd951ffcaa5"
+      }
+    },
+    "owner": "gravitynew"
   }
 }
