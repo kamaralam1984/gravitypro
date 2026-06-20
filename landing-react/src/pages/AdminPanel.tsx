@@ -835,29 +835,27 @@ export default function AdminPanel() {
         {/* ── FRAME BODY: mini sidebar + scrollable content ── */}
         <div className={styles.frameBody}>
 
-          {/* Mini sidebar — always visible in mobile mode */}
-          {viewMode !== 'desktop' && (
-            <nav className={styles.miniSidebar}>
-              <div className={styles.miniLogo}>🛡</div>
-              {navItems.map(item => (
-                <button
-                  key={item.key}
-                  className={`${styles.miniNavBtn} ${activeTab === item.key ? styles.miniNavBtnActive : ''}`}
-                  onClick={() => setActiveTab(item.key)}
-                  title={item.label}
-                >
-                  <span className={styles.miniNavIcon}>{item.icon}</span>
-                  {item.key === 'sos' && unresolvedCount > 0 && <span className={styles.miniBadge} />}
-                </button>
-              ))}
-              <div className={styles.miniSpacer} />
+          {/* Mini sidebar — always visible (hidden via CSS in desktop mode) */}
+          <nav className={styles.miniSidebar}>
+            <div className={styles.miniLogo}>🛡</div>
+            {navItems.map(item => (
               <button
-                className={styles.miniSignOutBtn}
-                onClick={() => { localStorage.removeItem('admin_token'); navigate('/admin/login') }}
-                title="Sign Out"
-              >🚪</button>
-            </nav>
-          )}
+                key={item.key}
+                className={`${styles.miniNavBtn} ${activeTab === item.key ? styles.miniNavBtnActive : ''}`}
+                onClick={() => setActiveTab(item.key)}
+                title={item.label}
+              >
+                <span className={styles.miniNavIcon}>{item.icon}</span>
+                {item.key === 'sos' && unresolvedCount > 0 && <span className={styles.miniBadge} />}
+              </button>
+            ))}
+            <div className={styles.miniSpacer} />
+            <button
+              className={styles.miniSignOutBtn}
+              onClick={() => { localStorage.removeItem('admin_token'); navigate('/admin/login') }}
+              title="Sign Out"
+            >🚪</button>
+          </nav>
 
           <div className={styles.frameMain}>
             {/* ── TAB CONTENT ── */}

@@ -231,12 +231,12 @@
 }
 .frameMain::-webkit-scrollbar { display: none; }
 
-/* ── MINI LEFT SIDEBAR (mobile mode) ── */
+/* ── MINI LEFT SIDEBAR (always rendered, hidden in desktop mode via CSS) ── */
 .miniSidebar {
   width: 54px;
   min-width: 54px;
-  background: #060E09;
-  border-right: 1px solid rgba(0, 230, 118, 0.1);
+  background: #071510;
+  border-right: 1px solid rgba(0, 230, 118, 0.18);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -245,6 +245,9 @@
   overflow: hidden;
   flex-shrink: 0;
 }
+
+/* Hide mini sidebar when the full 240px desktop sidebar is showing */
+.desktopMode .miniSidebar { display: none; }
 
 .miniLogo {
   font-size: 18px;
@@ -1284,14 +1287,12 @@
 .desktopMode .frameBody {
   flex: 1;
   overflow: hidden;
-  flex-direction: column;
 }
 .desktopMode .frameMain {
   flex: 1;
   overflow-y: auto;
 }
 .desktopMode .tabContent {
-  flex: 1;
   overflow-y: visible;
   padding-bottom: 24px;
 }
