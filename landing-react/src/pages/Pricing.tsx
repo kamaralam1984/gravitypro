@@ -155,11 +155,7 @@ export default function Pricing() {
         <div className={styles.faqGrid}>
           {[
             { q:'Can I cancel anytime?',           a:'Yes. Cancel from your account settings. Access continues until the end of the current billing period. No questions asked.' },
-            { q:'Which countries are supported?',  a:'India (Razorpay), Kenya & Tanzania (M-Pesa), Uganda, Rwanda & Zambia (Pesapal), UK, USA, Europe, UAE and 140+ countries via Stripe and PayPal.' },
-            { q:'What currencies are accepted?',   a:'INR, KES, USD, EUR, GBP, AUD, CAD, AED, SGD and many more. Price shown automatically in your local currency.' },
             { q:'Is there a money-back guarantee?', a:'Yes. 7-day money-back guarantee on all paid plans. Contact support within 7 days of purchase for a full refund.' },
-            { q:'How does the Free plan work?',    a:'The Free plan is free forever with no credit card required. You get up to 4 family members, 1 safe zone, SOS panic button, and 24-hour location history.' },
-            { q:'When does my subscription renew?', a:'Monthly subscriptions renew automatically on the same date each month. You will receive an email reminder before renewal.' },
           ].map(item => (
             <div key={item.q} className={styles.faqItem}>
               <div className={styles.faqQ}>{item.q}</div>
