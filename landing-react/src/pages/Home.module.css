@@ -344,15 +344,13 @@
 .headlineLine1 {
   display: block;
   color: #ffffff;
-  opacity: 0;
-  animation: slideUpFadeIn 0.8s ease forwards;
+  animation: slideUpFadeIn 0.8s ease both;
   animation-delay: 0.1s;
 }
 .headlineLine2 {
   display: block;
   color: #00E676;
-  opacity: 0;
-  animation: slideUpFadeIn 0.8s ease forwards;
+  animation: slideUpFadeIn 0.8s ease both;
   animation-delay: 0.3s;
 }
 .heroSub {
