@@ -658,13 +658,28 @@ export default function ParentPanel() {
       navigate('/login')
     }
   }
-  function confirmLeave() {
-    if (confirm('Are you sure you want to leave the Family Circle?')) alert('You have left the Family Circle.')
+  async function confirmLeave() {
+    if (!circleId) return
+    if (!confirm('Are you sure you want to leave this Family Circle?')) return
+    try {
+      const token = getToken()
+      const res = await fetch(API_BASE + '/circles/' + circleId + '/leave', { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Failed to leave circle')
+      showToast('You have left the circle')
+      setTimeout(() => { localStorage.removeItem('gravity_token'); localStorage.removeItem('gravity_user'); window.location.href = '/login' }, 1500)
+    } catch(e: unknown) { showToast(e instanceof Error ? e.message : 'Error leaving circle', 'error') }
   }
-  function confirmDelete() {
-    if (confirm('Are you sure you want to permanently delete your account? This action cannot be undone.')) {
-      alert('Account deletion initiated. A confirmation email will be sent.')
-    }
+  async function confirmDelete() {
+    if (!confirm('Are you sure you want to permanently delete your account? This will delete ALL your data and cannot be undone.')) return
+    if (!confirm('Final confirmation: Delete your Gravity account permanently?')) return
+    try {
+      const token = getToken()
+      const res = await fetch(API_BASE + '/users/me', { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
+      showToast('Account deleted. Goodbye!')
+      setTimeout(() => { localStorage.clear(); sessionStorage.clear(); window.location.href = '/' }, 2000)
+    } catch(e: unknown) { showToast(e instanceof Error ? e.message : 'Error deleting account', 'error') }
   }
 
   // ── HELPERS ──

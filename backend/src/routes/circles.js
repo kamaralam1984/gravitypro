@@ -79,4 +79,38 @@ router.get('/:circleId/members', authenticate, async (req, res) => {
   res.json({ members: result.rows })
 })
 
+// PATCH /api/v1/circles/:circleId — update circle name (admin only)
+router.patch('/:circleId', authenticate, async (req, res) => {
+  const { name } = req.body
+  if (!name || name.trim().length < 2) return res.status(400).json({ error: 'Name must be at least 2 characters' })
+  const mem = await query('SELECT role FROM circle_members WHERE circle_id=$1 AND user_id=$2', [req.params.circleId, req.user.id])
+  if (!mem.rows.length) return res.status(403).json({ error: 'Not a member of this circle' })
+  if (mem.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only circle admins can rename the circle' })
+  const r = await query('UPDATE circles SET name=$1 WHERE id=$2 RETURNING id, name, invite_code', [name.trim(), req.params.circleId])
+  if (!r.rows.length) return res.status(404).json({ error: 'Circle not found' })
+  res.json({ circle: r.rows[0] })
+})
+
+// DELETE /api/v1/circles/:circleId/leave — leave a circle (non-admin)
+router.delete('/:circleId/leave', authenticate, async (req, res) => {
+  const mem = await query('SELECT role FROM circle_members WHERE circle_id=$1 AND user_id=$2', [req.params.circleId, req.user.id])
+  if (!mem.rows.length) return res.status(404).json({ error: 'You are not a member of this circle' })
+  if (mem.rows[0].role === 'admin') {
+    const others = await query("SELECT id FROM circle_members WHERE circle_id=$1 AND user_id!=$2 AND role='admin'", [req.params.circleId, req.user.id])
+    if (!others.rows.length) return res.status(400).json({ error: 'You are the only admin. Delete the circle or promote another member first.' })
+  }
+  await query('DELETE FROM circle_members WHERE circle_id=$1 AND user_id=$2', [req.params.circleId, req.user.id])
+  res.json({ success: true, message: 'You have left the circle' })
+})
+
+// DELETE /api/v1/circles/:circleId — delete circle (admin only)
+router.delete('/:circleId', authenticate, async (req, res) => {
+  const mem = await query('SELECT role FROM circle_members WHERE circle_id=$1 AND user_id=$2', [req.params.circleId, req.user.id])
+  if (!mem.rows.length) return res.status(403).json({ error: 'Not a member of this circle' })
+  if (mem.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only admins can delete a circle' })
+  const r = await query('DELETE FROM circles WHERE id=$1 RETURNING id, name', [req.params.circleId])
+  if (!r.rows.length) return res.status(404).json({ error: 'Circle not found' })
+  res.json({ deleted: true, circle: r.rows[0] })
+})
+
 module.exports = router

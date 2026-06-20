@@ -1409,7 +1409,12 @@ export default function Home() {
           </div>
           <div className={styles.footerCol}>
             <h4 className={styles.footerColHeading}>Product</h4>
-            <ul className={styles.footerLinks}><li><a href="#features">Features</a></li><li><a href="#how">How it works</a></li><li><a href="#download">Download</a></li><li><a href="#">Pricing</a></li></ul>
+            <ul className={styles.footerLinks}>
+              <li><a href="#features">Features</a></li>
+              <li><a href="#how">How it works</a></li>
+              <li><a href="#download">Download</a></li>
+              <li><Link to="/pricing">Pricing</Link></li>
+            </ul>
           </div>
           <div className={styles.footerCol}>
             <h4 className={styles.footerColHeading}>Panels</h4>
@@ -1423,7 +1428,12 @@ export default function Home() {
           </div>
           <div className={styles.footerCol}>
             <h4 className={styles.footerColHeading}>Company</h4>
-            <ul className={styles.footerLinks}><li><a href="#">About Trackalways</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li><li><a href="#">Contact Us</a></li></ul>
+            <ul className={styles.footerLinks}>
+              <li><a href="#features">About Gravity</a></li>
+              <li><Link to="/privacy">Privacy Policy</Link></li>
+              <li><Link to="/terms">Terms of Service</Link></li>
+              <li><a href="mailto:support@trackalways.com">Contact Us</a></li>
+            </ul>
           </div>
         </div>
         <div className={styles.footerBottom}>

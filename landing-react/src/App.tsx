@@ -9,6 +9,10 @@ import AdminLogin from './pages/AdminLogin'
 import AdminPanel from './pages/AdminPanel'
 import Pricing from './pages/Pricing'
 import Checkout from './pages/Checkout'
+import Terms from './pages/Terms'
+import Privacy from './pages/Privacy'
+import Share from './pages/Share'
+import NotFound from './pages/NotFound'
 
 function App() {
   return (
@@ -18,6 +22,9 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/checkout" element={<Checkout />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/share" element={<Share />} />
         <Route path="/parent" element={<Parent />} />
         <Route path="/parent/panel" element={<ParentPanel />} />
         <Route path="/child" element={<Child />} />
@@ -27,6 +34,7 @@ function App() {
         <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/panel" element={<AdminPanel />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   )

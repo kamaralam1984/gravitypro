@@ -826,7 +826,7 @@ export default function ChildPanel() {
       setJoinCode('')
       setHasCircle(true)
       showToast('Joined family circle!')
-      window.location.reload()
+      setTimeout(() => window.location.reload(), 800)
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Invalid invite code', 'error')
     } finally {

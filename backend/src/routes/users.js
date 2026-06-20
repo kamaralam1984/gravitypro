@@ -268,4 +268,30 @@ router.get('/me/location-history', authenticate, async (req, res) => {
   }
 })
 
+// GET /api/v1/users/public-location?uid= — shared location link (no auth required)
+router.get('/public-location', async (req, res) => {
+  const { uid } = req.query
+  if (!uid) return res.status(400).json({ error: 'uid required' })
+  try {
+    const r = await query(
+      `SELECT u.name, u.avatar_url, ull.updated_at,
+        ST_Y(ull.geom) as latitude, ST_X(ull.geom) as longitude, ull.battery_level
+       FROM users u
+       LEFT JOIN user_latest_locations ull ON ull.user_id = u.id
+       WHERE u.id = $1`,
+      [uid]
+    )
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' })
+    res.json(r.rows[0])
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// DELETE /api/v1/users/me — delete own account
+router.delete('/me', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM users WHERE id = $1', [req.user.id])
+    res.json({ success: true, message: 'Account deleted. All data removed.' })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
 module.exports = router
