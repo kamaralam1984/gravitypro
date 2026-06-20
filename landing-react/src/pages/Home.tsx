@@ -12,7 +12,7 @@ export default function Home() {
   const [navScrolled, setNavScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeMapType, setActiveMapType] = useState<'dark' | 'light' | 'satellite' | 'street'>('dark')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const activeTileRef = useRef<L.TileLayer | null>(null)
 
   // Nav scroll effect
