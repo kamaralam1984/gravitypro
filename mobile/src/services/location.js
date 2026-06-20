@@ -2,7 +2,9 @@ import { Platform } from 'react-native'
 import * as Location from 'expo-location'
 
 const LOCATION_TASK_NAME = 'gravity-background-location'
-const TRACCAR_ENDPOINT = 'https://gravity.trackalways.com/telemetry'
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
+const TRACCAR_ENDPOINT = `${API_BASE}/telemetry`
 
 const fetchWithTimeout = (url, opts = {}, ms = 8000) => {
   const controller = new AbortController()
@@ -39,6 +41,23 @@ if (Platform.OS !== 'web') {
           if (res.ok) online = true
         } catch {
           // No internet or Traccar down
+        }
+
+        // Post location to Gravity API for SSE broadcast
+        try {
+          const token = await storage.getItem('auth_token')
+          if (token) {
+            await fetchWithTimeout(`${API_BASE}/api/v1/users/me/location`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token,
+              },
+              body: JSON.stringify({ latitude, longitude, accuracy, battery_level: null }),
+            })
+          }
+        } catch (e) {
+          // Ignore — will retry on next update
         }
 
         if (online) {
@@ -98,7 +117,16 @@ export const getCurrentLocation = async () => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return }
       navigator.geolocation.getCurrentPosition(
-        pos => resolve({ coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude, altitude: 0, accuracy: pos.coords.accuracy, speed: 0, heading: 0 } }),
+        pos => resolve({
+          coords: {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            altitude: 0,
+            accuracy: pos.coords.accuracy,
+            speed: 0,
+            heading: 0,
+          },
+        }),
         err => reject(err),
         { enableHighAccuracy: true, timeout: 10000 }
       )

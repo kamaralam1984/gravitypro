@@ -1,9 +1,7 @@
 import axios from 'axios'
 import { storage } from '../utils/storage'
 
-const BASE_URL = __DEV__
-  ? 'http://192.168.0.197:3021/api/v1'
-  : 'https://gravity.trackalways.com/api/v1'
+const BASE_URL = (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') + '/api/v1'
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -28,36 +26,64 @@ api.interceptors.response.use(
   }
 )
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
+  sendOtp: (phone) => api.post('/auth/send-otp', { phone }),
+  verifyOtp: (phone, otp) => api.post('/auth/verify-otp', { phone, otp }),
+  verifyPhone: (phone, otp) => api.post('/auth/verify-phone', { phone, otp }),
+  registerFree: (data) => api.post('/auth/register-free', data),
   register: (data) => api.post('/auth/register', data),
-  login: (data) => api.post('/auth/login', data),
 }
 
+// ── Users ─────────────────────────────────────────────────────────────────────
 export const userAPI = {
   getMe: () => api.get('/users/me'),
   updateMe: (data) => api.patch('/users/me', data),
-  searchByPhone: (phone) => api.get(`/users/search?phone=${phone}`),
+  getStats: () => api.get('/users/me/stats'),
+  postLocation: (data) => api.post('/users/me/location', data),
+  getLocationHistory: () => api.get('/users/me/location-history'),
 }
 
+// ── Circles ───────────────────────────────────────────────────────────────────
 export const circleAPI = {
-  getAll: () => api.get('/circles'),
+  getMy: () => api.get('/circles/my'),
+  getAll: () => api.get('/circles/my'),
   create: (data) => api.post('/circles', data),
   join: (invite_code) => api.post('/circles/join', { invite_code }),
   getMembers: (circleId) => api.get(`/circles/${circleId}/members`),
+  removeMember: (circleId, userId) => api.delete(`/circles/${circleId}/members/${userId}`),
 }
 
+// ── SOS ───────────────────────────────────────────────────────────────────────
+export const sosAPI = {
+  trigger: (data) => api.post('/sos/trigger', data),
+  getHistory: (circleId) => api.get(`/sos/history?circle_id=${circleId}`),
+  resolve: (sosId) => api.patch(`/sos/${sosId}/resolve`),
+}
+
+// ── Geofences ─────────────────────────────────────────────────────────────────
 export const geofenceAPI = {
   getByCircle: (circleId) => api.get(`/geofences/circle/${circleId}`),
   create: (data) => api.post('/geofences', data),
-  delete: (id) => api.delete(`/geofences/${id}`),
-  getEvents: (circleId) => api.get('/geofences/events/' + circleId),
+  update: (id, data) => api.patch(`/geofences/${id}`, data),
+  remove: (id) => api.delete(`/geofences/${id}`),
+  getEvents: (circleId) => api.get(`/geofences/events/${circleId}`),
 }
 
+// ── Media ─────────────────────────────────────────────────────────────────────
+// Usage:
+//   const { uploadUrl, publicUrl } = await mediaAPI.getAvatarUploadUrl()
+//   await fetch(uploadUrl, { method: 'PUT', body: fileBlob })
+//   await userAPI.updateMe({ avatar_url: publicUrl })
 export const mediaAPI = {
-  presignAvatar: (contentType, fileSize) => api.post('/media/avatar/presign', { contentType, fileSize }),
-  confirmAvatar: (publicUrl) => api.post('/media/avatar/confirm', { publicUrl }),
-  presignCircleIcon: (circleId, contentType, fileSize) => api.post(`/media/circle/${circleId}/icon/presign`, { contentType, fileSize }),
-  confirmCircleIcon: (circleId, publicUrl) => api.post(`/media/circle/${circleId}/icon/confirm`, { publicUrl }),
+  getAvatarUploadUrl: () => api.get('/media/avatar-upload-url'),
+}
+
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+export const subscriptionAPI = {
+  getMe: () => api.get('/subscriptions/me'),
+  cancel: () => api.post('/subscriptions/cancel'),
+  getHistory: () => api.get('/subscriptions/history'),
 }
 
 export default api

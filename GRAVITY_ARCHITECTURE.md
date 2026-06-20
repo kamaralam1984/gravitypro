@@ -1,10 +1,10 @@
 # GRAVITY — Full System Architecture Document
 
 **Product:** Gravity Family Safety Platform  
-**Version:** 1.0  
-**Date:** 19 June 2026  
+**Version:** 2.0  
+**Date:** 20 June 2026  
 **Repository:** github.com/kamaralam1984/gravitypro  
-**Domain:** gravity.trackalways.com  
+**Domain:** gravitypro.kvlbusinesssolutions.com  
 
 ---
 
@@ -18,27 +18,29 @@
 6. [Database Schema](#6-database-schema)
 7. [Database Indexes & Performance](#7-database-indexes--performance)
 8. [Authentication System](#8-authentication-system)
-9. [Real-Time Communication (SSE)](#9-real-time-communication-sse)
-10. [File Storage — Cloudflare R2](#10-file-storage--cloudflare-r2)
-11. [Web Application Architecture](#11-web-application-architecture)
-12. [Mobile Application Architecture](#12-mobile-application-architecture)
-13. [Mobile App Permissions](#13-mobile-app-permissions)
-14. [Push Notifications](#14-push-notifications)
-15. [Geofencing System](#15-geofencing-system)
-16. [Security Model](#16-security-model)
-17. [API Endpoint Reference](#17-api-endpoint-reference)
-18. [API Error Response Format](#18-api-error-response-format)
-19. [API Request & Response Examples](#19-api-request--response-examples)
-20. [Data Flow Diagrams](#20-data-flow-diagrams)
-21. [Third-Party Service Dependencies](#21-third-party-service-dependencies)
-22. [Scalability & Known Limitations](#22-scalability--known-limitations)
-23. [Monitoring & Health Checks](#23-monitoring--health-checks)
-24. [Backup & Disaster Recovery](#24-backup--disaster-recovery)
-25. [Data Privacy & Compliance](#25-data-privacy--compliance)
-26. [Target Markets](#26-target-markets)
-27. [Development Setup Guide](#27-development-setup-guide)
-28. [Environment Configuration](#28-environment-configuration)
-29. [Project File Structure](#29-project-file-structure)
+9. [Payment-Gated Signup Flow](#9-payment-gated-signup-flow)
+10. [Subscription & Payment System](#10-subscription--payment-system)
+11. [Real-Time Communication (SSE)](#11-real-time-communication-sse)
+12. [File Storage — Cloudflare R2](#12-file-storage--cloudflare-r2)
+13. [Web Application Architecture](#13-web-application-architecture)
+14. [Mobile Application Architecture](#14-mobile-application-architecture)
+15. [Mobile App Permissions](#15-mobile-app-permissions)
+16. [Push Notifications](#16-push-notifications)
+17. [Geofencing System](#17-geofencing-system)
+18. [Security Model](#18-security-model)
+19. [API Endpoint Reference](#19-api-endpoint-reference)
+20. [API Error Response Format](#20-api-error-response-format)
+21. [API Request & Response Examples](#21-api-request--response-examples)
+22. [Data Flow Diagrams](#22-data-flow-diagrams)
+23. [Third-Party Service Dependencies](#23-third-party-service-dependencies)
+24. [Scalability & Known Limitations](#24-scalability--known-limitations)
+25. [Monitoring & Health Checks](#25-monitoring--health-checks)
+26. [Backup & Disaster Recovery](#26-backup--disaster-recovery)
+27. [Data Privacy & Compliance](#27-data-privacy--compliance)
+28. [Target Markets](#28-target-markets)
+29. [Development Setup Guide](#29-development-setup-guide)
+30. [Environment Configuration](#30-environment-configuration)
+31. [Project File Structure](#31-project-file-structure)
 
 ---
 
@@ -53,7 +55,9 @@ Gravity is a **family safety and real-time location tracking platform** designed
 | **Live Location Tracking** | Real-time GPS coordinates broadcast to all family members via Server-Sent Events |
 | **SOS Alerts** | One-tap emergency button that instantly notifies all family members via push notification + in-app alert |
 | **Geofencing** | PostGIS-powered geographic zones — automatic entry/exit event logging |
-| **Family Circles** | Invite-code-based family groups; multiple circles per user supported |
+| **Family Circles** | Invite-code-based family groups; child users join via parent-issued invite code (no subscription required) |
+| **Subscription Plans** | Free / Family / Premium plans with Razorpay (India), Stripe (global), M-Pesa (Kenya), PayPal payment gateways |
+| **Payment-Gated Signup** | Account is created only after payment is confirmed; DB is never written on failed/cancelled payments |
 | **Admin Control** | Full administrative panel with user management, system monitoring, and broadcast messaging |
 
 ### Platform Components
@@ -100,10 +104,12 @@ Gravity is a **family safety and real-time location tracking platform** designed
 | **Express.js** | 5.2.x | HTTP server framework |
 | **PostgreSQL** | 15+ | Primary relational database |
 | **PostGIS** | 3.x | Geospatial extension for safe zone geometry |
-| **JWT** | jsonwebtoken | Stateless authentication tokens |
-| **bcrypt** | bcryptjs | Password hashing |
+| **JWT** | jsonwebtoken | Stateless authentication tokens + short-lived phone_token for signup flow |
+| **bcrypt** | bcryptjs | Password hashing (also generates random hashes for OTP-only users) |
 | **Zod** | 3.x | Runtime request schema validation |
 | **express-rate-limit** | 7.x | API rate limiting |
+| **Razorpay** | SDK | India payment gateway |
+| **Stripe** | SDK | Global payment gateway |
 | **CORS** | cors | Cross-origin resource sharing |
 | **dotenv** | 16.x | Environment variable management |
 
@@ -113,10 +119,11 @@ Gravity is a **family safety and real-time location tracking platform** designed
 |---|---|---|
 | **React** | 18.x | UI library |
 | **TypeScript** | 5.x | Type safety |
-| **Vite** | 5.x | Build tool and dev server |
+| **Vite** | 8.x | Build tool and dev server |
 | **CSS Modules** | — | Scoped component styles |
 | **Leaflet.js** | 1.9.x | Interactive maps (4 tile styles) |
 | **react-leaflet** | 4.x | React bindings for Leaflet |
+| **Fullscreen API** | Native | Both ParentPanel and ChildPanel support `requestFullscreen()` |
 
 ### Mobile Application
 
@@ -142,6 +149,10 @@ Gravity is a **family safety and real-time location tracking platform** designed
 | **Cloudflare R2** | S3-compatible object storage for user avatars |
 | **MSG91** | SMS OTP delivery service |
 | **Expo Push API** | Mobile push notification delivery |
+| **Razorpay** | Payment gateway — India (INR) |
+| **Stripe** | Payment gateway — Global (USD/EUR/GBP) |
+| **M-Pesa / PesaPal** | Payment gateways — East Africa (KES/UGX/TZS) |
+| **PayPal** | Payment gateway — Global fallback |
 
 ---
 
@@ -155,7 +166,7 @@ User (Browser/Mobile)
          │ HTTPS (443)
          ▼
   ┌─────────────────┐
-  │  Caddy Server   │  ← gravity.trackalways.com
+  │  Caddy Server   │  ← gravitypro.kvlbusinesssolutions.com
   │  Auto TLS/HTTPS │
   └────────┬────────┘
            │
@@ -177,17 +188,19 @@ User (Browser/Mobile)
   │  5. validate(zodSchema)         │
   └────┬────────────────────────────┘
        │
-  ┌────▼──────────────────────────────────────────┐
-  │               Route Handlers                  │
-  │  /api/v1/auth/*  /api/v1/users/*             │
-  │  /api/v1/circles/* /api/v1/sos/*             │
-  │  /api/v1/geofences/* /api/v1/locations/*     │
-  │  /api/v1/media/* /api/v1/sse/* /api/v1/admin/*│
-  └────┬──────────────────────────────────────────┘
+  ┌────▼─────────────────────────────────────────────────┐
+  │                  Route Handlers                       │
+  │  /api/v1/auth/*         /api/v1/users/*              │
+  │  /api/v1/circles/*      /api/v1/sos/*               │
+  │  /api/v1/geofences/*    /api/v1/locations/*         │
+  │  /api/v1/media/*        /api/v1/sse/*               │
+  │  /api/v1/payments/*     /api/v1/subscriptions/*     │
+  │  /api/v1/admin/*                                     │
+  └────┬─────────────────────────────────────────────────┘
        │
   ┌────▼──────────────────────────────────────────┐
   │            PostgreSQL + PostGIS               │
-  │            (9 tables, spatial queries)        │
+  │            (12 tables, spatial queries)       │
   └───────────────────────────────────────────────┘
 ```
 
@@ -223,10 +236,10 @@ Three processes managed by PM2 via `ecosystem.config.js`:
 ┌────────────────────┬──────────────────────────────────────────────┐
 │ Process Name       │ Details                                       │
 ├────────────────────┼──────────────────────────────────────────────┤
-│ gravity-api        │ Express backend — Port 8002                  │
+│ gravity-api        │ Express backend — Port 8002 (PM2 id=58)      │
 │                    │ Max memory: 500MB, autorestart: true          │
 ├────────────────────┼──────────────────────────────────────────────┤
-│ gravity-web        │ Static file server — Port 8090               │
+│ gravity-web        │ Static file server — Port 8090 (PM2 id=59)   │
 │                    │ Max memory: 200MB, autorestart: true          │
 ├────────────────────┼──────────────────────────────────────────────┤
 │ gravity-traccar    │ Traccar GPS ingestion service                 │
@@ -234,20 +247,31 @@ Three processes managed by PM2 via `ecosystem.config.js`:
 └────────────────────┴──────────────────────────────────────────────┘
 ```
 
-**Commands:**
+**VPS:** 187.127.148.237 | Project path: `/var/www/gravitypro/`
+
+**Deploy commands (run on VPS):**
+```bash
+cd /var/www/gravitypro && git pull origin main
+cd landing-react && npm run build
+pm2 restart 59     # restart web server (id=59)
+pm2 restart 58     # restart API (id=58)
+```
+
+**PM2 commands:**
 ```bash
 pm2 start ecosystem.config.js    # Start all processes
 pm2 reload ecosystem.config.js   # Zero-downtime reload
 pm2 logs gravity-api             # View API logs
 pm2 monit                        # Real-time dashboard
+pm2 restart 59                   # Restart web server by PM2 id
 ```
 
 ### Caddy Reverse Proxy
 
-Caddy handles TLS termination and routing at `gravity.trackalways.com`:
+Caddy handles TLS termination and routing at `gravitypro.kvlbusinesssolutions.com`:
 
 ```
-Request → gravity.trackalways.com
+Request → gravitypro.kvlbusinesssolutions.com
 │
 ├── /api/v1/sse/*   → localhost:3000 (flush_interval: -1 for SSE streaming)
 ├── /telemetry/*    → localhost:8082 (Traccar GPS ingestion)
@@ -286,15 +310,17 @@ app.js
 │   └── express-rate-limit (1000 requests / 15 minutes per IP)
 │
 ├── Route mounting
-│   ├── /api/v1/auth        → routes/auth.js
-│   ├── /api/v1/users       → routes/users.js
-│   ├── /api/v1/circles     → routes/circles.js
-│   ├── /api/v1/sos         → routes/sos.js
-│   ├── /api/v1/geofences   → routes/geofences.js
-│   ├── /api/v1/locations   → routes/locations.js
-│   ├── /api/v1/media       → routes/media.js
-│   ├── /api/v1/sse         → routes/sse.js
-│   └── /api/v1/admin       → routes/admin.js
+│   ├── /api/v1/auth          → routes/auth.js
+│   ├── /api/v1/users         → routes/users.js
+│   ├── /api/v1/circles       → routes/circles.js
+│   ├── /api/v1/sos           → routes/sos.js
+│   ├── /api/v1/geofences     → routes/geofences.js
+│   ├── /api/v1/locations     → routes/locations.js
+│   ├── /api/v1/media         → routes/media.js
+│   ├── /api/v1/sse           → routes/sse.js
+│   ├── /api/v1/payments      → routes/payments.js
+│   ├── /api/v1/subscriptions → routes/subscriptions.js
+│   └── /api/v1/admin         → routes/admin.js
 │
 └── Global error handler
     └── Returns { error: message } JSON on uncaught route errors
@@ -327,21 +353,16 @@ app.js
 Uses `node-postgres` (`pg`) with connection pooling:
 
 ```javascript
-// Pool configuration
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  max: 20,           // max pool size
+  connectionString: process.env.DATABASE_URL,  // Neon PostgreSQL pooled URL
+  max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 })
-
 // All queries use parameterized statements ($1, $2...)
-// No raw string interpolation — prevents SQL injection
 ```
+
+**Database host:** Neon PostgreSQL (cloud-managed, pooled connection via `DATABASE_URL`)
 
 ---
 
@@ -349,91 +370,137 @@ const pool = new Pool({
 
 ### Tables Overview
 
+12 tables total (3 added since initial schema):
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DATABASE SCHEMA                              │
-│                                                                 │
-│  users ─────────────────────────────────────────────────────┐  │
-│  ├── id (UUID PK)                                            │  │
-│  ├── phone (UNIQUE)                                          │  │
-│  ├── email                                                   │  │
-│  ├── name                                                    │  │
-│  ├── password_hash                                           │  │
-│  ├── role (parent/child)                                     │  │
-│  ├── avatar_url                                              │  │
-│  ├── push_token (Expo push token)                            │  │
-│  ├── is_banned (BOOLEAN)                                     │  │
-│  └── created_at                                              │  │
-│                                                              │  │
-│  circles ─────────────────────────────────────────────────┐ │  │
-│  ├── id (UUID PK)                                          │ │  │
-│  ├── name                                                  │ │  │
-│  ├── invite_code (12-char hex, UNIQUE)                     │ │  │
-│  ├── owner_id (FK → users.id)                              │ │  │
-│  └── created_at                                            │ │  │
-│                                                            │ │  │
-│  circle_members ──────────────────────────────────────┐   │ │  │
-│  ├── id (UUID PK)                                      │   │ │  │
-│  ├── circle_id (FK → circles.id)                      ◄───┘ │  │
-│  ├── user_id (FK → users.id) ◄────────────────────────────── ┘  │
-│  ├── role (admin/member)                                        │
-│  └── joined_at                                                  │
-│                                                                 │
-│  phone_otps ──────────────────────────────────────────────────  │
-│  ├── id (UUID PK)                                               │
-│  ├── phone                                                      │
-│  ├── otp (6-digit code)                                         │
-│  ├── expires_at                                                 │
-│  └── used (BOOLEAN)                                             │
-│                                                                 │
-│  device_locations ───────────────────────────────────────────── │
-│  ├── id (UUID PK)                                               │
-│  ├── user_id (FK → users.id)                                    │
-│  ├── latitude (DOUBLE PRECISION)                                │
-│  ├── longitude (DOUBLE PRECISION)                               │
-│  ├── accuracy                                                   │
-│  ├── battery_level                                              │
-│  ├── speed                                                      │
-│  └── recorded_at                                                │
-│                                                                 │
-│  safe_zones (PostGIS) ────────────────────────────────────────  │
-│  ├── id (UUID PK)                                               │
-│  ├── circle_id (FK → circles.id)                               │
-│  ├── name                                                       │
-│  ├── geom (GEOMETRY - polygon circle via ST_Buffer)             │
-│  ├── radius_meters (50–50,000)                                  │
-│  ├── created_by (FK → users.id)                                 │
-│  └── created_at                                                 │
-│                                                                 │
-│  geofence_events ─────────────────────────────────────────────  │
-│  ├── id (UUID PK)                                               │
-│  ├── user_id (FK → users.id)                                    │
-│  ├── safe_zone_id (FK → safe_zones.id)                          │
-│  ├── event_type (entry/exit)                                    │
-│  ├── geom (GEOMETRY - point where event occurred)               │
-│  └── created_at                                                 │
-│                                                                 │
-│  sos_events ───────────────────────────────────────────────────  │
-│  ├── id (UUID PK)                                               │
-│  ├── user_id (FK → users.id)                                    │
-│  ├── circle_id (FK → circles.id)                                │
-│  ├── message (TEXT)                                             │
-│  ├── latitude                                                   │
-│  ├── longitude                                                  │
-│  ├── resolved (BOOLEAN, default false)                          │
-│  └── created_at                                                 │
-│                                                                 │
-│  user_latest_locations (VIEW) ────────────────────────────────  │
-│  └── Materialized view: latest location per user_id            │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                      DATABASE SCHEMA                                │
+│                                                                     │
+│  users ──────────────────────────────────────────────────────────   │
+│  ├── id (UUID PK)                                                   │
+│  ├── phone (UNIQUE, VARCHAR 20)                                     │
+│  ├── name (VARCHAR 100)                                             │
+│  ├── email (UNIQUE, VARCHAR 255)                                    │
+│  ├── password_hash (VARCHAR 255, NOT NULL — random hash for OTP users)│
+│  ├── avatar_url (TEXT)                                              │
+│  ├── push_token (TEXT — Expo push token)                            │
+│  ├── country_code (VARCHAR 5, default 'IN')                         │
+│  ├── account_type ('parent'|'child', default 'parent') ← migration 005│
+│  ├── google_id (TEXT) ← migration 004                              │
+│  ├── current_plan ('free'|'family'|'premium', default 'free') ← 006│
+│  ├── is_banned (BOOLEAN)                                            │
+│  └── created_at / updated_at                                        │
+│                                                                     │
+│  circles ──────────────────────────────────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── name (VARCHAR 100)                                             │
+│  ├── invite_code (VARCHAR 12, UNIQUE)                               │
+│  ├── created_by (FK → users.id)                                     │
+│  └── created_at / updated_at                                        │
+│                                                                     │
+│  circle_members ───────────────────────────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── circle_id (FK → circles.id ON DELETE CASCADE)                 │
+│  ├── user_id (FK → users.id ON DELETE CASCADE)                     │
+│  ├── role ('admin'|'member', default 'member')                      │
+│  ├── joined_at                                                      │
+│  └── UNIQUE(circle_id, user_id)                                     │
+│                                                                     │
+│  phone_otps ───────────────────────────────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── phone (VARCHAR 20)                                             │
+│  ├── code (6-digit string)                                          │
+│  ├── expires_at (TIMESTAMPTZ, 10 min from creation)                 │
+│  └── used (BOOLEAN, default false)                                  │
+│                                                                     │
+│  device_locations (PostGIS) ───────────────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── user_id (FK → users.id ON DELETE CASCADE)                     │
+│  ├── geom (GEOMETRY Point, SRID 4326)                               │
+│  ├── accuracy, speed, bearing, altitude (FLOAT)                     │
+│  ├── battery_level (FLOAT)                                          │
+│  └── recorded_at / created_at                                       │
+│                                                                     │
+│  user_latest_locations (live lookup table) ────────────────────     │
+│  ├── user_id (UUID PK, FK → users.id ON DELETE CASCADE)            │
+│  ├── geom (GEOMETRY Point, SRID 4326)                               │
+│  ├── accuracy, battery_level (FLOAT)                                │
+│  └── updated_at                                                     │
+│                                                                     │
+│  safe_zones (PostGIS) ─────────────────────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── circle_id (FK → circles.id ON DELETE CASCADE)                 │
+│  ├── name (VARCHAR 100)                                             │
+│  ├── geom (GEOMETRY Polygon, SRID 4326 — ST_Buffer circle)          │
+│  ├── radius_meters (FLOAT)                                          │
+│  ├── created_by (FK → users.id)                                     │
+│  └── created_at / updated_at                                        │
+│                                                                     │
+│  geofence_events ──────────────────────────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── user_id (FK → users.id ON DELETE CASCADE)                     │
+│  ├── safe_zone_id (FK → safe_zones.id ON DELETE CASCADE)           │
+│  ├── event_type ('entry'|'exit')                                    │
+│  ├── geom (GEOMETRY Point, SRID 4326 — where event occurred)        │
+│  └── created_at                                                     │
+│                                                                     │
+│  sos_events ───────────────────────────────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── user_id (FK → users.id)                                        │
+│  ├── circle_id (FK → circles.id)                                    │
+│  ├── message (TEXT)                                                 │
+│  ├── latitude / longitude (FLOAT)                                   │
+│  ├── resolved (BOOLEAN, default false)                              │
+│  └── created_at                                                     │
+│                                                                     │
+│  subscription_plans ← migration 006 ──────────────────────────     │
+│  ├── id (TEXT PK: 'free'|'family'|'premium')                        │
+│  ├── display_name (TEXT)                                            │
+│  ├── price_usd, price_inr, price_kes, price_eur, price_gbp          │
+│  ├── max_members, max_circles, history_days (INT)                   │
+│  ├── features (JSONB array)                                         │
+│  └── is_active (BOOLEAN)                                            │
+│                                                                     │
+│  user_subscriptions ← migration 006 ──────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── user_id (FK → users.id ON DELETE CASCADE)                     │
+│  ├── plan_id (TEXT, default 'free')                                 │
+│  ├── status ('active'|'cancelled'|'expired'|'pending')              │
+│  ├── gateway (TEXT — 'razorpay'|'stripe'|'paypal'|'mpesa'|'free')  │
+│  ├── gateway_subscription_id, gateway_customer_id (TEXT)           │
+│  ├── current_period_start / current_period_end (TIMESTAMPTZ)        │
+│  └── cancelled_at / created_at / updated_at                         │
+│                                                                     │
+│  payment_orders ← migration 006 + 007 ────────────────────────     │
+│  ├── id (UUID PK)                                                   │
+│  ├── user_id (UUID NULLABLE FK → users.id) ← 007: made nullable    │
+│  ├── plan_id (TEXT)                                                 │
+│  ├── gateway (TEXT)                                                 │
+│  ├── gateway_order_id / gateway_payment_id (TEXT)                  │
+│  ├── amount / currency (NUMERIC / TEXT)                             │
+│  ├── status ('pending'|'completed'|'failed'|'cancelled')            │
+│  ├── phone (TEXT) ← 007: added for pre-registration tracking        │
+│  ├── metadata (JSONB) ← 007: stores name/email during signup        │
+│  └── created_at / updated_at                                        │
+└─────────────────────────────────────────────────────────────────────┘
 ```
+
+### Database Migrations Applied
+
+| File | Description |
+|---|---|
+| `001_initial.sql` | Core schema: users, circles, circle_members, phone_otps, device_locations, user_latest_locations, safe_zones, geofence_events |
+| `004_add_google_id.sql` | Adds `google_id` column to users for Google OAuth |
+| `005_add_account_type.sql` | Adds `account_type` column ('parent'/'child') to users |
+| `006_subscriptions.sql` | Adds subscription_plans, user_subscriptions, payment_orders; adds `current_plan` to users; seeds plan catalog |
+| `007_anon_payments.sql` | Makes `payment_orders.user_id` nullable; adds `metadata` JSONB and `phone` TEXT columns to payment_orders |
 
 ### PostGIS Spatial Operations
 
 Safe zones are stored as geographic buffer circles:
 
 ```sql
--- Creating a safe zone (150-meter radius around a point)
+-- Creating a safe zone (200-meter radius around a point)
 INSERT INTO safe_zones (circle_id, name, geom, radius_meters, created_by)
 VALUES (
   $1, $2,
@@ -444,12 +511,14 @@ VALUES (
   $radius_meters, $user_id
 )
 
--- Retrieving zone center from geometry
-SELECT
-  ST_X(ST_Centroid(geom)) as center_lng,
-  ST_Y(ST_Centroid(geom)) as center_lat,
-  ST_AsGeoJSON(geom)::json as geometry
-FROM safe_zones
+-- Check if a point is inside any safe zone for a circle
+SELECT sz.id, sz.name
+FROM safe_zones sz
+WHERE sz.circle_id = $circleId
+  AND ST_Within(
+    ST_SetSRID(ST_MakePoint($lng, $lat), 4326),
+    sz.geom
+  )
 ```
 
 All spatial data uses **SRID 4326** (WGS84 — standard GPS coordinate system).
@@ -463,21 +532,27 @@ All spatial data uses **SRID 4326** (WGS84 — standard GPS coordinate system).
 | Table | Column(s) | Index Type | Purpose |
 |---|---|---|---|
 | `users` | `phone` | UNIQUE B-tree | OTP lookup, login |
-| `users` | `email` | B-tree | Google OAuth lookup |
+| `users` | `email` | UNIQUE B-tree | Email uniqueness, Google OAuth lookup |
 | `circles` | `invite_code` | UNIQUE B-tree | Join-by-code lookup |
-| `circle_members` | `(circle_id, user_id)` | Composite B-tree | Membership check (runs on every authenticated request) |
-| `device_locations` | `(user_id, recorded_at DESC)` | B-tree | Location history queries |
+| `circle_members` | `(circle_id, user_id)` | Composite UNIQUE B-tree | Membership check (runs on every authenticated request) |
+| `device_locations` | `user_id` | B-tree | Location history queries |
+| `device_locations` | `geom` | GIST | Spatial queries |
+| `device_locations` | `recorded_at DESC` | B-tree | Latest-first pagination |
+| `safe_zones` | `circle_id` | B-tree | Zone list per circle |
 | `safe_zones` | `geom` | GIST | PostGIS spatial queries (ST_Within) |
-| `geofence_events` | `(safe_zone_id, created_at DESC)` | B-tree | Event log pagination |
-| `sos_events` | `(circle_id, created_at DESC)` | B-tree | SOS history pagination |
+| `geofence_events` | `user_id` | B-tree | Event history per user |
+| `geofence_events` | `created_at DESC` | B-tree | Latest-first pagination |
+| `payment_orders` | `user_id` | B-tree | Order history per user |
+| `payment_orders` | `gateway_order_id` | B-tree | Webhook lookup by gateway reference |
+| `user_subscriptions` | `user_id` | B-tree | Active plan lookup |
 | `phone_otps` | `(phone, used, expires_at)` | Composite B-tree | OTP verification |
 
 ### Query Performance Notes
 
-- **`circle_members` check** runs on every circle-data API call. The composite index `(circle_id, user_id)` makes this an O(log n) lookup even with millions of memberships.
+- **`circle_members` check** runs on every circle-data API call. The composite UNIQUE index on `(circle_id, user_id)` makes this an O(log n) lookup.
 - **PostGIS GIST index** on `safe_zones.geom` is critical — without it, geofence entry/exit detection would do a full table scan on every location update.
-- **`device_locations`** grows unboundedly over time. The Admin Panel "Purge Old Locations" function (`DELETE /admin/purge-locations`) deletes records older than a configurable number of days. Recommended: schedule monthly via cron.
-- **Connection pool** is set to `max: 20` connections. At peak load (20 concurrent DB queries), new requests queue until a connection is free. Increase `max` if DB server has capacity.
+- **`device_locations`** grows unboundedly. The Admin Panel "Purge Old Locations" function deletes records older than a configurable number of days. Recommended: monthly cron.
+- **Connection pool** is set to `max: 20`. At peak load, new requests queue until a connection is free.
 
 ---
 
@@ -489,76 +564,216 @@ All spatial data uses **SRID 4326** (WGS84 — standard GPS coordinate system).
 ┌─────────────────────────────────────────────────────────────┐
 │                  AUTHENTICATION FLOWS                       │
 │                                                             │
-│  1. PHONE OTP (Primary)                                     │
-│     ┌──────────┐    POST /auth/send-otp                    │
-│     │  Client  │ ─────────────────────────► MSG91 SMS      │
-│     │          │    POST /auth/verify-otp                  │
-│     │          │ ──────────────────────────► DB check      │
-│     │          │ ◄────────────────────────── JWT token     │
-│     └──────────┘                                           │
+│  1. PHONE OTP LOGIN (Existing users)                        │
+│     POST /auth/send-otp → MSG91 SMS                         │
+│     POST /auth/verify-otp → DB check → JWT token           │
+│     (Returns 404 if phone not yet registered)              │
 │                                                             │
-│  2. PASSWORD LOGIN (Secondary)                              │
-│     ┌──────────┐    POST /auth/login                       │
-│     │  Client  │    { phone, password }                    │
-│     │          │ ──────────────────────────► bcrypt.compare│
-│     │          │ ◄────────────────────────── JWT token     │
-│     └──────────┘                                           │
+│  2. PHONE OTP SIGNUP (New users — see Section 9)           │
+│     POST /auth/send-otp → MSG91 SMS                         │
+│     POST /auth/verify-phone → phone_token JWT (30min)       │
+│     → Details form (name, email, type, country)             │
+│     → For parents: Plan selection → Payment                 │
+│     → POST /auth/register-free (child or free parent)       │
+│     → POST /auth/register-with-payment (paid parent)        │
 │                                                             │
-│  3. GOOGLE OAUTH (Social)                                   │
-│     ┌──────────┐    POST /auth/google                      │
-│     │  Client  │    { id_token }                           │
-│     │          │ ──────────────────────────► JWT decode    │
-│     │          │                             (no library)  │
-│     │          │ ──────────────────────────► find/create   │
-│     │          │ ◄────────────────────────── JWT token     │
-│     └──────────┘                                           │
+│  3. CLASSIC REGISTER (Legacy, still active)                 │
+│     POST /auth/send-otp                                     │
+│     POST /auth/register { phone, name, otp, account_type }  │
 │                                                             │
-│  4. ADMIN (Separate System)                                 │
-│     ┌──────────┐    POST /admin/auth                       │
-│     │  Admin   │    { password }                           │
-│     │  Browser │ ──────────────────────────► env compare  │
-│     │          │ ◄────────────────────────── admin_token   │
-│     └──────────┘    x-admin-token header on all requests   │
+│  4. GOOGLE OAUTH (Social)                                   │
+│     POST /auth/google { id_token }                          │
+│     → Decode JWT without library                            │
+│     → Find or create user by google_id or email            │
+│     → Return session JWT                                    │
+│                                                             │
+│  5. ADMIN (Separate System)                                 │
+│     POST /admin/auth { password }                           │
+│     → Compare against ADMIN_TOKEN env                       │
+│     → Return admin_token (sent as x-admin-token header)     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### JWT Token Details
+### JWT Token Types
 
 ```javascript
-// Token payload
-{
-  userId: "uuid-string",
-  iat: 1234567890,     // issued at
-  exp: 1234567890,     // expiry (configurable via JWT_EXPIRES_IN)
-}
+// 1. Session token — returned after login or registration
+// Payload: { userId: "uuid" }
+// Storage: localStorage 'gravity_token' (web) / AsyncStorage 'auth_token' (mobile)
+// Expiry: JWT_EXPIRES_IN env (default '7d')
 
-// Signing
-jwt.sign({ userId }, process.env.JWT_SECRET, {
-  expiresIn: process.env.JWT_EXPIRES_IN  // e.g. '7d'
-})
-
-// Storage
-// Web: localStorage key 'gravity_token'
-// Mobile: AsyncStorage key 'auth_token'
-// Admin: localStorage key 'admin_token' (separate)
+// 2. phone_token — short-lived, used ONLY during signup flow
+// Payload: { phone: "+919876543210", type: "phone_verified" }
+// Storage: React state only — never persisted
+// Expiry: 30 minutes
+// Purpose: Proves phone was verified without creating a DB entry yet
 ```
 
 ### OTP Rate Limiting
 
 - Maximum **3 OTP requests per phone number per 10 minutes**
 - OTPs expire after **10 minutes**
-- Each OTP is single-use (marked `used = true` after verification)
-- Fallback: if `MSG91_API_KEY` is not set, OTP is printed to server console (development mode)
+- Each OTP is single-use (marked `used = TRUE` after verification)
+- Old unused OTPs for the same phone are invalidated before issuing a new one
+- Fallback: if `MSG91_AUTH_KEY` is not set, OTP is logged to server console and returned in API response as `dev_otp`
 
 ### Password Security
 
-- Passwords hashed with `bcrypt` (10 salt rounds)
+- Passwords hashed with `bcrypt` (12 salt rounds)
 - `bcrypt.compare()` used for all password verifications
-- Passwords never stored in plaintext or logs
+- **OTP-only users** (most users): a random 32-byte hex string is hashed and stored to satisfy the `password_hash NOT NULL` constraint — the user has no usable password
 
 ---
 
-## 9. Real-Time Communication (SSE)
+## 9. Payment-Gated Signup Flow
+
+### Design Principle
+
+**Zero database entries until payment is confirmed.** If a user cancels payment or if payment fails, no user record is created.
+
+### Flow Diagram
+
+```
+New User (Web Browser)
+        │
+        │ Step 1 — Phone Verification
+        │ POST /auth/send-otp { phone }
+        │ → MSG91 sends OTP SMS (or dev_otp in response if no SMS key)
+        │
+        │ Step 2 — OTP Verification
+        │ POST /auth/verify-phone { phone, otp }
+        │ → Marks OTP used, returns phone_token (30-min JWT, no DB user created)
+        │ → If phone already registered: { already_registered: true } → switch to login
+        │
+        │ Step 3 — Details Form
+        │   name (live validation: ≥2 chars)
+        │   email (live validation: valid format)
+        │   account_type: Parent | Child
+        │   country_code: IN | KE | AE | GB | US | PK | …
+        │ → "Continue" button disabled until name AND email both valid
+        │
+        ├─────────────────────────────────────────────────────────┐
+        │ account_type = 'child'              account_type = 'parent'
+        │                                               │
+        │ Step 4 (SKIPPED for child)          Step 4 — Plan Selection
+        │                                       Free | Family | Premium
+        │                                       ├── Free → doRegisterFree()
+        │                                       ├── Family/Premium →
+        │                                       │   POST /payments/create-order-anon
+        │                                       │   { phone_token, plan, gateway, currency }
+        │                                       │   → Razorpay checkout opens
+        │                                       │   → On success:
+        │                                       │   POST /auth/register-with-payment
+        │                                       │   { phone_token, name, email, ...payment_data }
+        │                                       └── On cancel/fail: nothing in DB
+        │
+        │ POST /auth/register-free             POST /auth/register-free (Free plan)
+        │ { phone_token, name, email,
+        │   account_type: 'child',
+        │   country_code }
+        │
+        ▼
+  User account created in DB
+  Session JWT returned → stored in localStorage
+  Redirect: parent → /parent/panel | child → /child/panel
+```
+
+### Child Account Special Behavior
+
+- Child accounts **do not need a subscription**
+- Child accounts **skip the plan selection step entirely**
+- A child joins a family circle by entering a **parent-issued invite code** from within the ChildPanel
+- The invite code flow: ChildPanel → Settings → Join Circle → enter 12-character invite code
+
+### Endpoints Used in Signup Flow
+
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/auth/send-otp` | POST | None | Send OTP to phone |
+| `/auth/verify-phone` | POST | None | Verify OTP → return phone_token (no DB write) |
+| `/payments/create-order-anon` | POST | phone_token in body | Create Razorpay order before user exists |
+| `/auth/register-free` | POST | phone_token in body | Create free/child account |
+| `/auth/register-with-payment` | POST | phone_token in body | Create account + activate subscription atomically |
+
+---
+
+## 10. Subscription & Payment System
+
+### Plans
+
+| Plan | Price (INR) | Price (USD) | Price (KES) | Members | Circles | History |
+|---|---|---|---|---|---|---|
+| **Free** | ₹0 | $0 | 0 | 4 | 1 | 1 day |
+| **Family** | ₹299/mo | $5.99/mo | KES 599/mo | 6 | 3 | 7 days |
+| **Premium** | ₹499/mo | $9.99/mo | KES 999/mo | 15 | 10 | 30 days |
+
+Multi-currency support: USD, INR, KES, EUR, GBP.
+
+### Payment Gateways
+
+| Gateway | Region | Currency | Method |
+|---|---|---|---|
+| Razorpay | India | INR | Credit card, UPI, Net banking, Wallets |
+| Stripe | Global | USD, EUR, GBP | Credit/debit card |
+| PayPal | Global | USD | PayPal account |
+| M-Pesa | Kenya, Tanzania | KES, TZS | Mobile money |
+| PesaPal | East Africa | KES, UGX, TZS | Mobile money + card |
+
+### Subscription Lifecycle
+
+```
+New User (paid signup)
+     │
+     ├── POST /payments/create-order-anon → payment_orders row (user_id=NULL)
+     ├── Razorpay payment succeeds
+     ├── POST /auth/register-with-payment
+     │    ├── Creates users row
+     │    ├── Creates user_subscriptions row (status='active', period end = +1 month)
+     │    ├── Updates payment_orders.status='completed', user_id=new user UUID
+     │    └── Sets users.current_plan = plan_id
+     │
+Existing User (upgrade)
+     ├── POST /payments/create-order (authenticate middleware required)
+     ├── POST /payments/verify → activates new subscription
+     │    ├── Cancels existing active subscription
+     │    ├── Inserts new user_subscriptions row
+     │    └── Updates users.current_plan
+     │
+Webhook (async confirmation)
+     ├── POST /payments/webhook/razorpay
+     ├── POST /payments/webhook/stripe
+     ├── POST /payments/callback/mpesa
+     └── POST /payments/callback/pesapal
+          └── All call activateSub() internally
+```
+
+### Payment Routes
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/payments/plans` | None | List all active plans with prices |
+| GET | `/payments/gateways?currency=INR` | None | Available gateways for currency |
+| POST | `/payments/create-order` | Bearer | Create order for logged-in user |
+| POST | `/payments/create-order-anon` | phone_token in body | Create order before account exists |
+| POST | `/payments/verify` | Bearer | Verify payment + activate subscription |
+| GET | `/payments/status/:orderId` | Bearer | Poll order status (M-Pesa) |
+| POST | `/payments/webhook/razorpay` | Webhook sig | Razorpay async webhook |
+| POST | `/payments/webhook/stripe` | Webhook sig | Stripe async webhook |
+| POST | `/payments/webhook/paypal` | Webhook sig | PayPal async webhook |
+| POST | `/payments/callback/mpesa` | None | M-Pesa async callback |
+| POST | `/payments/callback/pesapal` | None | PesaPal async callback |
+
+### Subscription Routes
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/subscriptions/me` | Bearer | Get active subscription details |
+| POST | `/subscriptions/cancel` | Bearer | Cancel active subscription |
+| GET | `/subscriptions/history` | Bearer | Payment order history |
+
+---
+
+## 11. Real-Time Communication (SSE)
 
 ### Server-Sent Events Architecture
 
@@ -624,8 +839,8 @@ Mobile/Web Client
     │ POST /api/v1/locations/update { lat, lng, battery }
     ▼
 Express Route Handler
-    │ UPDATE device_locations (persist to DB)
-    │ UPDATE user_latest_locations (upsert)
+    │ INSERT device_locations (persist to DB)
+    │ UPSERT user_latest_locations
     ▼
 broadcastToCircle(circleId, {
     type: 'location_update',
@@ -638,7 +853,7 @@ broadcastToCircle(circleId, {
 
 ---
 
-## 10. File Storage — Cloudflare R2
+## 12. File Storage — Cloudflare R2
 
 ### Avatar Upload Flow (3-Step Presigned Process)
 
@@ -647,23 +862,20 @@ Client                          Express API                   Cloudflare R2
   │                                  │                              │
   │  1. GET /api/v1/media/avatar-    │                              │
   │     upload-url                   │                              │
-  │ ─────────────────────────────── ► │                              │
+  │ ────────────────────────────── ► │                              │
   │                                  │  Generate presigned PUT URL  │
   │                                  │ ─────────────────────────── ► │
   │                                  │ ◄─────────────────────────── │
   │ ◄─────────────────────────────── │  { uploadUrl, publicUrl }    │
-  │  { uploadUrl, publicUrl }        │                              │
   │                                  │                              │
   │  2. PUT <uploadUrl>              │                              │
   │     Body: image file             │                              │
-  │ ────────────────────────────────────────────────────────────── ► │
-  │                                  │  File stored in R2 bucket    │
-  │ ◄────────────────────────────────────────────────────────────── │
+  │ ─────────────────────────────────────────────────────────────── ► │
+  │ ◄─────────────────────────────────────────────────────────────── │
   │                                  │                              │
   │  3. PATCH /api/v1/users/me       │                              │
   │     { avatar_url: publicUrl }    │                              │
-  │ ─────────────────────────────── ► │                              │
-  │                                  │  UPDATE users SET avatar_url │
+  │ ────────────────────────────── ► │  UPDATE users SET avatar_url │
   │ ◄─────────────────────────────── │  { user: { avatar_url } }   │
 ```
 
@@ -674,11 +886,10 @@ Client                          Express API                   Cloudflare R2
 - Access credentials: `CLOUDFLARE_R2_ACCESS_KEY_ID` + `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
 - Public URL prefix: `CLOUDFLARE_R2_PUBLIC_URL`
 - Files are publicly readable once uploaded
-- No file size limit enforced at API level (enforced by client)
 
 ---
 
-## 11. Web Application Architecture
+## 13. Web Application Architecture
 
 ### Application Entry
 
@@ -686,22 +897,68 @@ Client                          Express API                   Cloudflare R2
 landing-react/
 ├── index.html          ← Vite entry point
 ├── server.cjs          ← Node.js static file server (Port 8090)
-│                          Serves /dist, proxies /api/* to :8002
+│                          Serves /dist, SPA fallback for all routes
 └── src/
-    ├── main.tsx        ← React root, React Router setup
+    ├── main.tsx        ← React root, ErrorBoundary, window.onerror handler
     └── pages/          ← All page components
 ```
 
-### Routing Structure
+### Routing Structure (App.tsx)
 
 ```
 / (root)
-├── /                  → Home.tsx      (Landing page)
-├── /login             → Login.tsx     (Phone OTP login)
-├── /admin/login       → AdminLogin.tsx
-├── /parent/panel      → ParentPanel.tsx  (Auth-guarded)
-├── /child/panel       → ChildPanel.tsx   (Auth-guarded)
-└── /admin/panel       → AdminPanel.tsx   (Admin auth-guarded)
+├── /                   → Home.tsx           (Landing page — simplified)
+├── /login              → Login.tsx          (Multi-step signup + login tabs)
+├── /pricing            → Pricing.tsx        (Plan comparison page)
+├── /checkout           → Checkout.tsx       (Checkout flow)
+├── /terms              → Terms.tsx          (Terms of service)
+├── /privacy            → Privacy.tsx        (Privacy policy)
+├── /share              → Share.tsx          (Share/referral page)
+├── /parent             → Navigate → /parent/panel
+├── /parent/panel       → ParentPanel.tsx    (Auth-guarded)
+├── /parent-panel       → Navigate → /parent/panel
+├── /child              → Navigate → /child/panel
+├── /child/panel        → ChildPanel.tsx     (Auth-guarded)
+├── /child-panel        → Navigate → /child/panel
+├── /admin              → Navigate → /admin/login
+├── /admin/login        → AdminLogin.tsx
+├── /admin/panel        → AdminPanel.tsx     (Admin auth-guarded)
+└── *                   → NotFound.tsx
+```
+
+**Removed pages** (deleted from codebase): `Parent.tsx`, `Parent.module.css`, `Child.tsx`, `Child.module.css`
+
+### Login.tsx — Multi-Step Signup & Login
+
+```
+Login.tsx (tab switcher)
+│
+├── Tab: "Sign In"
+│   └── phone → OTP → POST /auth/verify-otp → redirect by account_type
+│
+└── Tab: "Create Account" (4 steps)
+    ├── Step 1: Phone input → POST /auth/send-otp
+    │   └── dev_otp auto-fills OTP boxes + yellow banner shown if no SMS
+    │
+    ├── Step 2: OTP entry → POST /auth/verify-phone
+    │   └── If already_registered → switch to Sign In tab
+    │
+    ├── Step 3: Details form
+    │   ├── Name (live: ✓ green / ✗ red, min 2 chars)
+    │   ├── Email (live: ✓ green / ✗ red, format validated)
+    │   ├── Account type toggle: Parent | Child
+    │   └── Country dropdown: IN | KE | AE | GB | US | PK…
+    │       "Continue" button DISABLED until name AND email valid
+    │       For child: button says "Create Account →"
+    │       For parent: button says "Continue to Plan →"
+    │
+    ├── Step 4 (Parent only — child skips directly to register-free)
+    │   ├── Free plan card → POST /auth/register-free
+    │   ├── Family plan card → Razorpay → POST /auth/register-with-payment
+    │   └── Premium plan card → Razorpay → POST /auth/register-with-payment
+    │
+    └── On success → localStorage.setItem('gravity_token', token)
+                   → redirect to /parent/panel or /child/panel
 ```
 
 ### Parent Panel — Architecture
@@ -716,8 +973,20 @@ ParentPanel.tsx
 │   ├── safeZones[]        — all zones for this circle
 │   ├── allCircles[]       — multi-circle support (switcher UI)
 │   ├── circleId           — active circle UUID
+│   ├── isFullscreen       — fullscreen toggle state
 │   ├── showHistory        — location history overlay
 │   └── historyPoints[]    — GPS trail points (last 50)
+│
+├── Layout (simplified — NO phone frame)
+│   ├── Header: GRAVITY logo | fullscreen button (green) | logout button (red)
+│   ├── Content area (full-width, min-height: 100vh)
+│   └── Bottom tab bar: Map | Family | Alerts | Geofence | Settings
+│
+├── Fullscreen
+│   ├── toggleFullscreen() → document.documentElement.requestFullscreen()
+│   │                         / document.exitFullscreen()
+│   ├── Listens: document.addEventListener('fullscreenchange', ...)
+│   └── SVG expand/compress icon toggles based on isFullscreen state
 │
 ├── Real-time (SSE)
 │   └── EventSource('/api/v1/sse/stream?token=...')
@@ -734,20 +1003,37 @@ ParentPanel.tsx
 │   └── Multi-circle switcher tabs (shown if >1 circle)
 │
 ├── Family Tab → member cards with battery, status, last-seen
+│   └── Uses .reveal { opacity: 1 } — always visible (not animated)
 ├── Alerts Tab → SOS + geofence events feed with real-time updates
 ├── Geofence Tab → safe zone list + create/edit/delete modals
-└── Settings Tab → avatar upload (R2), name edit, logout
+└── Settings Tab → avatar upload (R2), name edit, subscription info, logout
 ```
 
 ### Child Panel — Architecture
 
 ```
 ChildPanel.tsx
-├── 6 tabs: home | map | sos | family | alerts | profile
+├── State
+│   ├── activeTab: 'home' | 'map' | 'sos' | 'family' | 'alerts' | 'profile'
+│   ├── todayDistance, todaySafeZones, todayCheckins — stats from /users/me/stats
+│   └── isFullscreen — fullscreen toggle state
 │
-├── Home Tab → stats overview, SOS shortcut
+├── Layout (simplified — NO phone frame)
+│   ├── Header: GRAVITY logo | fullscreen button (green) | logout button (red)
+│   ├── Content area (full-width, min-height: 100vh)
+│   └── Bottom tab bar: Home | Map | SOS | Family | Alerts | Profile
+│
+├── Stats Keys (fixed from backend)
+│   ├── distance  (was: distance_km)
+│   ├── safeZones (was: safe_zones_visited)
+│   └── checkins  (was: family_checkins)
+│   Fallback: s.distance ?? s.distance_km ?? 0
+│
+├── Fullscreen — same implementation as ParentPanel
+│
+├── Home Tab → stats overview (distance, safe zones, check-ins)
 ├── Map Tab  → Leaflet map, own location + family positions
-├── SOS Tab  → Large SOS button → POST /sos/trigger → SSE broadcast
+├── SOS Tab  → Large red SOS button → POST /sos/trigger → SSE broadcast
 ├── Family Tab → circle members list
 ├── Alerts Tab → All / Geofence / SOS filter chips
 └── Profile Tab → avatar upload, name/email/phone display, edit, logout
@@ -759,7 +1045,7 @@ ChildPanel.tsx
 AdminPanel.tsx (1530+ lines)
 ├── Dual View Mode System
 │   ├── Desktop Mode (default): 240px sidebar + full-width content
-│   └── Mobile Mode: phone-frame (max 393px) + bottom nav
+│   └── Mobile Mode: max 393px + bottom nav
 │   └── Toggled via localStorage key 'admin_view_mode'
 │
 ├── 7 Tabs
@@ -779,6 +1065,19 @@ AdminPanel.tsx (1530+ lines)
     ├── Mobile View toggle button
     └── Sign Out button
 ```
+
+### Home.tsx — Landing Page (Simplified)
+
+The landing page was simplified from ~1446 lines to ~868 lines. Removed sections:
+- Testimonials
+- Stats bar
+- How-it-works section
+- Screenshots section
+- Countries/global reach section
+- Download app section
+- Demo family characters: Pinky and Grand Mom removed from hero strip, map markers, and member list
+
+Remaining sections: Navbar + Hero (with family avatar strip and live map demo) + 3 Feature cards + 3 Pricing cards + Footer.
 
 ### CSS Design System
 
@@ -805,7 +1104,7 @@ AdminPanel.tsx (1530+ lines)
 
 ---
 
-## 12. Mobile Application Architecture
+## 14. Mobile Application Architecture
 
 ### App Structure
 
@@ -846,11 +1145,9 @@ Tab Bar (5 Tabs)
 
 Tab Bar Style:
 - Position: absolute (floats over content)
-- Background: iOS → BlurView (blur effect) | Android → semi-opaque dark
-- Border top: green (Colors.border)
+- Background: iOS → BlurView | Android → semi-opaque dark
 - Active icon: Ionicons solid + green tint
 - Inactive icon: Ionicons outline + muted gray
-- Active icon background: glass highlight square
 ```
 
 ### MapScreen Architecture
@@ -875,11 +1172,6 @@ MapScreen.jsx (781 lines)
 │   ├── Own location: green animated pulsing dot (Animated.loop)
 │   └── Family markers: circular avatar with initials + name label
 │
-├── Interactions
-│   ├── Tap family marker → slide-up info card
-│   │   └── Shows: name, role, battery %, last-seen timestamp
-│   └── SOS FAB (bottom-right) → confirm dialog → POST /sos/trigger
-│
 └── SOS Trigger
     POST /api/v1/sos/trigger { circleId, message, lat, lng }
     → Server SSE broadcast to all members
@@ -891,20 +1183,14 @@ MapScreen.jsx (781 lines)
 #### `api.js` — API Client
 
 ```javascript
-// Base URL from environment
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://gravity.trackalways.com'
-
-// Auth token stored in AsyncStorage
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
 const getToken = () => AsyncStorage.getItem('auth_token')
-
-// All API methods return { data } or throw error
-// Methods cover: auth, users, circles, sos, geofences, locations, media
+// Methods: auth, users, circles, sos, geofences, locations, media, subscriptions
 ```
 
 #### `location.js` — Background Location
 
 ```javascript
-// Permissions: foreground (always) + background (when-in-use)
 // Update interval: 30 seconds
 // Accuracy: LocationAccuracy.High
 // Distance filter: 10 meters (only sends if moved >10m)
@@ -914,12 +1200,9 @@ const getToken = () => AsyncStorage.getItem('auth_token')
 #### `notifications.js` — Push Setup
 
 ```javascript
-// On app launch:
-// 1. Request notification permissions
-// 2. Get Expo Push Token
-// 3. POST /api/v1/users/me/push-token { push_token }
-// 4. Listen for incoming notifications (foreground)
-// 5. Handle notification tap (background/killed)
+// On login: request permissions → get Expo push token
+// POST /api/v1/users/me/push-token { push_token }
+// Token stored in users.push_token column
 ```
 
 #### `offlineQueue.js` — Connectivity Resilience
@@ -928,96 +1211,61 @@ const getToken = () => AsyncStorage.getItem('auth_token')
 // Queue location updates when offline
 // Retry on reconnect (NetInfo listener)
 // Max queue size: 100 entries
-// Each entry: { endpoint, payload, timestamp }
 ```
 
 ---
 
-## 13. Mobile App Permissions
+## 15. Mobile App Permissions
 
-The Expo app declares the following device permissions in `app.json`. These are shown to users during installation or at first use.
+### Android Permissions
 
-### Android Permissions (`AndroidManifest.xml` via Expo)
+| Permission | Purpose |
+|---|---|
+| `ACCESS_FINE_LOCATION` | GPS tracking (high accuracy) |
+| `ACCESS_COARSE_LOCATION` | Approximate location fallback |
+| `ACCESS_BACKGROUND_LOCATION` | Location updates when app backgrounded |
+| `RECEIVE_BOOT_COMPLETED` | Restart location service after reboot |
+| `VIBRATE` | Vibrate on SOS alert received |
+| `POST_NOTIFICATIONS` | Show push notifications (Android 13+) |
 
-| Permission | When Requested | Purpose |
-|---|---|---|
-| `ACCESS_FINE_LOCATION` | On Map screen first open | GPS tracking (high accuracy) |
-| `ACCESS_COARSE_LOCATION` | Fallback if fine denied | Approximate location |
-| `ACCESS_BACKGROUND_LOCATION` | After fine location granted | Sends location when app is in background |
-| `RECEIVE_BOOT_COMPLETED` | Install time | Restart location service after device reboot |
-| `VIBRATE` | Runtime | Vibrate on SOS alert received |
-| `POST_NOTIFICATIONS` | Android 13+ runtime | Show push notifications |
+### iOS Permissions
 
-### iOS Permissions (`Info.plist` via Expo)
-
-| Permission Key | Shown Text | Purpose |
-|---|---|---|
-| `NSLocationWhenInUseUsageDescription` | "Gravity needs your location to share with family members" | Map screen |
-| `NSLocationAlwaysAndWhenInUseUsageDescription` | "Allow background location to keep family updated even when app is closed" | Background tracking |
-| `NSLocationAlwaysUsageDescription` | Same as above | iOS 10 compatibility |
-
-### Permission Request Flow
-
-```
-App opens for first time
-        │
-        ├── Map Screen → requestForegroundPermissionsAsync()
-        │   ├── Granted → start location watching
-        │   └── Denied  → show "Location required" message, limit features
-        │
-        ├── On login → requestPermissionsAsync() (notifications)
-        │   ├── Granted → register Expo push token with backend
-        │   └── Denied  → SOS push alerts will not work (warn user)
-        │
-        └── Background location (Android only)
-            └── requestBackgroundPermissionsAsync()
-                ├── Granted → location updates when app backgrounded
-                └── Denied  → location only updates when app is open
-```
+| Key | Purpose |
+|---|---|
+| `NSLocationWhenInUseUsageDescription` | Map screen location sharing |
+| `NSLocationAlwaysAndWhenInUseUsageDescription` | Background tracking |
+| `NSLocationAlwaysUsageDescription` | iOS 10 compatibility |
 
 ---
 
-## 14. Push Notifications
+## 16. Push Notifications
 
 ### Expo Push Notification Flow
 
 ```
 Family Member (Mobile)
-    │ SOS triggered on device
     │ POST /api/v1/sos/trigger { circleId, message, lat, lng }
     ▼
 Express SOS Route Handler
     │ 1. INSERT INTO sos_events
-    │ 2. broadcastToCircle() → SSE to all web/mobile clients
+    │ 2. broadcastToCircle() → SSE to all open connections
     │ 3. SELECT push_token FROM users WHERE id IN (circle members)
-    │ 4. Filter: tokens must start with 'ExponentPushToken['
+    │ 4. Filter tokens starting with 'ExponentPushToken['
     ▼
 Expo Push API (https://exp.host/--/api/v2/push/send)
-    │ Chunked requests (max 100 tokens per request)
-    │ Payload: { to, title, body, data: { type: 'sos', circleId } }
+    │ Chunked: max 100 tokens per request
+    │ { to, title: '🚨 SOS Alert', body, data: { type, circleId } }
     ▼
-Apple APNs / Google FCM
-    │
-    ▼
-Family Members' Devices
-    └── Push notification appears even if app is in background/closed
+Apple APNs / Google FCM → Device notification
 ```
-
-### Push Token Registration
-
-On every app login or startup, the mobile app:
-1. Calls `Notifications.getExpoPushTokenAsync()`
-2. POSTs the token to `PATCH /api/v1/users/me/push-token`
-3. Token stored in `users.push_token` column
 
 ---
 
-## 15. Geofencing System
+## 17. Geofencing System
 
 ### Zone Creation
 
 ```sql
--- Zone stored as a geographic buffer circle
 INSERT INTO safe_zones (circle_id, name, geom, radius_meters, created_by)
 VALUES ($circle_id, $name,
   ST_Buffer(
@@ -1031,21 +1279,10 @@ VALUES ($circle_id, $name,
 ### Entry/Exit Detection
 
 When a device posts a location update:
-1. Backend checks if the new position intersects any safe zones in the user's circle
+1. Backend checks if the new position intersects any safe zones in the user's circle (`ST_Within`)
 2. Compares with previous position's zone membership
 3. If zone membership changed → INSERT into `geofence_events`
 4. Broadcast geofence event via SSE to all circle members
-
-```sql
--- Check if point is inside any safe zone
-SELECT sz.id, sz.name
-FROM safe_zones sz
-WHERE sz.circle_id = $circleId
-  AND ST_Within(
-    ST_SetSRID(ST_MakePoint($lng, $lat), 4326),
-    sz.geom
-  )
-```
 
 ### Geofence API
 
@@ -1059,7 +1296,7 @@ WHERE sz.circle_id = $circleId
 
 ---
 
-## 16. Security Model
+## 18. Security Model
 
 ### Defense Layers
 
@@ -1075,15 +1312,16 @@ Layer 2: Network Controls
 └── CORS: Configured per environment
 
 Layer 3: Authentication
-├── JWT with configurable expiry (default 7 days)
+├── Session JWT with configurable expiry (default 7 days)
+├── phone_token JWT (30-min, type-checked, signup use only)
 ├── JWT_SECRET from environment (never hardcoded)
 ├── Separate admin token (x-admin-token header)
-├── bcrypt password hashing (10 rounds)
+├── bcrypt password hashing (12 rounds)
 └── Google OAuth: id_token decoded without external library
 
 Layer 4: Authorization
 ├── All user routes require authenticate() middleware
-├── Circle data access: circle_members table checked on every query
+├── Circle data access: circle_members checked on every query
 ├── Admin routes: separate x-admin-token header check
 └── Geofence/zone mutations: role checked (admin vs member)
 
@@ -1093,26 +1331,24 @@ Layer 5: Data Validation
 ├── Parameterized SQL queries (no string interpolation)
 └── Number range checks (radius: 50–50,000 meters)
 
-Layer 6: Storage
+Layer 6: Payment Security
+├── phone_token type must equal 'phone_verified' for anon orders
+├── Razorpay HMAC-SHA256 signature verified before account creation
+├── payment_orders.user_id stays NULL until payment confirmed
+└── Zero DB entries on failed/cancelled payments
+
+Layer 7: Storage
 ├── Passwords: bcrypt hashed, never logged
-├── OTPs: single-use, time-limited, stored hashed
+├── OTPs: single-use, time-limited
 ├── Avatar files: uploaded directly to R2 (never through API server)
-└── Push tokens: stored per-user, not exposed in responses
+└── Push tokens: stored per-user, not exposed in API responses
 ```
-
-### Admin Security
-
-The admin panel uses a completely separate authentication system:
-- No JWT; uses a static `ADMIN_TOKEN` from environment
-- Sent as `x-admin-token` header on every admin API request
-- Separate localStorage key (`admin_token`) from user tokens
-- Admin panel accessible at `/admin/panel` (separate route)
 
 ---
 
-## 17. API Endpoint Reference
+## 19. API Endpoint Reference
 
-**Base URL:** `https://gravity.trackalways.com/api/v1`  
+**Base URL:** `https://gravitypro.kvlbusinesssolutions.com/api/v1`  
 **Auth:** All user endpoints require `Authorization: Bearer <jwt_token>` header  
 **Admin Auth:** Admin endpoints require `x-admin-token: <admin_token>` header
 
@@ -1121,22 +1357,22 @@ The admin panel uses a completely separate authentication system:
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/auth/send-otp` | None | Send OTP to phone (MSG91) |
-| POST | `/auth/verify-otp` | None | Verify OTP → return JWT |
-| POST | `/auth/register` | None | Register new user with OTP |
-| POST | `/auth/login` | None | Login with phone + password |
-| POST | `/auth/google` | None | Login with Google id_token |
-| POST | `/auth/refresh` | Bearer | Refresh JWT token |
+| POST | `/auth/verify-otp` | None | Verify OTP → return JWT (login for existing users) |
+| POST | `/auth/verify-phone` | None | Verify OTP → return phone_token (signup step 2) |
+| POST | `/auth/register` | None | Classic register with OTP |
+| POST | `/auth/register-free` | phone_token in body | Create free/child account post-OTP verification |
+| POST | `/auth/register-with-payment` | phone_token in body | Create account + activate subscription atomically |
+| POST | `/auth/google` | None | Login/register with Google id_token |
 
 ### Users — `/users`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/users/me` | Bearer | Get own profile |
-| PATCH | `/users/me` | Bearer | Update name / avatar_url |
-| POST | `/users/me/location` | Bearer | Post current GPS location |
+| PATCH | `/users/me` | Bearer | Update name / email / push_token |
+| POST | `/users/me/location` | Bearer | Post current GPS location + SSE broadcast |
 | POST | `/users/me/battery` | Bearer | Post battery level |
-| POST | `/users/me/push-token` | Bearer | Register Expo push token |
-| GET | `/users/me/stats` | Bearer | Get personal stats |
+| GET | `/users/me/stats` | Bearer | Get today's stats { distance, safeZones, checkins } |
 | GET | `/users/me/location-history` | Bearer | Get last N location points |
 
 ### Circles — `/circles`
@@ -1171,7 +1407,7 @@ The admin panel uses a completely separate authentication system:
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/locations/update` | Bearer | Post location + trigger SSE broadcast |
+| POST | `/locations/update` | Bearer | Post location + SSE broadcast |
 | GET | `/locations/circle/:circleId` | Bearer | Get latest location for all members |
 
 ### Media — `/media`
@@ -1184,7 +1420,31 @@ The admin panel uses a completely separate authentication system:
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/sse/stream` | Bearer token or `?token=` | Open SSE stream |
+| GET | `/sse/stream` | Bearer OR `?token=` | Open SSE stream |
+
+### Payments — `/payments`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/payments/plans` | None | List active plans with multi-currency prices |
+| GET | `/payments/gateways` | None | Available gateways for currency |
+| POST | `/payments/create-order` | Bearer | Create order for logged-in user |
+| POST | `/payments/create-order-anon` | phone_token in body | Create order before account exists |
+| POST | `/payments/verify` | Bearer | Verify payment + activate subscription |
+| GET | `/payments/status/:orderId` | Bearer | Poll order status (M-Pesa) |
+| POST | `/payments/webhook/razorpay` | Sig | Razorpay webhook |
+| POST | `/payments/webhook/stripe` | Sig | Stripe webhook |
+| POST | `/payments/webhook/paypal` | None | PayPal webhook |
+| POST | `/payments/callback/mpesa` | None | M-Pesa callback |
+| POST | `/payments/callback/pesapal` | None | PesaPal callback |
+
+### Subscriptions — `/subscriptions`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/subscriptions/me` | Bearer | Active subscription with plan details |
+| POST | `/subscriptions/cancel` | Bearer | Cancel active subscription |
+| GET | `/subscriptions/history` | Bearer | Payment order history (last 20) |
 
 ### Admin — `/admin`
 
@@ -1209,77 +1469,31 @@ The admin panel uses a completely separate authentication system:
 
 ---
 
-## 18. API Error Response Format
+## 20. API Error Response Format
 
-All error responses from the API follow a consistent JSON structure:
+All error responses follow a consistent JSON structure:
 
 ```json
-{
-  "error": "Human-readable error message"
-}
+{ "error": "Human-readable error message" }
 ```
 
-### HTTP Status Codes Used
+### HTTP Status Codes
 
 | Code | Meaning | When Returned |
 |---|---|---|
 | `200 OK` | Success | GET / PATCH / DELETE success |
-| `201 Created` | Resource created | POST success (new user, circle, zone, etc.) |
-| `400 Bad Request` | Validation failed | Zod schema mismatch, invalid UUID, missing required field |
-| `401 Unauthorized` | Auth required | Missing token, expired token, wrong admin password |
-| `403 Forbidden` | Access denied | User not a member of this circle, insufficient role |
-| `404 Not Found` | Resource missing | User/circle/zone ID does not exist |
-| `429 Too Many Requests` | Rate limit hit | >1000 requests/15 min (IP) or >3 OTPs/10 min (phone) |
-| `500 Internal Server Error` | Server error | Unhandled DB errors, unexpected exceptions |
-
-### Validation Error Example (400)
-
-When Zod validation fails, the error message lists which fields failed:
-
-```json
-{
-  "error": "Validation failed",
-  "details": [
-    { "field": "radius_meters", "message": "Number must be at least 50" },
-    { "field": "circle_id", "message": "Invalid uuid" }
-  ]
-}
-```
-
-### Success Response Examples
-
-```json
-// GET /api/v1/users/me
-{
-  "user": {
-    "id": "a3f9c1d2-...",
-    "name": "Rahul Sharma",
-    "phone": "+919876543210",
-    "email": "rahul@gmail.com",
-    "role": "parent",
-    "avatar_url": "https://pub-xxx.r2.dev/avatars/a3f9c1d2.jpg",
-    "is_banned": false,
-    "created_at": "2026-01-15T10:30:00Z"
-  }
-}
-
-// POST /api/v1/sos/trigger
-{
-  "sos": {
-    "id": "b7e2a8f1-...",
-    "circle_id": "c4d9e3f2-...",
-    "message": "Help needed!",
-    "latitude": 28.6139,
-    "longitude": 77.2090,
-    "resolved": false,
-    "created_at": "2026-06-19T14:22:11Z"
-  }
-}
-```
+| `201 Created` | Resource created | POST success |
+| `400 Bad Request` | Validation failed | Zod mismatch, invalid UUID, missing field |
+| `401 Unauthorized` | Auth required | Missing token, expired token, invalid phone_token |
+| `403 Forbidden` | Access denied | User not a circle member, insufficient role |
+| `404 Not Found` | Resource missing | User / circle / zone ID not found |
+| `409 Conflict` | Duplicate | Phone already registered |
+| `429 Too Many Requests` | Rate limit | >1000 req/15min or >3 OTPs/10min |
+| `500 Internal Server Error` | Server error | Unhandled DB errors |
 
 ---
 
-## 19. API Request & Response Examples
+## 21. API Request & Response Examples
 
 ### Send OTP
 
@@ -1289,252 +1503,231 @@ Content-Type: application/json
 
 { "phone": "+919876543210" }
 ```
-
 ```json
-{ "message": "OTP sent successfully" }
+{ "success": true, "sms_sent": true }
+```
+```json
+{ "success": true, "sms_sent": false, "dev_otp": "847291" }
 ```
 
-### Verify OTP + Get JWT
+### Verify Phone (Signup Step 2)
 
 ```http
-POST /api/v1/auth/verify-otp
+POST /api/v1/auth/verify-phone
 Content-Type: application/json
 
 { "phone": "+919876543210", "otp": "847291" }
 ```
-
 ```json
-{
-  "verified": true,
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": { "id": "...", "name": "Rahul", "role": "parent" }
-}
+{ "verified": true, "phone_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
 ```
 
-### Post Location Update
+### Create Anon Payment Order
 
 ```http
-POST /api/v1/locations/update
-Authorization: Bearer <token>
+POST /api/v1/payments/create-order-anon
 Content-Type: application/json
 
 {
-  "latitude": 28.6139,
-  "longitude": 77.2090,
-  "accuracy": 12.5,
-  "battery_level": 78,
-  "circle_id": "c4d9e3f2-..."
+  "phone_token": "eyJ...",
+  "plan": "family",
+  "gateway": "razorpay",
+  "currency": "INR",
+  "name": "Rahul Sharma",
+  "email": "rahul@gmail.com"
+}
+```
+```json
+{
+  "success": true,
+  "orderId": "uuid",
+  "gatewayOrderId": "order_xxx",
+  "clientData": { "key": "rzp_test_xxx", "amount": 29900, "currency": "INR" }
 }
 ```
 
-```json
-{ "success": true, "broadcast": true }
-```
-
-### Create Safe Zone
+### Register With Payment
 
 ```http
-POST /api/v1/geofences
-Authorization: Bearer <token>
+POST /api/v1/auth/register-with-payment
 Content-Type: application/json
 
 {
-  "circle_id": "c4d9e3f2-...",
-  "name": "Home",
-  "center_lat": 28.6139,
-  "center_lng": 77.2090,
-  "radius_meters": 200
+  "phone_token": "eyJ...",
+  "name": "Rahul Sharma",
+  "email": "rahul@gmail.com",
+  "account_type": "parent",
+  "country_code": "IN",
+  "plan": "family",
+  "gateway": "razorpay",
+  "gatewayOrderId": "order_xxx",
+  "gatewayPaymentId": "pay_xxx",
+  "signature": "hmac_sha256_signature"
 }
 ```
-
 ```json
 {
-  "safe_zone": {
-    "id": "d8f3b2e1-...",
-    "name": "Home",
-    "radius_meters": 200,
-    "center_lat": 28.6139,
-    "center_lng": 77.2090,
-    "created_at": "2026-06-19T10:00:00Z"
-  }
+  "user": { "id": "uuid", "name": "Rahul", "account_type": "parent", "current_plan": "family" },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
 
-### SSE Stream Event Payload (received by client)
+### Register Free (Child)
+
+```http
+POST /api/v1/auth/register-free
+Content-Type: application/json
+
+{
+  "phone_token": "eyJ...",
+  "name": "Ananya",
+  "email": "ananya@gmail.com",
+  "account_type": "child",
+  "country_code": "IN"
+}
+```
+```json
+{
+  "user": { "id": "uuid", "name": "Ananya", "account_type": "child", "current_plan": "free" },
+  "token": "eyJ..."
+}
+```
+
+### SSE Stream Event Payloads
 
 ```
-data: {"type":"location_update","userId":"a3f9...","name":"Rahul","latitude":28.6139,"longitude":77.2090,"battery":78,"timestamp":"2026-06-19T14:22:11Z"}
+data: {"type":"location_update","userId":"a3f9...","name":"Rahul","latitude":28.6139,"longitude":77.2090,"battery":78,"timestamp":"2026-06-20T14:22:11Z"}
 
-data: {"type":"sos_alert","userId":"b7e2...","name":"Priya","latitude":28.55,"longitude":77.21,"message":"Help!","sosId":"x9y1..."}
+data: {"type":"sos_alert","userId":"b7e2...","name":"Ananya","latitude":28.55,"longitude":77.21,"message":"Help!","sosId":"x9y1..."}
 
 data: {"type":"geofence_event","userId":"a3f9...","name":"Rahul","eventType":"exit","zoneName":"Home","zoneId":"d8f3..."}
 ```
 
 ---
 
-## 20. Data Flow Diagrams
+## 22. Data Flow Diagrams
+
+### Payment-Gated Signup Flow
+
+```
+Browser
+  │ Step 1: POST /auth/send-otp → OTP SMS
+  │
+  │ Step 2: POST /auth/verify-phone → phone_token (30min JWT)
+  │         ↳ No DB entry yet
+  │
+  │ Step 3: User fills name/email/type/country
+  │
+  │ Step 4: (parent + paid plan)
+  │   POST /payments/create-order-anon { phone_token, plan, gateway }
+  │   → payment_orders row: user_id=NULL, status='pending'
+  │   → Razorpay checkout opens in browser
+  │
+  │   [User pays successfully]
+  │
+  │ Step 5: POST /auth/register-with-payment { phone_token, ...paymentData }
+  │   ├── Verify Razorpay HMAC-SHA256 signature
+  │   ├── INSERT users (with random bcrypt hash for password_hash)
+  │   ├── INSERT user_subscriptions (status='active', +1 month period)
+  │   ├── UPDATE payment_orders SET status='completed', user_id=newUserId
+  │   └── UPDATE users SET current_plan=planId
+  │   → Return { user, token }
+  │
+  └── Redirect to /parent/panel
+```
 
 ### SOS Alert Complete Flow
 
 ```
 Child Device (Mobile)
-        │
-        │  Presses SOS button
-        │  POST /api/v1/sos/trigger
-        │  { circleId, message, latitude, longitude }
+        │ POST /api/v1/sos/trigger { circleId, message, latitude, longitude }
         ▼
-Express SOS Route (/routes/sos.js)
-        │
-        ├── 1. INSERT sos_events → DB → returns sos_id
-        │
-        ├── 2. broadcastToCircle(circleId, {
-        │       type: 'sos_alert',
-        │       userId, userName, lat, lng, message
-        │   })
+Express SOS Route
+        ├── 1. INSERT sos_events → DB
+        ├── 2. broadcastToCircle(circleId, { type: 'sos_alert', ... })
         │   └── SSE clients Map → write to all open connections
-        │       ├── Parent browser (SSE) → Alert tab flashes red
-        │       └── Admin panel (SSE) → Dashboard SOS count ++
-        │
-        ├── 3. SELECT push_token FROM users
-        │      WHERE id IN (SELECT user_id FROM circle_members
-        │                   WHERE circle_id = $circleId)
-        │      AND push_token IS NOT NULL
-        │
-        └── 4. POST https://exp.host/--/api/v2/push/send
-            { to: [push_tokens], title: '🚨 SOS Alert',
-              body: 'userName needs help!',
-              data: { type: 'sos', circleId, lat, lng } }
+        │       ├── Parent browser → Alert tab flashes red
+        │       └── Admin panel → Dashboard SOS count ++
+        └── 3. POST https://exp.host/--/api/v2/push/send
             └── Apple APNs + Google FCM delivery
 ```
 
 ### Live Location Update Flow
 
 ```
-User Device (Mobile)
-        │
-        │  expo-location watchPositionAsync fires
-        │  every 30s or when moved >10m
-        │
-        │  POST /api/v1/locations/update
-        │  { latitude, longitude, accuracy, battery_level }
+User Device
+        │ POST /api/v1/locations/update { latitude, longitude, battery_level }
         ▼
-Express Locations Route
-        │
+Express Locations / Users Route
         ├── INSERT device_locations (full history)
-        ├── UPSERT user_latest_locations (for fast queries)
-        │
-        └── broadcastToCircle(circleId, {
-                type: 'location_update',
-                userId, lat, lng, battery, timestamp
-            })
+        ├── UPSERT user_latest_locations
+        ├── checkGeofenceStatus() → if zone changed → INSERT geofence_events
+        └── broadcastToCircle() → location_update SSE event
             ├── Parent web (SSE open) → Leaflet marker moves
-            ├── Other mobile (SSE open) → Map marker moves
-            └── Admin panel → SSE client count visible in System tab
-```
-
-### User Registration Flow
-
-```
-New User (Mobile/Web)
-        │
-        │  Step 1: POST /auth/send-otp { phone }
-        ▼
-Express Auth Route
-        │
-        ├── Check OTP rate limit (max 3 in 10 min)
-        ├── Generate 6-digit OTP
-        ├── INSERT phone_otps { phone, otp, expires_at }
-        └── MSG91 API call → SMS to phone
-                │
-                │  User receives SMS
-                ▼
-        Step 2: POST /auth/verify-otp { phone, otp }
-                │
-                ├── SELECT FROM phone_otps WHERE phone=$1 AND used=false
-                ├── Check expiry + code match
-                ├── UPDATE phone_otps SET used=true
-                └── Return { verified: true }
-                │
-                │  Registration screen shown
-                ▼
-        Step 3: POST /auth/register { phone, name, role, password }
-                │
-                ├── INSERT users { phone, name, role, password_hash }
-                └── jwt.sign({ userId }) → return JWT token
-                │
-                ▼
-        Client stores token
-        └── localStorage 'gravity_token' (web)
-        └── AsyncStorage 'auth_token' (mobile)
+            └── Other mobile (SSE open) → Map marker moves
 ```
 
 ---
 
-## 21. Third-Party Service Dependencies
+## 23. Third-Party Service Dependencies
 
 | Service | Used For | Fallback if Unavailable |
 |---|---|---|
-| **MSG91** | SMS OTP delivery | If `MSG91_API_KEY` not set, OTP is printed to server console (dev mode). In production: user cannot receive OTP → login fails. |
-| **Cloudflare R2** | Avatar image storage | If R2 is down, avatar upload fails but all other features continue. Avatars fall back to initials avatar in UI. |
-| **Expo Push API** | Mobile push notifications | If Expo API is unreachable, SOS push is silently skipped. SSE alert still reaches web users. No retry implemented. |
-| **Apple APNs** | iOS push delivery | Managed by Expo — no direct dependency. Expo handles APNs/FCM routing. |
-| **Google FCM** | Android push delivery | Same as above — managed by Expo. |
-| **Traccar** | GPS device telemetry ingestion | Optional service. Core tracking via direct API still works if Traccar is offline. |
-| **Let's Encrypt (via Caddy)** | TLS certificates | Caddy auto-renews 30 days before expiry. If renewal fails, HTTPS breaks. Monitor cert expiry. |
-| **Google Maps API** | Mobile map tiles (Android) | App requires `GOOGLE_MAPS_API_KEY` in `app.json`. Without it, Android MapView shows blank. iOS uses Apple Maps (no key needed). |
-| **CartoDB tile server** | Web map tiles (Leaflet dark mode) | If CartoDB is down, dark tile style shows blank. User can switch to Street/Satellite tile in UI. |
+| **MSG91** | SMS OTP delivery | If key not set, OTP logged to console and returned as `dev_otp` in response |
+| **Razorpay** | India payments (INR) | If not configured, create-order returns 503 with setup instructions |
+| **Stripe** | Global payments (USD/EUR/GBP) | Same as Razorpay |
+| **M-Pesa / PesaPal** | East Africa payments (KES) | Same as Razorpay |
+| **Cloudflare R2** | Avatar image storage | If R2 down, avatar upload fails; other features continue |
+| **Expo Push API** | Mobile push notifications | If unreachable, SOS push silently skipped; SSE alert still works |
+| **Apple APNs / Google FCM** | iOS/Android push delivery | Managed by Expo — no direct dependency |
+| **Traccar** | GPS device telemetry ingestion | Optional; core tracking via direct API still works |
+| **Let's Encrypt (via Caddy)** | TLS certificates | Caddy auto-renews 30 days before expiry |
+| **Neon PostgreSQL** | Cloud database | If Neon unreachable, all API requests fail; no local fallback |
+| **CartoDB tile server** | Web map dark mode tiles | User can switch to Street/Satellite tile in UI |
 
 ---
 
-## 22. Scalability & Known Limitations
+## 24. Scalability & Known Limitations
 
 ### Current Architecture Limits
 
 | Limitation | Detail | How to Scale |
 |---|---|---|
-| **SSE in-memory Map** | The `clients` Map lives in the single Node.js process. If the API is horizontally scaled (multiple instances), a user on server A won't receive broadcasts from server B. | Add Redis Pub/Sub as a shared broadcast channel between instances. |
-| **Single PM2 instance** | `instances: 1` in ecosystem.config.js — no clustering. | Change to `instances: 'max'` for multi-core utilization. Requires Redis for SSE (see above). |
-| **`device_locations` table growth** | Every location update is stored permanently. At 1 location/30s per user, 1000 active users = ~2.9M rows/day. | Run monthly purge (`DELETE /admin/purge-locations`), or add `pg_partman` time-based partitioning. |
-| **Connection pool cap** | `max: 20` DB connections. Under 20 concurrent queries, performance is fine. Beyond that, queries queue. | Increase `max` if server has a large PostgreSQL `max_connections`. Add PgBouncer for 1000+ concurrent users. |
-| **No WebSocket** | SSE is one-directional (server → client only). Clients send location via REST POST, not via SSE. This adds latency vs full-duplex WebSocket but is simpler and HTTP-compatible. | Acceptable at current scale. Migrate to WebSocket if sub-second bidirectional updates are needed. |
-| **OTP via MSG91 only** | No secondary SMS provider. If MSG91 has an outage, OTP delivery fails entirely. | Add Twilio or Fast2SMS as fallback provider. |
-| **No message queue** | Push notifications are sent synchronously within the SOS route handler. If Expo API is slow, it adds latency to the SOS response. | Move push notifications to a background job queue (Bull + Redis) for decoupled delivery. |
+| **SSE in-memory Map** | `clients` Map lives in single Node.js process. Horizontal scaling breaks SSE. | Add Redis Pub/Sub as shared broadcast channel |
+| **Single PM2 instance** | `instances: 1` in ecosystem.config.js | Change to `instances: 'max'` + Redis for SSE |
+| **`device_locations` growth** | At 1 location/30s per user, 1000 active users = ~2.9M rows/day | Monthly purge via admin panel; or `pg_partman` |
+| **Connection pool cap** | `max: 20` DB connections | Increase `max`; add PgBouncer for 1000+ users |
+| **No WebSocket** | SSE is one-directional only | Acceptable; migrate to WebSocket if sub-second bidirectional needed |
+| **OTP via MSG91 only** | Single SMS provider; outage = no OTP delivery | Add Twilio or Fast2SMS as fallback |
+| **Sync push notifications** | Push sent inline in SOS handler; slow Expo API adds SOS response latency | Move to Bull + Redis background job queue |
+| **Neon DB** | Cloud-managed; adds ~5ms latency vs local Postgres | Acceptable at current scale |
 
 ### Expected Capacity (Single Server)
 
 | Metric | Estimate |
 |---|---|
-| Concurrent SSE connections | ~500 (limited by server RAM and file descriptors) |
-| API requests/second | ~200 (1000 req/15min rate limit per IP; server can handle far more without rate limit) |
-| Active users per circle | No limit enforced; practical limit ~50 before SSE broadcast becomes slow |
-| Safe zones per circle | No limit enforced; PostGIS handles thousands efficiently |
+| Concurrent SSE connections | ~500 |
+| API requests/second | ~200 (within rate limit; server handles far more) |
+| Active users per circle | Practical limit ~50 before SSE broadcast slows |
+| Safe zones per circle | No limit; PostGIS handles thousands efficiently |
 
 ---
 
-## 23. Monitoring & Health Checks
+## 25. Monitoring & Health Checks
 
 ### Health Check Endpoint
 
-The Admin Panel's System tab (`GET /api/v1/admin/system`) serves as the health check, returning:
+`GET /api/v1/admin/system` returns:
 
 ```json
 {
-  "database": {
-    "size_mb": 45.2,
-    "tables": { "users": 312, "device_locations": 891230 }
-  },
-  "server": {
-    "uptime_seconds": 1209600,
-    "node_version": "v20.20.0",
-    "memory_usage_mb": 128
-  },
-  "sse": {
-    "active_connections": 23
-  }
+  "database": { "size_mb": 45.2, "tables": { "users": 312, "device_locations": 891230 } },
+  "server": { "uptime_seconds": 1209600, "node_version": "v20.20.0", "memory_usage_mb": 128 },
+  "sse": { "active_connections": 23 }
 }
 ```
 
-### Process Monitoring — PM2
+### PM2 Commands
 
 ```bash
 pm2 status              # View all process statuses
@@ -1543,149 +1736,107 @@ pm2 logs gravity-api    # Tail API logs
 pm2 logs --lines 200    # Last 200 lines all processes
 ```
 
-PM2 auto-restarts any process that:
-- Exits unexpectedly (crash)
-- Exceeds memory limit (500MB for API, 200MB for web server)
-
-### Log Files
-
-| Log | Path | Format |
-|---|---|---|
-| API stdout | `/tmp/gravity-api-out.log` | Plain text with timestamps |
-| API errors | `/tmp/gravity-api-error.log` | Node.js stack traces |
-| Caddy access | `/var/log/caddy/gravity.log` | JSON (includes IP, path, status, duration) |
-
 ### Recommended External Monitoring (Not Yet Implemented)
 
 | Tool | Purpose |
 |---|---|
-| **UptimeRobot** (free) | HTTP uptime check every 5 minutes — alerts via email/SMS if API is down |
-| **PM2 Plus** | Cloud dashboard for PM2 metrics, restart alerts |
-| **Sentry** | Error tracking — captures unhandled exceptions in Express with user context |
-| **Grafana + Prometheus** | Metrics dashboards for DB query times, SSE connection count, request rates |
+| **UptimeRobot** (free) | HTTP uptime check every 5 minutes |
+| **PM2 Plus** | Cloud dashboard for PM2 metrics |
+| **Sentry** | Error tracking for Express unhandled exceptions |
+| **Grafana + Prometheus** | Metrics dashboards for DB query times, SSE count |
 
 ---
 
-## 24. Backup & Disaster Recovery
+## 26. Backup & Disaster Recovery
 
 ### Database Backup
 
-**Current Setup:** No automated backup configured. Recommended setup:
+**Current Setup:** Neon PostgreSQL handles managed backups. Manual backup recommendation:
 
 ```bash
-# Daily PostgreSQL dump (add to cron)
-pg_dump -U gravity_user -F c gravity_db > /backups/gravity_$(date +%Y%m%d).dump
+# Full dump
+pg_dump $DATABASE_URL -F c > /backups/gravity_$(date +%Y%m%d).dump
 
-# Restore from backup
-pg_restore -U gravity_user -d gravity_db /backups/gravity_20260619.dump
+# Restore
+pg_restore -d $DATABASE_URL /backups/gravity_20260620.dump
 ```
 
-**Recommended backup schedule:**
-- Full dump: Daily at 2 AM
-- Retention: 7 daily + 4 weekly + 3 monthly
-- Offsite storage: Copy to Cloudflare R2 or AWS S3
-
-### What Can Be Lost (Recovery Point Objective)
-
-| Data Type | Loss Risk Without Backup | Recovery |
-|---|---|---|
-| User accounts, circles | High impact | Restore from DB dump |
-| Location history | Medium impact (non-critical history) | Restore from DB dump |
-| Avatar images | Low impact | R2 is managed — no backup needed |
-| Safe zones | High impact | Restore from DB dump |
-| Code / Config | No data loss | Git repository |
+**Recommended backup schedule:** Daily at 2 AM, 7 daily + 4 weekly + 3 monthly retention.
 
 ### Disaster Recovery Steps
 
 ```
-1. Provision new server
-2. Install Node.js 20, PostgreSQL 15, PostGIS 3, PM2, Caddy
-3. Clone repo: git clone https://github.com/kamaralam1984/gravitypro
-4. Restore DB from latest dump: pg_restore ...
+1. Provision new Ubuntu server
+2. Install Node.js 20, PM2, Caddy
+3. Clone: git clone https://github.com/kamaralam1984/gravitypro /var/www/gravitypro
+4. Restore DB from dump (Neon handles this automatically)
 5. Copy backend/.env from secure storage
-6. Run: cd landing-react && npm run build
-7. Start: pm2 start ecosystem.config.js
-8. Start Caddy: caddy start --config caddy/Caddyfile
-9. Verify: curl https://gravity.trackalways.com/api/v1/admin/system
+6. cd landing-react && npm run build
+7. pm2 start ecosystem.config.js
+8. caddy start --config caddy/Caddyfile
+9. Verify: curl https://gravitypro.kvlbusinesssolutions.com/api/v1/admin/system
 ```
 
 Estimated recovery time: **30–60 minutes** with prepared backups.
 
 ---
 
-## 25. Data Privacy & Compliance
+## 27. Data Privacy & Compliance
 
 ### Data Collected
 
 | Data Type | Stored In | Sensitivity |
 |---|---|---|
 | Phone number | `users.phone` | High — personal identifier |
-| Name | `users.name` | Medium |
-| Email | `users.email` | High — personal identifier |
+| Name / Email | `users.name`, `users.email` | High |
 | GPS coordinates (history) | `device_locations` | Very High — movement patterns |
 | GPS coordinates (latest) | `user_latest_locations` | Very High |
 | Profile photo | Cloudflare R2 | Medium |
-| SOS messages | `sos_events.message` | High — may contain distress context |
-| Expo push token | `users.push_token` | Medium — device identifier |
+| SOS messages | `sos_events.message` | High |
+| Payment records | `payment_orders` | High |
+| Expo push token | `users.push_token` | Medium |
 
 ### Data Isolation
 
 - All location, SOS, and geofence data is scoped to **circles**
-- A user can only query data for circles they are a member of (enforced by `circle_members` check on every query)
-- Admins can see all data across all circles (admin panel)
-
-### Children's Data
-
-- The platform supports "child" role users who may be minors
-- Location data of children is visible to their circle (parents)
-- No third-party analytics SDK is included in the mobile app
-- No advertising or tracking pixels
+- A user can only query data for circles they are a member of
+- Child users can only see their own circle's data
+- Admins can see all data across all circles
 
 ### User Data Deletion
 
-Admin can delete a user account via `DELETE /api/v1/admin/users/:id`. This:
-- Removes the `users` row
-- Cascades to `circle_members` (user leaves all circles)
-- Does **not** automatically delete `device_locations` (orphaned rows)
-- Does **not** delete avatar from R2 (manual cleanup required)
+Admin `DELETE /api/v1/admin/users/:id`:
+- Removes `users` row (cascades to `circle_members`, `user_subscriptions`)
+- Does **not** automatically delete `device_locations` orphaned rows
+- Does **not** delete avatar from R2
 
-**Recommendation:** Implement a proper user-data-deletion job that cleans up all associated records and R2 files when a user account is deleted.
+### GDPR Notes
 
-### GDPR / Data Protection Notes
-
-If operating in the EU or UK:
-- Provide users with a "Download My Data" feature (not yet implemented)
-- Provide users with "Delete My Account" self-service (not yet implemented)
-- Add a Privacy Policy page on the landing page
-- Document data retention periods (currently indefinite for locations)
-- Obtain explicit consent for location tracking on registration
+If operating in EU/UK: add "Download My Data" and "Delete My Account" features; add Privacy Policy page; obtain explicit consent for location tracking on registration.
 
 ---
 
-## 26. Target Markets
+## 28. Target Markets
 
-The Gravity platform is designed for global use. The Caddy configuration explicitly notes support for users in:
+| Region | Countries | Payment Gateway | Notes |
+|---|---|---|---|
+| South Asia | India | Razorpay (INR) | Primary market; MSG91 OTP works well |
+| East Africa | Kenya | M-Pesa, PesaPal (KES) | Supported |
+| East Africa | Uganda, Tanzania | PesaPal, M-Pesa (UGX/TZS) | Supported |
+| Middle East | UAE | Stripe (USD) | Supported |
+| Europe | UK | Stripe (GBP/EUR) | GDPR compliance may be required |
+| North America | USA | Stripe, PayPal (USD) | Supported |
 
-| Region | Countries | Notes |
-|---|---|---|
-| South Asia | India | Primary development market; MSG91 OTP service works well |
-| East Africa | Kenya | Supported; MSG91 covers Kenya |
-| Middle East | UAE | Supported |
-| Europe | UK | Supported; GDPR compliance may be required |
-| North America | USA | Supported |
-
-**Language:** Platform UI is in English. No i18n/localization is implemented currently.
-
-**Currency / Payments:** No payment system implemented. Platform operates without monetization. Future: Stripe (global) or Razorpay (India).
+**Language:** English only. No i18n implemented.
 
 ---
 
-## 27. Development Setup Guide
+## 29. Development Setup Guide
 
 ### Prerequisites
 
 - Node.js 20.x
-- PostgreSQL 15 with PostGIS extension
+- PostgreSQL 15 with PostGIS extension (or Neon account)
 - Git
 
 ### Backend Setup
@@ -1694,14 +1845,14 @@ The Gravity platform is designed for global use. The Caddy configuration explici
 git clone https://github.com/kamaralam1984/gravitypro
 cd Gravity/backend
 npm install
-cp .env.example .env   # Fill in all required variables
-# Create database
-psql -U postgres -c "CREATE DATABASE gravity_db;"
-psql -U postgres -d gravity_db -c "CREATE EXTENSION postgis;"
-# Run migrations (SQL schema files)
-psql -U gravity_user -d gravity_db -f schema.sql
-# Start development server
-npm run dev   # Uses nodemon for auto-reload
+cp .env.example .env   # Fill all required variables
+# Run migrations
+psql $DATABASE_URL -f migrations/001_initial.sql
+psql $DATABASE_URL -f migrations/004_add_google_id.sql
+psql $DATABASE_URL -f migrations/005_add_account_type.sql
+psql $DATABASE_URL -f migrations/006_subscriptions.sql
+psql $DATABASE_URL -f migrations/007_anon_payments.sql
+npm run dev
 ```
 
 ### Frontend Setup
@@ -1709,8 +1860,7 @@ npm run dev   # Uses nodemon for auto-reload
 ```bash
 cd Gravity/landing-react
 npm install
-npm run dev   # Starts Vite dev server on port 5173
-# API calls proxy to localhost:8002 (configured in vite.config.ts)
+npm run dev   # Vite dev server on port 5173
 ```
 
 ### Mobile App Setup
@@ -1718,27 +1868,8 @@ npm run dev   # Starts Vite dev server on port 5173
 ```bash
 cd Gravity/mobile
 npm install
-# Install Expo CLI
-npm install -g @expo/cli
-# Set environment
 echo "EXPO_PUBLIC_API_URL=http://localhost:8002" > .env
-# Start Expo
 npx expo start
-# Scan QR code with Expo Go app on device
-# OR press 'a' for Android emulator, 'i' for iOS simulator
-```
-
-### Running All Services Locally
-
-```bash
-# Terminal 1 — Backend API
-cd backend && npm run dev
-
-# Terminal 2 — Web frontend
-cd landing-react && npm run dev
-
-# Terminal 3 — Mobile
-cd mobile && npx expo start
 ```
 
 ### Building for Production
@@ -1746,42 +1877,34 @@ cd mobile && npx expo start
 ```bash
 # Build web frontend
 cd landing-react && npm run build
-# Output in landing-react/dist/
 
 # Start with PM2
 pm2 start ecosystem.config.js
 
-# Build mobile (requires Expo EAS CLI)
-cd mobile
-npx eas build --platform android
-npx eas build --platform ios
+# Build mobile
+cd mobile && npx eas build --platform android
 ```
 
 ---
 
-## 28. Environment Configuration
+## 30. Environment Configuration
 
 ### Backend — `backend/.env`
 
 ```bash
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=gravity_db
-DB_USER=gravity_user
-DB_PASSWORD=<secure-password>
+# Database (Neon PostgreSQL)
+DATABASE_URL=postgresql://neondb_owner:***@ep-odd-queen-***.neon.tech/neondb?sslmode=require
 
 # JWT
-JWT_SECRET=<long-random-secret>
+JWT_SECRET=<64-char-random-secret>
 JWT_EXPIRES_IN=7d
 
 # Admin
 ADMIN_TOKEN=<secure-admin-password>
 
 # SMS OTP
-MSG91_API_KEY=<msg91-api-key>
+MSG91_AUTH_KEY=<msg91-auth-key>
 MSG91_TEMPLATE_ID=<template-id>
-MSG91_SENDER_ID=GRAVTY
 
 # Cloudflare R2
 CLOUDFLARE_ACCOUNT_ID=<account-id>
@@ -1790,7 +1913,21 @@ CLOUDFLARE_R2_SECRET_ACCESS_KEY=<secret-key>
 CLOUDFLARE_R2_BUCKET=gravity-avatars
 CLOUDFLARE_R2_PUBLIC_URL=https://pub-<hash>.r2.dev
 
-# Server
+# Payment Gateways
+RAZORPAY_KEY_ID=rzp_live_xxx
+RAZORPAY_KEY_SECRET=xxx
+STRIPE_SECRET_KEY=sk_live_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+PAYPAL_CLIENT_ID=xxx
+PAYPAL_CLIENT_SECRET=xxx
+MPESA_CONSUMER_KEY=xxx
+MPESA_CONSUMER_SECRET=xxx
+MPESA_SHORTCODE=xxx
+MPESA_PASSKEY=xxx
+MPESA_CALLBACK_URL=https://gravitypro.kvlbusinesssolutions.com/api/v1/payments/callback/mpesa
+
+# App
+APP_URL=https://gravitypro.kvlbusinesssolutions.com
 PORT=8002
 NODE_ENV=production
 ```
@@ -1798,60 +1935,77 @@ NODE_ENV=production
 ### Mobile — `mobile/.env`
 
 ```bash
-EXPO_PUBLIC_API_URL=https://gravity.trackalways.com
-```
-
-### Web Frontend — Build-time (Vite)
-
-```bash
-# In landing-react/.env (Vite prefix required)
-VITE_API_URL=https://gravity.trackalways.com
+EXPO_PUBLIC_API_URL=https://gravitypro.kvlbusinesssolutions.com
 ```
 
 ---
 
-## 29. Project File Structure
+## 31. Project File Structure
 
 ```
 Gravity/
 │
 ├── backend/                            ← Express.js API (Port 8002)
 │   ├── src/
-│   │   ├── app.js                      ← Main entry, middleware setup
+│   │   ├── app.js                      ← Main entry, middleware, route mounting
 │   │   ├── config/
-│   │   │   └── db.js                   ← PostgreSQL pool connection
+│   │   │   └── db.js                   ← PostgreSQL pool (Neon connection string)
 │   │   ├── middleware/
-│   │   │   ├── auth.js                 ← JWT authentication
-│   │   │   └── validate.js             ← Zod schema validation
+│   │   │   ├── auth.js                 ← JWT authenticate() middleware
+│   │   │   └── validate.js             ← Zod validate() middleware
+│   │   ├── services/
+│   │   │   ├── geofence.js             ← checkGeofenceStatus() helper
+│   │   │   ├── sse.js                  ← sendToCircleMembers() helper
+│   │   │   └── payments/
+│   │   │       └── index.js            ← Payment gateway factory
 │   │   └── routes/
-│   │       ├── auth.js                 ← OTP, Google OAuth, login
-│   │       ├── users.js                ← Profile, location, push token
+│   │       ├── auth.js                 ← OTP, verify-phone, register-free,
+│   │       │                              register-with-payment, Google OAuth
+│   │       ├── users.js                ← Profile, location, push token, stats
 │   │       ├── circles.js              ← Family group management
 │   │       ├── sos.js                  ← SOS alerts + push notifications
 │   │       ├── geofences.js            ← Safe zones (PostGIS)
 │   │       ├── locations.js            ← GPS tracking + SSE broadcast
 │   │       ├── media.js                ← Cloudflare R2 upload URLs
 │   │       ├── sse.js                  ← SSE stream handler
+│   │       ├── payments.js             ← Multi-gateway payments + webhooks
+│   │       │                              + create-order-anon (pre-registration)
+│   │       ├── subscriptions.js        ← Subscription status + cancel + history
 │   │       └── admin.js                ← Full admin management API
+│   ├── migrations/
+│   │   ├── 001_initial.sql             ← Core schema (8 tables)
+│   │   ├── 004_add_google_id.sql       ← google_id column on users
+│   │   ├── 005_add_account_type.sql    ← account_type column on users
+│   │   ├── 006_subscriptions.sql       ← subscription_plans, user_subscriptions,
+│   │   │                                  payment_orders tables + current_plan on users
+│   │   └── 007_anon_payments.sql       ← user_id nullable, add phone + metadata
 │   └── package.json
 │
 ├── landing-react/                      ← React+Vite Web App (Port 8090)
 │   ├── index.html                      ← Vite entry
-│   ├── server.cjs                      ← Static file server + API proxy
+│   ├── server.cjs                      ← Static file server + SPA fallback
 │   ├── vite.config.ts
 │   ├── src/
-│   │   ├── main.tsx                    ← React root + React Router
+│   │   ├── main.tsx                    ← React root + ErrorBoundary + window.onerror
 │   │   ├── index.css                   ← Global styles
 │   │   └── pages/
-│   │       ├── Home.tsx / .module.css  ← Landing page
-│   │       ├── Login.tsx               ← Phone OTP login
+│   │       ├── Home.tsx / .module.css  ← Landing page (simplified)
+│   │       ├── Login.tsx / .module.css ← Multi-step signup + login tab switcher
+│   │       ├── Pricing.tsx / .module.css ← Plan comparison page
+│   │       ├── Checkout.tsx / .module.css ← Checkout flow
+│   │       ├── Terms.tsx               ← Terms of service
+│   │       ├── Privacy.tsx             ← Privacy policy
+│   │       ├── Share.tsx               ← Share / referral page
+│   │       ├── NotFound.tsx            ← 404 page
 │   │       ├── AdminLogin.tsx          ← Admin login
 │   │       ├── ParentPanel.tsx / .module.css  ← 5-tab parent dashboard
+│   │       │                                     (no phone frame, fullscreen, logout)
 │   │       ├── ChildPanel.tsx / .module.css   ← 6-tab child dashboard
-│   │       └── AdminPanel.tsx / .module.css   ← 7-tab admin + desktop mode
+│   │       │                                     (no phone frame, fullscreen, logout)
+│   │       └── AdminPanel.tsx / .module.css   ← 7-tab admin + desktop sidebar
 │   └── dist/                           ← Production build (Vite output)
 │
-├── mobile/                             ← React Native Expo App
+├── mobile/                             ← React Native Expo App (Expo 54)
 │   ├── App.js                          ← Root, NavigationContainer
 │   ├── app.json                        ← Expo config (bundle ID, permissions)
 │   └── src/
@@ -1877,12 +2031,10 @@ Gravity/
 ├── caddy/
 │   └── Caddyfile                       ← Reverse proxy + TLS config
 │
-├── ecosystem.config.js                 ← PM2 process config
+├── ecosystem.config.js                 ← PM2 process config (gravity-api id=58, gravity-web id=59)
 │
-├── GRAVITY_SYSTEM_INFO.md              ← Detailed system documentation
-├── GRAVITY_SYSTEM_INFO.pdf             ← PDF version
-├── GRAVITY_ARCHITECTURE.md            ← This document
-└── PROJECT_REPORT.md                  ← Project status report (June 2026)
+├── GRAVITY_ARCHITECTURE.md            ← This document (v2.0)
+└── PROJECT_REPORT.md                  ← Project status report
 ```
 
 ---
@@ -1891,20 +2043,24 @@ Gravity/
 
 | Area | Technology | Status |
 |---|---|---|
-| Backend API | Node.js + Express 5.2.x | Production-ready |
-| Database | PostgreSQL 15 + PostGIS 3 | Production-ready |
-| Real-Time | Server-Sent Events (SSE) | Production-ready |
-| Web App | React 18 + TypeScript + Vite | Production-ready |
-| Mobile App | React Native + Expo 54 | ~80% complete |
-| File Storage | Cloudflare R2 | Production-ready |
-| Process Mgmt | PM2 | Configured |
+| Backend API | Node.js + Express 5.2.x | Production |
+| Database | Neon PostgreSQL 15 + PostGIS 3 (12 tables) | Production |
+| Real-Time | Server-Sent Events (SSE) | Production |
+| Web App | React 18 + TypeScript + Vite 8 | Production |
+| Signup Flow | Payment-gated, OTP → phone_token → register | Production |
+| Subscriptions | Free / Family / Premium — 5 gateways | Production |
+| File Storage | Cloudflare R2 (presigned upload) | Production |
+| Process Mgmt | PM2 (id=58 API, id=59 Web) | Configured |
 | Reverse Proxy | Caddy 2 (auto TLS) | Configured |
-| SMS OTP | MSG91 | Integrated |
+| SMS OTP | MSG91 (dev_otp fallback) | Integrated |
 | Push Notify | Expo Push API | Integrated |
-| Geofencing | PostGIS ST_Buffer + ST_Within | Production-ready |
+| Geofencing | PostGIS ST_Buffer + ST_Within | Production |
+| Mobile App | React Native + Expo 54 | ~80% complete |
+| Admin Panel | 7 sections, desktop + mobile mode | Production |
 
 ---
 
-*Document prepared by: Gravity Development Team*  
-*Last updated: 19 June 2026*  
-*Repository: github.com/kamaralam1984/gravitypro*
+*Document version: 2.0*  
+*Last updated: 20 June 2026*  
+*Repository: github.com/kamaralam1984/gravitypro*  
+*Domain: gravitypro.kvlbusinesssolutions.com*

@@ -1,12 +1,12 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { View, StyleSheet, Platform } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { BlurView } from 'expo-blur'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import HomeScreen from '../screens/HomeScreen'
 import MapScreen from '../screens/MapScreen'
 import CirclesScreen from '../screens/CirclesScreen'
-import SafeZonesScreen from '../screens/SafeZonesScreen'
 import AlertsScreen from '../screens/AlertsScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import { Colors } from '../theme/colors'
@@ -26,7 +26,16 @@ function TabBarBackground() {
   return <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,15,8,0.97)' }]} />
 }
 
-export default function TabNavigator() {
+// Icon map for each tab
+const TAB_ICONS = {
+  Home: { active: 'home', inactive: 'home-outline' },
+  Map: { active: 'map', inactive: 'map-outline' },
+  Circles: { active: 'people', inactive: 'people-outline' },
+  Alerts: { active: 'notifications', inactive: 'notifications-outline' },
+  Profile: { active: 'person', inactive: 'person-outline' },
+}
+
+export default function TabNavigator({ unresolvedSosCount = 0 }) {
   const insets = useSafeAreaInsets()
 
   return (
@@ -38,12 +47,12 @@ export default function TabNavigator() {
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarStyle: {
           position: 'absolute',
-          borderTopWidth: 1,
-          borderTopColor: Colors.border,
-          height: 60 + insets.bottom,
+          borderTopWidth: 0,
+          height: 65 + insets.bottom,
           paddingBottom: insets.bottom,
           paddingTop: 8,
           elevation: 0,
+          shadowOpacity: 0,
           backgroundColor: 'transparent',
         },
         tabBarBackground: () => <TabBarBackground />,
@@ -52,26 +61,54 @@ export default function TabNavigator() {
           fontWeight: '600',
           letterSpacing: 0.3,
         },
-        tabBarIcon: ({ focused, color, size }) => {
-          const icons = {
-            Map: focused ? 'map' : 'map-outline',
-            Circles: focused ? 'people' : 'people-outline',
-            Zones: focused ? 'shield-checkmark' : 'shield-checkmark-outline',
-            Alerts: focused ? 'notifications' : 'notifications-outline',
-            Profile: focused ? 'person' : 'person-outline',
-          }
+        tabBarIcon: ({ focused, color }) => {
+          const icons = TAB_ICONS[route.name]
           return (
             <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-              <Ionicons name={icons[route.name]} size={22} color={color} />
+              <Ionicons
+                name={icons ? (focused ? icons.active : icons.inactive) : 'ellipse-outline'}
+                size={22}
+                color={color}
+              />
             </View>
           )
         },
       })}>
-      <Tab.Screen name="Map" component={MapScreen} options={{ tabBarLabel: 'Map' }} />
-      <Tab.Screen name="Circles" component={CirclesScreen} options={{ tabBarLabel: 'Circles' }} />
-      <Tab.Screen name="Zones" component={SafeZonesScreen} options={{ tabBarLabel: 'Zones' }} />
-      <Tab.Screen name="Alerts" component={AlertsScreen} options={{ tabBarLabel: 'Alerts' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
+
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ tabBarLabel: 'Home' }}
+      />
+      <Tab.Screen
+        name="Map"
+        component={MapScreen}
+        options={{ tabBarLabel: 'Map' }}
+      />
+      <Tab.Screen
+        name="Circles"
+        component={CirclesScreen}
+        options={{ tabBarLabel: 'Circles' }}
+      />
+      <Tab.Screen
+        name="Alerts"
+        component={AlertsScreen}
+        options={{
+          tabBarLabel: 'Alerts',
+          tabBarBadge: unresolvedSosCount > 0 ? unresolvedSosCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: Colors.danger,
+            color: '#fff',
+            fontSize: 10,
+            fontWeight: '700',
+          },
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ tabBarLabel: 'Profile' }}
+      />
     </Tab.Navigator>
   )
 }

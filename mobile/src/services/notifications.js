@@ -57,6 +57,26 @@ export const registerForPushNotifications = async () => {
     Constants.expoConfig?.extra?.eas?.projectId ??
     Constants.easConfig?.projectId
   const token = (await n.getExpoPushTokenAsync({ projectId })).data
+
+  // Register push token with backend so server can send targeted pushes
+  try {
+    const { storage } = await import('../utils/storage')
+    const apiToken = await storage.getItem('auth_token')
+    if (apiToken && token) {
+      const apiBase = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
+      await fetch(`${apiBase}/api/v1/users/me`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiToken,
+        },
+        body: JSON.stringify({ push_token: token }),
+      })
+    }
+  } catch (e) {
+    console.warn('Failed to register push token', e)
+  }
+
   return token
 }
 

@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
-  View, Text, StyleSheet, Pressable, Animated,
-  TextInput, Modal, Dimensions, ActivityIndicator, Alert, Platform
+  View, Text, StyleSheet, Pressable, Animated, ScrollView,
+  TextInput, Modal, Dimensions, ActivityIndicator, Alert, Platform,
 } from 'react-native'
-import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps'
+import MapView, { Circle as MapCircle, Marker, PROVIDER_GOOGLE } from 'react-native-maps'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import { Ionicons } from '@expo/vector-icons'
@@ -18,6 +18,75 @@ import { Colors, Gradients } from '../theme/colors'
 import { DARK_MAP_STYLE } from '../theme/mapStyles'
 
 const { width, height } = Dimensions.get('window')
+const MAP_HEIGHT = height * 0.45
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const formatRadius = (r) => r >= 1000 ? `${(r / 1000).toFixed(1)} km` : `${r} m`
+
+const formatCoord = (n) => (Math.round(n * 10000) / 10000).toFixed(4)
+
+// ─── Zone Card ────────────────────────────────────────────────────────────────
+
+function ZoneCard({ zone, index, onDelete, onFocus }) {
+  const slideAnim = useRef(new Animated.Value(40)).current
+  const fadeAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, tension: 80, friction: 10, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start()
+    }, index * 70)
+  }, [])
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 12 }}>
+      <GradientCard style={styles.zoneCard}>
+        <Pressable onPress={() => onFocus(zone)} style={styles.zoneCardMain}>
+          <LinearGradient
+            colors={['rgba(0,200,83,0.22)', 'rgba(0,200,83,0.07)']}
+            style={styles.zoneIconWrap}>
+            <Ionicons name="shield-checkmark" size={22} color={Colors.accentSoft} />
+          </LinearGradient>
+
+          <View style={styles.zoneTextBlock}>
+            <Text style={styles.zoneName}>{zone.name}</Text>
+            <Text style={styles.zoneRadius}>{formatRadius(zone.radius_meters)} radius</Text>
+            <Text style={styles.zoneCoords}>
+              {formatCoord(zone.center_lat)}, {formatCoord(zone.center_lng)}
+            </Text>
+          </View>
+        </Pressable>
+
+        <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
+          <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+        </Pressable>
+      </GradientCard>
+    </Animated.View>
+  )
+}
+
+// ─── Circle Chip ─────────────────────────────────────────────────────────────
+
+function CircleChip({ circle, active, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+      {active && (
+        <LinearGradient colors={Gradients.button} style={StyleSheet.absoluteFill} borderRadius={20} />
+      )}
+      <Ionicons
+        name="people"
+        size={13}
+        color={active ? Colors.accent : Colors.textMuted}
+      />
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{circle.name}</Text>
+    </Pressable>
+  )
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function SafeZonesScreen() {
   const insets = useSafeAreaInsets()
@@ -26,16 +95,17 @@ export default function SafeZonesScreen() {
   const [safeZones, setSafeZones] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [creatingStep, setCreatingStep] = useState(1)
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [zoneName, setZoneName] = useState('')
   const [radius, setRadius] = useState(200)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  const [pickingOnMap, setPickingOnMap] = useState(false)
   const mapRef = useRef(null)
+  const modalMapRef = useRef(null)
   const fadeAnim = useRef(new Animated.Value(0)).current
-  const modalAnim = useRef(new Animated.Value(300)).current
   const headerAnim = useRef(new Animated.Value(0)).current
+  const modalAnim = useRef(new Animated.Value(350)).current
 
   useEffect(() => {
     loadData()
@@ -45,7 +115,7 @@ export default function SafeZonesScreen() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const res = await circleAPI.getAll()
+      const res = await circleAPI.getMy()
       const circs = res.circles || []
       setCircles(circs)
       if (circs.length) {
@@ -69,35 +139,58 @@ export default function SafeZonesScreen() {
     }
   }
 
+  const switchCircle = async (circle) => {
+    if (circle.id === activeCircle?.id) return
+    if (Platform.OS !== 'web') Haptics.selectionAsync()
+    setActiveCircle(circle)
+    setSafeZones([])
+    await loadZones(circle.id)
+  }
+
+  const focusZoneOnMap = useCallback((zone) => {
+    if (!mapRef.current) return
+    mapRef.current.animateToRegion({
+      latitude: zone.center_lat,
+      longitude: zone.center_lng,
+      latitudeDelta: (zone.radius_meters / 111000) * 4,
+      longitudeDelta: (zone.radius_meters / 111000) * 4,
+    }, 600)
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+  }, [])
+
   const openCreateModal = () => {
     setShowCreateModal(true)
-    setCreatingStep(1)
     setSelectedLocation(null)
     setZoneName('')
     setRadius(200)
     setError('')
-    Animated.spring(modalAnim, { toValue: 0, tension: 70, friction: 10, useNativeDriver: true }).start()
+    setPickingOnMap(false)
+    Animated.spring(modalAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }).start()
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
   }
 
   const closeCreateModal = () => {
-    Animated.timing(modalAnim, { toValue: 300, duration: 250, useNativeDriver: true }).start(() => {
+    Animated.timing(modalAnim, { toValue: 350, duration: 250, useNativeDriver: true }).start(() => {
       setShowCreateModal(false)
     })
   }
 
-  const handleMapPress = (e) => {
-    if (creatingStep === 1) {
-      setSelectedLocation(e.nativeEvent.coordinate)
-      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    }
+  const handleMainMapPress = (e) => {
+    // Main map just browses; tapping individual cards focuses them
+  }
+
+  const handleModalMapPress = (e) => {
+    setSelectedLocation(e.nativeEvent.coordinate)
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    setPickingOnMap(false)
   }
 
   const handleCreateZone = async () => {
     if (!activeCircle) { setError('No circle selected'); return }
-    if (!selectedLocation) { setError('Tap on the map to pick a location'); return }
+    if (!selectedLocation) { setError('Tap on the map above to pick a location'); return }
     if (!zoneName.trim()) { setError('Zone name is required'); return }
-    setCreating(true); setError('')
+    setCreating(true)
+    setError('')
     try {
       await geofenceAPI.create({
         circle_id: activeCircle.id,
@@ -123,39 +216,82 @@ export default function SafeZonesScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete', style: 'destructive',
+          text: 'Delete',
+          style: 'destructive',
           onPress: async () => {
             try {
-              await geofenceAPI.delete(zone.id)
+              await geofenceAPI.remove(zone.id)
               if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
               await loadZones(activeCircle.id)
             } catch (e) {
-              Alert.alert('Error', 'Failed to delete zone')
+              Alert.alert('Error', 'Failed to delete zone. Please try again.')
             }
-          }
-        }
+          },
+        },
       ]
     )
   }
 
-  const formatRadius = (r) => r >= 1000 ? `${(r / 1000).toFixed(1)} km` : `${r} m`
+  // Compute initial map region from zones or default
+  const mapRegion = safeZones.length > 0
+    ? {
+        latitude: safeZones[0].center_lat,
+        longitude: safeZones[0].center_lng,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      }
+    : {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+      }
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
       {/* Header */}
-      <Animated.View style={[styles.header, { paddingTop: insets.top + 12, opacity: headerAnim }]}>
-        <LinearGradient colors={['rgba(5,15,8,0.98)', 'rgba(5,15,8,0.85)']} style={StyleSheet.absoluteFill} />
-        <Text style={styles.headerTitle}>Safe Zones</Text>
-        <Text style={styles.headerSubtitle}>
-          {safeZones.length} zone{safeZones.length !== 1 ? 's' : ''} active
-          {activeCircle ? ` in ${activeCircle.name}` : ''}
-        </Text>
+      <Animated.View style={[styles.header, { paddingTop: insets.top + 10, opacity: headerAnim }]}>
+        <LinearGradient
+          colors={['rgba(5,15,8,0.98)', 'rgba(5,15,8,0.82)']}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.headerTitle}>Safe Zones</Text>
+            <Text style={styles.headerSubtitle}>
+              {safeZones.length} zone{safeZones.length !== 1 ? 's' : ''} active
+              {activeCircle ? ` · ${activeCircle.name}` : ''}
+            </Text>
+          </View>
+          <View style={styles.headerShieldBadge}>
+            <Ionicons name="shield-checkmark" size={16} color={Colors.accent} />
+            <Text style={styles.headerShieldText}>{safeZones.length}</Text>
+          </View>
+        </View>
+
+        {/* Circle Switcher */}
+        {circles.length > 1 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+            style={styles.chipScroll}>
+            {circles.map(c => (
+              <CircleChip
+                key={c.id}
+                circle={c}
+                active={activeCircle?.id === c.id}
+                onPress={() => switchCircle(c)}
+              />
+            ))}
+          </ScrollView>
+        )}
       </Animated.View>
 
-      {/* Map Preview */}
-      <View style={styles.mapContainer}>
+      {/* Map — top 45% */}
+      <View style={[styles.mapContainer, { height: MAP_HEIGHT }]}>
         <MapView
           ref={mapRef}
           provider={PROVIDER_GOOGLE}
@@ -163,19 +299,21 @@ export default function SafeZonesScreen() {
           customMapStyle={DARK_MAP_STYLE}
           showsUserLocation
           showsCompass={false}
-          onPress={handleMapPress}>
+          initialRegion={mapRegion}
+          onPress={handleMainMapPress}>
           {safeZones.map(zone => (
             <React.Fragment key={zone.id}>
-              <Circle
+              <MapCircle
                 center={{ latitude: zone.center_lat, longitude: zone.center_lng }}
                 radius={zone.radius_meters}
-                fillColor="rgba(0,200,83,0.12)"
+                fillColor="rgba(0,200,83,0.13)"
                 strokeColor="#00C853"
                 strokeWidth={2}
               />
               <Marker
                 coordinate={{ latitude: zone.center_lat, longitude: zone.center_lng }}
-                title={zone.name}>
+                title={zone.name}
+                description={`${formatRadius(zone.radius_meters)} radius`}>
                 <View style={styles.zoneMarker}>
                   <LinearGradient colors={['#0D7A45', '#0A5C35']} style={styles.zoneMarkerGrad}>
                     <Ionicons name="shield-checkmark" size={14} color={Colors.accent} />
@@ -184,98 +322,161 @@ export default function SafeZonesScreen() {
               </Marker>
             </React.Fragment>
           ))}
-          {selectedLocation && showCreateModal && (
-            <>
-              <Circle
-                center={selectedLocation}
-                radius={radius}
-                fillColor="rgba(0,230,118,0.15)"
-                strokeColor="#00E676"
-                strokeWidth={2}
-              />
-              <Marker coordinate={selectedLocation}>
-                <View style={styles.previewMarker}>
-                  <LinearGradient colors={['#00E676', '#00C853']} style={styles.previewMarkerGrad}>
-                    <Ionicons name="location" size={14} color="#fff" />
-                  </LinearGradient>
-                </View>
-              </Marker>
-            </>
-          )}
         </MapView>
-        <LinearGradient colors={['rgba(2,12,5,0)', 'rgba(2,12,5,0.9)']} style={styles.mapOverlay} pointerEvents="none" />
-        <Pressable style={styles.addZoneBtn} onPress={openCreateModal}>
-          <LinearGradient colors={Gradients.buttonHero} style={styles.addZoneBtnGrad}>
+
+        {/* Gradient fade at bottom of map */}
+        <LinearGradient
+          colors={['transparent', 'rgba(2,12,5,0.85)']}
+          style={styles.mapBottomFade}
+          pointerEvents="none"
+        />
+
+        {/* Zone count overlay */}
+        {safeZones.length > 0 && (
+          <View style={styles.mapBadge}>
+            <Ionicons name="shield-checkmark" size={12} color={Colors.accent} />
+            <Text style={styles.mapBadgeText}>{safeZones.length} zones</Text>
+          </View>
+        )}
+
+        {/* FAB on map */}
+        <Pressable style={styles.fab} onPress={openCreateModal}>
+          <LinearGradient colors={Gradients.buttonHero} style={styles.fabGrad}>
             <Ionicons name="add" size={26} color="#fff" />
           </LinearGradient>
         </Pressable>
       </View>
 
-      {/* Zones List */}
+      {/* Zone List */}
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={Colors.accent} />
+          <Text style={styles.loadingText}>Loading zones…</Text>
         </View>
       ) : (
-        <Animated.FlatList
-          style={{ opacity: fadeAnim }}
-          data={safeZones}
-          keyExtractor={item => item.id}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 30 }]}
-          ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons name="shield-outline" size={60} color={Colors.accentDim} />
-              <Text style={styles.emptyTitle}>No Safe Zones</Text>
-              <Text style={styles.emptyText}>Tap + to create your first safe zone</Text>
-            </View>
-          }
-          renderItem={({ item, index }) => (
-            <ZoneCard zone={item} index={index} onDelete={() => handleDeleteZone(item)} />
+        <Animated.ScrollView
+          style={[styles.list, { opacity: fadeAnim }]}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + 30 },
+          ]}
+          showsVerticalScrollIndicator={false}>
+          {safeZones.length === 0 ? (
+            <EmptyZones onAddPress={openCreateModal} />
+          ) : (
+            safeZones.map((zone, index) => (
+              <ZoneCard
+                key={zone.id}
+                zone={zone}
+                index={index}
+                onDelete={handleDeleteZone}
+                onFocus={focusZoneOnMap}
+              />
+            ))
           )}
-        />
+        </Animated.ScrollView>
       )}
 
       {/* Create Zone Modal */}
-      <Modal visible={showCreateModal} transparent animationType="none" onRequestClose={closeCreateModal}>
-        <BlurView intensity={20} style={StyleSheet.absoluteFill} />
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="none"
+        onRequestClose={closeCreateModal}>
+        <BlurView intensity={22} style={StyleSheet.absoluteFill} />
         <View style={styles.modalOverlay}>
           <Animated.View style={[styles.modalContainer, { transform: [{ translateY: modalAnim }] }]}>
             <GradientCard style={styles.modal}>
+              {/* Handle */}
               <View style={styles.modalHandle} />
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Create Safe Zone</Text>
-                <Pressable onPress={closeCreateModal} style={styles.modalClose}>
-                  <Ionicons name="close" size={22} color={Colors.textMuted} />
+
+              {/* Title row */}
+              <View style={styles.modalHeaderRow}>
+                <LinearGradient colors={Gradients.button} style={styles.modalIconBg}>
+                  <Ionicons name="shield-checkmark-outline" size={20} color={Colors.accent} />
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalTitle}>Create Safe Zone</Text>
+                  <Text style={styles.modalSubtitle}>Tap the map to set the center</Text>
+                </View>
+                <Pressable onPress={closeCreateModal} style={styles.modalCloseBtn} hitSlop={8}>
+                  <Ionicons name="close" size={20} color={Colors.textMuted} />
                 </Pressable>
               </View>
 
-              {/* Step 1: Pick location */}
-              <View style={styles.stepRow}>
-                <View style={[styles.stepDot, creatingStep >= 1 && styles.stepDotActive]}>
-                  <Text style={styles.stepNum}>1</Text>
-                </View>
-                <Text style={styles.stepLabel}>Tap map to pick center</Text>
-                {selectedLocation && <Ionicons name="checkmark-circle" size={20} color={Colors.success} />}
+              {/* Mini map for location picking */}
+              <View style={styles.miniMapWrap}>
+                <MapView
+                  ref={modalMapRef}
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.miniMap}
+                  customMapStyle={DARK_MAP_STYLE}
+                  showsUserLocation
+                  showsCompass={false}
+                  onPress={handleModalMapPress}
+                  initialRegion={mapRegion}>
+                  {selectedLocation && (
+                    <>
+                      <MapCircle
+                        center={selectedLocation}
+                        radius={radius}
+                        fillColor="rgba(0,230,118,0.18)"
+                        strokeColor="#00E676"
+                        strokeWidth={2}
+                      />
+                      <Marker coordinate={selectedLocation}>
+                        <View style={styles.previewMarker}>
+                          <LinearGradient colors={['#00E676', '#00C853']} style={styles.previewMarkerGrad}>
+                            <Ionicons name="location" size={13} color="#fff" />
+                          </LinearGradient>
+                        </View>
+                      </Marker>
+                    </>
+                  )}
+                </MapView>
+
+                {/* Crosshair hint when no location picked */}
+                {!selectedLocation && (
+                  <View style={styles.crosshairOverlay} pointerEvents="none">
+                    <View style={styles.crosshairVert} />
+                    <View style={styles.crosshairHoriz} />
+                    <View style={styles.crosshairHint}>
+                      <Ionicons name="finger-print-outline" size={14} color={Colors.accent} />
+                      <Text style={styles.crosshairHintText}>Tap to place zone center</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Location confirmed badge */}
+                {selectedLocation && (
+                  <View style={styles.locationConfirmedBadge}>
+                    <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
+                    <Text style={styles.locationConfirmedText}>
+                      {formatCoord(selectedLocation.latitude)}, {formatCoord(selectedLocation.longitude)}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Zone Name */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Zone Name</Text>
                 <View style={styles.inputWrap}>
-                  <Ionicons name="shield-outline" size={18} color={Colors.accentSoft} style={{ marginRight: 10 }} />
+                  <Ionicons name="shield-outline" size={18} color={Colors.accentSoft} />
                   <TextInput
                     style={styles.textInput}
                     value={zoneName}
                     onChangeText={setZoneName}
                     placeholder="e.g. Home, School, Work"
                     placeholderTextColor={Colors.textMuted}
+                    returnKeyType="done"
                   />
                 </View>
               </View>
 
               {/* Radius Slider */}
               <View style={styles.radiusGroup}>
-                <View style={styles.radiusHeader}>
+                <View style={styles.radiusHeaderRow}>
                   <Text style={styles.inputLabel}>Radius</Text>
                   <View style={styles.radiusBadge}>
                     <Text style={styles.radiusBadgeText}>{formatRadius(radius)}</Text>
@@ -284,7 +485,7 @@ export default function SafeZonesScreen() {
                 <Slider
                   style={styles.slider}
                   minimumValue={50}
-                  maximumValue={5000}
+                  maximumValue={2000}
                   step={50}
                   value={radius}
                   onValueChange={setRadius}
@@ -293,24 +494,26 @@ export default function SafeZonesScreen() {
                   thumbTintColor={Colors.accent}
                 />
                 <View style={styles.sliderLabels}>
-                  <Text style={styles.sliderLabel}>50m</Text>
-                  <Text style={styles.sliderLabel}>5km</Text>
+                  <Text style={styles.sliderLabel}>50 m</Text>
+                  <Text style={styles.sliderLabel}>2 km</Text>
                 </View>
               </View>
 
+              {/* Error */}
               {error ? (
                 <View style={styles.errorBox}>
-                  <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                  <Ionicons name="alert-circle" size={15} color={Colors.danger} />
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               ) : null}
 
+              {/* Create button */}
               <PremiumButton
                 title="Create Safe Zone"
                 onPress={handleCreateZone}
                 loading={creating}
                 disabled={!selectedLocation || !zoneName.trim()}
-                icon={<Ionicons name="shield-checkmark-outline" size={20} color="#fff" />}
+                icon={<Ionicons name="shield-checkmark-outline" size={18} color="#fff" />}
               />
             </GradientCard>
           </Animated.View>
@@ -320,89 +523,348 @@ export default function SafeZonesScreen() {
   )
 }
 
-function ZoneCard({ zone, index, onDelete }) {
-  const slideAnim = useRef(new Animated.Value(40)).current
-  const fadeAnim = useRef(new Animated.Value(0)).current
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+function EmptyZones({ onAddPress }) {
+  const floatAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    setTimeout(() => {
-      Animated.parallel([
-        Animated.spring(slideAnim, { toValue: 0, tension: 80, friction: 10, useNativeDriver: true }),
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      ]).start()
-    }, index * 70)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, { toValue: -7, duration: 1800, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 1800, useNativeDriver: true }),
+      ])
+    ).start()
   }, [])
 
-  const formatRadius = (r) => r >= 1000 ? `${(r / 1000).toFixed(1)} km` : `${r} m`
-
   return (
-    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 12 }}>
-      <GradientCard style={styles.zoneCard}>
-        <View style={styles.zoneCardLeft}>
-          <LinearGradient colors={['rgba(0,200,83,0.2)', 'rgba(0,200,83,0.05)']} style={styles.zoneIconWrap}>
-            <Ionicons name="shield-checkmark" size={22} color={Colors.accentSoft} />
+    <View style={styles.emptyBox}>
+      <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
+        <LinearGradient
+          colors={['rgba(0,200,83,0.18)', 'rgba(10,92,53,0.08)']}
+          style={styles.emptyIconRing}>
+          <LinearGradient colors={Gradients.button} style={styles.emptyIconBg}>
+            <Ionicons name="shield-outline" size={40} color={Colors.accent} />
           </LinearGradient>
-          <View>
-            <Text style={styles.zoneName}>{zone.name}</Text>
-            <Text style={styles.zoneRadius}>Radius: {formatRadius(zone.radius_meters)}</Text>
-          </View>
-        </View>
-        <Pressable onPress={onDelete} style={styles.deleteBtn}>
-          <Ionicons name="trash-outline" size={18} color={Colors.danger} />
-        </Pressable>
-      </GradientCard>
-    </Animated.View>
+        </LinearGradient>
+      </Animated.View>
+      <Text style={styles.emptyTitle}>No safe zones yet</Text>
+      <Text style={styles.emptyText}>
+        Add your first zone to get alerts{'\n'}when family members arrive or leave.
+      </Text>
+      <Pressable onPress={onAddPress} style={styles.emptyAddBtn}>
+        <LinearGradient colors={Gradients.buttonHero} style={styles.emptyAddBtnGrad}>
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.emptyAddBtnText}>Add First Zone</Text>
+        </LinearGradient>
+      </Pressable>
+    </View>
   )
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgDeep },
-  header: { paddingHorizontal: 24, paddingBottom: 14, zIndex: 10 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: Colors.textWhite },
+
+  // Header
+  header: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    zIndex: 10,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerTitle: { fontSize: 26, fontWeight: '800', color: Colors.textWhite },
   headerSubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
-  mapContainer: { height: height * 0.38, position: 'relative' },
+  headerShieldBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Colors.bgGlassStrong,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  headerShieldText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
+
+  // Circle switcher chips
+  chipScroll: { marginTop: 10 },
+  chipRow: { gap: 8, paddingVertical: 2 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.bgMid,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  chipActive: { borderColor: Colors.borderStrong },
+  chipText: { fontSize: 13, color: Colors.textMuted, fontWeight: '600' },
+  chipTextActive: { color: Colors.textPrimary },
+
+  // Map
+  mapContainer: { position: 'relative' },
   map: { flex: 1 },
-  mapOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 60 },
-  addZoneBtn: { position: 'absolute', bottom: 16, right: 16, borderRadius: 28, shadowColor: Colors.accentSoft, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 12 },
-  addZoneBtnGrad: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  mapBottomFade: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 56,
+  },
+  mapBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(5,15,8,0.85)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  mapBadgeText: { color: Colors.accentSoft, fontSize: 12, fontWeight: '700' },
+  fab: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    borderRadius: 28,
+    shadowColor: Colors.accentSoft,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  fabGrad: {
+    width: 56, height: 56, borderRadius: 28,
+    alignItems: 'center', justifyContent: 'center',
+  },
   zoneMarker: { alignItems: 'center' },
-  zoneMarkerGrad: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: Colors.accentSoft },
-  previewMarker: { alignItems: 'center' },
-  previewMarkerGrad: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-  list: { padding: 16 },
-  emptyBox: { alignItems: 'center', paddingVertical: 60, gap: 12 },
-  emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.textSecondary },
-  emptyText: { fontSize: 14, color: Colors.textMuted, textAlign: 'center' },
-  zoneCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  zoneCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  zoneIconWrap: { width: 46, height: 46, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  zoneMarkerGrad: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: Colors.accentSoft,
+  },
+
+  // Zone list
+  list: { flex: 1 },
+  listContent: { padding: 16 },
+  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 50, gap: 14 },
+  loadingText: { color: Colors.textMuted, fontSize: 14 },
+
+  // Zone card
+  zoneCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  zoneCardMain: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
+  zoneIconWrap: {
+    width: 48, height: 48, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  zoneTextBlock: { flex: 1, gap: 2 },
   zoneName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  zoneRadius: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  deleteBtn: { padding: 8, backgroundColor: 'rgba(229,57,53,0.1)', borderRadius: 10 },
+  zoneRadius: { fontSize: 12, color: Colors.accentSoft, fontWeight: '600' },
+  zoneCoords: { fontSize: 11, color: Colors.textMuted, letterSpacing: 0.3 },
+  deleteBtn: {
+    padding: 9,
+    backgroundColor: 'rgba(229,57,53,0.1)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(229,57,53,0.2)',
+  },
+
+  // Empty state
+  emptyBox: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    gap: 14,
+  },
+  emptyIconRing: {
+    width: 110, height: 110, borderRadius: 55,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyIconBg: {
+    width: 80, height: 80, borderRadius: 40,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: Colors.borderStrong,
+  },
+  emptyTitle: { fontSize: 20, fontWeight: '800', color: Colors.textSecondary },
+  emptyText: { fontSize: 13, color: Colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  emptyAddBtn: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginTop: 6,
+    shadowColor: Colors.accentSoft,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  emptyAddBtnGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  emptyAddBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Create zone modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalContainer: { width: '100%' },
-  modal: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, gap: 18 },
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: 'center', marginBottom: 4 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: Colors.textPrimary },
-  modalClose: { padding: 4, backgroundColor: Colors.bgMid, borderRadius: 10 },
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.bgMid, borderRadius: 14, padding: 14 },
-  stepDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.bgCard, borderWidth: 2, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
-  stepDotActive: { borderColor: Colors.accent, backgroundColor: Colors.bgGlassStrong },
-  stepNum: { color: Colors.textSecondary, fontSize: 13, fontWeight: '700' },
-  stepLabel: { flex: 1, fontSize: 14, color: Colors.textSecondary },
+  modal: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 22,
+    gap: 16,
+  },
+  modalHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: 4,
+  },
+  modalHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  modalIconBg: {
+    width: 42, height: 42, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.textPrimary },
+  modalSubtitle: { fontSize: 12, color: Colors.textMuted, marginTop: 1 },
+  modalCloseBtn: {
+    padding: 6,
+    backgroundColor: Colors.bgMid,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Mini map
+  miniMapWrap: {
+    height: 180,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  miniMap: { flex: 1 },
+  crosshairOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crosshairVert: {
+    position: 'absolute',
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(0,230,118,0.6)',
+  },
+  crosshairHoriz: {
+    position: 'absolute',
+    height: 1,
+    width: 30,
+    backgroundColor: 'rgba(0,230,118,0.6)',
+  },
+  crosshairHint: {
+    position: 'absolute',
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(5,15,8,0.85)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  crosshairHintText: { color: Colors.accentSoft, fontSize: 12, fontWeight: '600' },
+  locationConfirmedBadge: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(5,15,8,0.9)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.borderStrong,
+  },
+  locationConfirmedText: { color: Colors.accentSoft, fontSize: 11, fontWeight: '600', flex: 1 },
+  previewMarker: { alignItems: 'center' },
+  previewMarkerGrad: {
+    width: 26, height: 26, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Form fields
   inputGroup: { gap: 8 },
-  inputLabel: { fontSize: 12, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bgMid, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border },
-  textInput: { flex: 1, color: Colors.textPrimary, fontSize: 16 },
-  radiusGroup: { gap: 10 },
-  radiusHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  radiusBadge: { backgroundColor: Colors.bgGlassStrong, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, borderWidth: 1, borderColor: Colors.border },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.bgMid,
+    borderRadius: 14,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  textInput: { flex: 1, color: Colors.textPrimary, fontSize: 15 },
+  radiusGroup: { gap: 8 },
+  radiusHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  radiusBadge: {
+    backgroundColor: Colors.bgGlassStrong,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
   radiusBadgeText: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
-  slider: { width: '100%', height: 40 },
-  sliderLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  slider: { width: '100%', height: 36 },
+  sliderLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -4 },
   sliderLabel: { color: Colors.textMuted, fontSize: 11 },
-  errorBox: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: 'rgba(229,57,53,0.1)', borderRadius: 12, padding: 12 },
+  errorBox: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    backgroundColor: 'rgba(229,57,53,0.1)',
+    borderRadius: 12,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(229,57,53,0.2)',
+  },
   errorText: { color: Colors.danger, fontSize: 13, flex: 1 },
 })
