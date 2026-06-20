@@ -576,10 +576,16 @@ export default function Home() {
               GRAVITY LIVE <span className={styles.memberCount}>6 online</span>
             </div>
 
+            {/* Toggle tab — always visible at right edge, moves with sidebar */}
+            <button
+              className={`${styles.sidebarToggle} ${sidebarOpen ? styles.sidebarToggleOpen : ''}`}
+              onClick={() => setSidebarOpen(o => !o)}
+              aria-label={sidebarOpen ? 'Close panel' : 'Open panel'}
+            >
+              {sidebarOpen ? '›' : '‹'}
+            </button>
+
             <div className={`${styles.mapSidebar} ${sidebarOpen ? styles.mapSidebarOpen : ''}`}>
-              <button className={styles.sidebarToggle} onClick={() => setSidebarOpen(o => !o)} title={sidebarOpen ? 'Hide panel' : 'Show panel'}>
-                {sidebarOpen ? '›' : '‹'}
-              </button>
               <div className={styles.sidebarTitle}>
                 <span className={styles.safeIcon}>✓</span> All 6 members safe
               </div>

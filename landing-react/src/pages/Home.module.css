@@ -569,7 +569,13 @@
 }
 .mapDemoTitle span { color: #00E676; }
 .mapDemoSub { font-size: 14px; color: #6B9B7A; margin: 0; }
-.mapWrap { position: relative; flex: 1; min-height: 380px; overflow: hidden; }
+.mapWrap { position: relative; flex: 1; min-height: 420px; overflow: hidden; }
+@media (max-width: 768px) {
+  .mapWrap { min-height: 360px; }
+}
+@media (max-width: 480px) {
+  .mapWrap { min-height: 320px; }
+}
 .mapLiveTag {
   position: absolute;
   top: 12px;
@@ -624,16 +630,16 @@
 }
 .mapSidebar::-webkit-scrollbar { display: none; }
 
-/* Toggle tab that sticks out on the LEFT edge of the sidebar */
+/* Toggle tab — sibling of sidebar, always visible at right edge of mapWrap */
 .sidebarToggle {
   position: absolute;
-  left: -32px;
+  right: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 32px;
-  height: 56px;
-  background: rgba(5, 15, 8, 0.96);
-  border: 1px solid rgba(0, 230, 118, 0.2);
+  width: 28px;
+  height: 52px;
+  background: rgba(5, 15, 8, 0.94);
+  border: 1px solid rgba(0, 230, 118, 0.22);
   border-right: none;
   border-radius: 10px 0 0 10px;
   color: #00E676;
@@ -644,15 +650,14 @@
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(12px);
-  transition: background 0.2s, color 0.2s;
   padding: 0;
   line-height: 1;
-  z-index: 10;
+  z-index: 1002;
+  transition: right 0.32s cubic-bezier(0.34, 1.1, 0.64, 1), background 0.2s;
 }
-.sidebarToggle:hover {
-  background: rgba(0, 230, 118, 0.12);
-  color: #00FF88;
-}
+.sidebarToggle:hover { background: rgba(0, 230, 118, 0.12); color: #00FF88; }
+/* When sidebar open, tab moves left to sidebar's left edge */
+.sidebarToggleOpen { right: 188px; }
 .sidebarTitle { font-size: 13px; font-weight: 700; color: #00E676; display: flex; align-items: center; gap: 6px; }
 .safeIcon {
   width: 20px;
