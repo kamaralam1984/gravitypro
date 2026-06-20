@@ -305,14 +305,16 @@ export default function ChildPanel() {
           if (mapInitRef.current) refreshMapMarkers(members)
         }
 
-        // Try to fetch today's activity stats
+        // Fetch today's activity stats
         try {
           const statsData = await apiGet('/users/me/stats')
           if (statsData && statsData.today) {
             const s = statsData.today
-            if (s.distance_km != null) setTodayDistance(parseFloat(s.distance_km).toFixed(1) + ' km')
-            if (s.safe_zones_visited != null) setTodaySafeZones(parseInt(s.safe_zones_visited))
-            if (s.family_checkins != null) setTodayCheckins(parseInt(s.family_checkins))
+            // backend returns: { distance, safeZones, checkins }
+            const dist = s.distance ?? s.distance_km ?? 0
+            setTodayDistance(parseFloat(dist) > 0 ? parseFloat(dist).toFixed(1) + ' km' : '0 km')
+            setTodaySafeZones(parseInt(s.safeZones ?? s.safe_zones_visited ?? 0))
+            setTodayCheckins(parseInt(s.checkins ?? s.family_checkins ?? 0))
           }
         } catch { /* stats endpoint optional */ }
 
