@@ -1,0 +1,131 @@
+.root {
+  min-height: 100vh;
+  background: #071a0f;
+  color: #ffffff;
+  font-family: 'Inter', sans-serif;
+}
+
+/* NAV */
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid rgba(0,230,118,0.12);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(7,26,15,0.95);
+  backdrop-filter: blur(12px);
+}
+.navLogo { display: flex; align-items: center; gap: 0.5rem; text-decoration: none; }
+.logoPin { font-size: 1.3rem; }
+.logoText { font-size: 1.2rem; font-weight: 800; color: #00E676; letter-spacing: 2px; }
+.navRight { display: flex; align-items: center; gap: 1.5rem; }
+.navLink { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+.navLink:hover { color: #00E676; }
+.navCta { background: #00E676; color: #071a0f; padding: 0.45rem 1.1rem; border-radius: 6px; font-size: 0.9rem; font-weight: 600; text-decoration: none; transition: opacity 0.2s; }
+.navCta:hover { opacity: 0.85; }
+
+/* HERO */
+.hero { text-align: center; padding: 4rem 1rem 2.5rem; }
+.heroLabel { display: inline-block; background: rgba(0,230,118,0.12); color: #00E676; border: 1px solid rgba(0,230,118,0.25); border-radius: 20px; padding: 0.3rem 1rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 1rem; }
+.heroTitle { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; margin: 0 0 0.75rem; }
+.heroSub { color: rgba(255,255,255,0.65); font-size: 1.05rem; margin: 0 auto 1.75rem; max-width: 500px; }
+
+/* CURRENCY SELECTOR */
+.currencyRow { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-top: 0.5rem; }
+.currencyLabel { color: rgba(255,255,255,0.55); font-size: 0.85rem; }
+.currencySelect { background: rgba(255,255,255,0.06); color: #fff; border: 1px solid rgba(0,230,118,0.2); border-radius: 8px; padding: 0.45rem 1rem; font-size: 0.9rem; cursor: pointer; outline: none; }
+.currencySelect:focus { border-color: #00E676; }
+
+/* PLANS GRID */
+.plansGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  max-width: 1100px;
+  margin: 2rem auto 3rem;
+  padding: 0 1.5rem;
+}
+.planCard {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 2rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: relative;
+  transition: border-color 0.25s, transform 0.25s;
+}
+.planCard:hover { border-color: rgba(0,230,118,0.3); transform: translateY(-3px); }
+.popularCard {
+  border-color: rgba(0,230,118,0.4);
+  background: rgba(0,230,118,0.05);
+  transform: scale(1.02);
+}
+.popularCard:hover { transform: scale(1.02) translateY(-3px); }
+.popularBadge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: #00E676; color: #071a0f; font-size: 0.75rem; font-weight: 700; padding: 0.25rem 0.9rem; border-radius: 20px; white-space: nowrap; }
+
+.planTop { text-align: center; }
+.planIcon { font-size: 2.2rem; display: block; margin-bottom: 0.5rem; }
+.planName { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.4rem; }
+.planPrice { font-size: 2rem; font-weight: 800; margin-bottom: 0.4rem; }
+.planMeta { font-size: 0.8rem; color: rgba(255,255,255,0.45); }
+
+.featureList { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.6rem; flex: 1; }
+.featureItem { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.88rem; color: rgba(255,255,255,0.8); }
+.check { font-weight: 700; flex-shrink: 0; }
+
+.planBtn {
+  display: block;
+  width: 100%;
+  padding: 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: transparent;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  margin-top: auto;
+}
+.planBtn:hover { background: rgba(255,255,255,0.07); }
+.planBtnPrimary { background: #00E676; color: #071a0f; border-color: #00E676; }
+.planBtnPrimary:hover { background: #00c560; border-color: #00c560; }
+.planBtnPremium { background: rgba(0,230,118,0.12); border-color: rgba(0,230,118,0.35); color: #00E676; }
+.planBtnPremium:hover { background: rgba(0,230,118,0.2); }
+
+/* PAYMENT METHODS */
+.pmSection { text-align: center; padding: 2rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.06); }
+.pmTitle { font-size: 0.9rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; }
+.pmRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.65rem; margin-bottom: 0.75rem; }
+.pmBadge { display: flex; align-items: center; gap: 0.4rem; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 0.35rem 0.85rem; font-size: 0.82rem; color: rgba(255,255,255,0.75); }
+.pmSub { font-size: 0.78rem; color: rgba(255,255,255,0.35); }
+
+/* FAQ */
+.faq { max-width: 900px; margin: 0 auto 3rem; padding: 2rem 1.5rem; }
+.faqTitle { font-size: 1.6rem; font-weight: 700; text-align: center; margin-bottom: 2rem; }
+.faqGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 1.25rem; }
+.faqItem { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 1.25rem 1.5rem; }
+.faqQ { font-weight: 600; color: #00E676; margin-bottom: 0.5rem; font-size: 0.95rem; }
+.faqA { color: rgba(255,255,255,0.65); font-size: 0.88rem; line-height: 1.6; }
+
+/* FOOTER */
+.footer { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 2rem; border-top: 1px solid rgba(255,255,255,0.07); flex-wrap: wrap; gap: 0.75rem; }
+.footerBack { color: rgba(255,255,255,0.55); text-decoration: none; font-size: 0.88rem; transition: color 0.2s; }
+.footerBack:hover { color: #00E676; }
+.footerCopy { color: rgba(255,255,255,0.3); font-size: 0.8rem; }
+.footerLogin { color: #00E676; text-decoration: none; font-size: 0.88rem; }
+
+@media (max-width: 600px) {
+  .plansGrid { grid-template-columns: 1fr; }
+  .popularCard { transform: none; }
+  .popularCard:hover { transform: translateY(-3px); }
+  .faqGrid { grid-template-columns: 1fr; }
+  .nav { padding: 0.85rem 1rem; }
+  .footer { justify-content: center; flex-direction: column; text-align: center; }
+}

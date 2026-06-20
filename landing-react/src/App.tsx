@@ -7,6 +7,8 @@ import Child from './pages/Child'
 import ChildPanel from './pages/ChildPanel'
 import AdminLogin from './pages/AdminLogin'
 import AdminPanel from './pages/AdminPanel'
+import Pricing from './pages/Pricing'
+import Checkout from './pages/Checkout'
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/checkout" element={<Checkout />} />
         <Route path="/parent" element={<Parent />} />
         <Route path="/parent/panel" element={<ParentPanel />} />
         <Route path="/child" element={<Child />} />

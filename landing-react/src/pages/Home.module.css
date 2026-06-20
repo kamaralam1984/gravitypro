@@ -1979,6 +1979,19 @@
   color: #5E8B6E;
   text-align: center;
 }
+
+.viewAllPlansLink {
+  display: inline-block;
+  margin-top: 14px;
+  color: #00E676;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: center;
+  width: 100%;
+  transition: opacity 0.2s;
+}
+.viewAllPlansLink:hover { opacity: 0.75; }
 @media(max-width:768px) {
   .pricingSection { padding: 70px 20px; }
   .pricingCard.popular { transform: scale(1); }

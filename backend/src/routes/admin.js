@@ -218,4 +218,49 @@ router.post('/broadcast', adminAuth, async (req, res) => {
   res.json({ sent: true, message, type, recipients: count })
 })
 
+// GET /api/v1/admin/subscriptions
+router.get('/subscriptions', adminAuth, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = 50, offset = (page - 1) * limit
+    const r = await query(`SELECT us.*, u.phone, u.name as user_name, sp.display_name as plan_name
+      FROM user_subscriptions us LEFT JOIN users u ON u.id=us.user_id
+      LEFT JOIN subscription_plans sp ON sp.id=us.plan_id
+      ORDER BY us.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset])
+    const cnt = await query('SELECT COUNT(*) FROM user_subscriptions')
+    res.json({ subscriptions: r.rows, total: parseInt(cnt.rows[0].count), page, limit })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/v1/admin/payments
+router.get('/payments', adminAuth, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = 50, offset = (page - 1) * limit
+    const r = await query(`SELECT po.*, u.phone, u.name as user_name, sp.display_name as plan_name
+      FROM payment_orders po LEFT JOIN users u ON u.id=po.user_id
+      LEFT JOIN subscription_plans sp ON sp.id=po.plan_id
+      ORDER BY po.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset])
+    const cnt = await query('SELECT COUNT(*) FROM payment_orders')
+    res.json({ payments: r.rows, total: parseInt(cnt.rows[0].count), page, limit })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// PATCH /api/v1/admin/users/:id/plan — manually override user's subscription plan
+router.patch('/users/:id/plan', adminAuth, async (req, res) => {
+  try {
+    const { plan, months = 1 } = req.body
+    if (!['free','family','premium'].includes(plan)) return res.status(400).json({ error: 'Invalid plan' })
+    const now = new Date(), end = new Date(now)
+    end.setMonth(end.getMonth() + months)
+    await query("UPDATE user_subscriptions SET status='cancelled', cancelled_at=NOW() WHERE user_id=$1 AND status='active'", [req.params.id])
+    if (plan !== 'free') {
+      await query('INSERT INTO user_subscriptions (user_id,plan_id,status,gateway,current_period_start,current_period_end) VALUES ($1,$2,$3,$4,$5,$6)',
+        [req.params.id, plan, 'active', 'admin', now, end])
+    }
+    await query('UPDATE users SET current_plan=$1 WHERE id=$2', [plan, req.params.id])
+    res.json({ success: true, plan, valid_until: end })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
 module.exports = router

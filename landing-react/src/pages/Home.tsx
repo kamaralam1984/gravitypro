@@ -1345,24 +1345,27 @@ export default function Home() {
           </div>
           <div className={`${styles.pricingCard} ${styles.popular} ${styles.revealUp}`} style={{ transitionDelay: '0.12s' }}>
             <div className={styles.popularBadge}>⭐ Most Popular</div>
-            <div className={styles.pricingPlanName}>Pro</div>
-            <div className={styles.pricingPrice}><sup>₹</sup>99<sub>/month</sub></div>
-            <p className={styles.pricingDesc}>For larger families and complete control</p>
+            <div className={styles.pricingPlanName}>Family</div>
+            <div className={styles.pricingPrice}><sup>₹</sup>299<sub>/month</sub></div>
+            <p className={styles.pricingDesc}>For larger families and complete peace of mind</p>
             <ul className={styles.pricingFeatures}>
               <li>Everything in Free</li>
-              <li>Family Circle (up to 20 members)</li>
+              <li>Family Circle (up to 15 members)</li>
               <li>Unlimited Safe Zones</li>
-              <li>SOS + Auto emergency call</li>
+              <li>SOS + Auto emergency alert</li>
               <li>Instant priority alerts</li>
               <li>30-day location history</li>
               <li>Battery level reports</li>
               <li>Journey tracking</li>
               <li>Priority support 24/7</li>
             </ul>
-            <Link to="/login" className={`${styles.pricingCta} ${styles.proCta}`}>Get Pro — ₹99/mo</Link>
+            <Link to="/pricing" className={`${styles.pricingCta} ${styles.proCta}`}>See All Plans →</Link>
           </div>
         </div>
-        <p className={styles.pricingNote}>💳 UPI, Credit/Debit Card accepted &nbsp;·&nbsp; Cancel anytime &nbsp;·&nbsp; 7-day free trial on Pro</p>
+        <p className={styles.pricingNote}>
+          🌍 Pay with Razorpay · M-Pesa · Pesapal · Stripe · PayPal &nbsp;·&nbsp; Available in 145+ countries &nbsp;·&nbsp; Cancel anytime
+        </p>
+        <Link to="/pricing" className={styles.viewAllPlansLink}>View all plans with international pricing →</Link>
       </section>
 
       {/* DOWNLOAD */}
