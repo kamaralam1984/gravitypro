@@ -699,30 +699,6 @@ export default function ParentPanel() {
 
       <div className={styles.appFrame} id="appFrame">
 
-        {/* PHONE NOTCH */}
-        <div className={styles.phoneNotch}>
-          <div className={styles.phoneNotchCam}></div>
-        </div>
-
-        {/* STATUS BAR */}
-        <div className={styles.statusBar}>
-          <span className={styles.statusTime}>9:41</span>
-          <div className={styles.statusIcons}>
-            <div className={styles.signalBars}>
-              <span></span><span></span><span></span><span></span>
-            </div>
-            <svg width="15" height="11" viewBox="0 0 15 11" fill="none" style={{ margin: '0 2px' }}>
-              <path d="M7.5 2.5C9.5 2.5 11.3 3.3 12.6 4.6L14 3.2C12.3 1.5 10 0.5 7.5 0.5C5 0.5 2.7 1.5 1 3.2L2.4 4.6C3.7 3.3 5.5 2.5 7.5 2.5Z" fill="white" />
-              <path d="M7.5 5.5C8.8 5.5 9.9 6 10.7 6.8L12.1 5.4C10.9 4.2 9.3 3.5 7.5 3.5C5.7 3.5 4.1 4.2 2.9 5.4L4.3 6.8C5.1 6 6.2 5.5 7.5 5.5Z" fill="white" />
-              <circle cx="7.5" cy="9.5" r="1.5" fill="white" />
-            </svg>
-            <div className={styles.statusBattery}>
-              <div className={styles.batteryIcon}><div className={styles.batteryFill}></div></div>
-              <span style={{ fontSize: '11px', fontWeight: 700 }}>79</span>
-            </div>
-          </div>
-        </div>
-
         {/* APP HEADER */}
         <div className={styles.appHeader}>
           <div className={styles.headerLeft}>
@@ -757,6 +733,12 @@ export default function ParentPanel() {
               </svg>
               {notifCount > 0 && <div className={styles.notifBadge}>{notifCount}</div>}
             </div>
+            <button onClick={doLogout} className={styles.logoutBtn}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Logout
+            </button>
           </div>
         </div>
 
