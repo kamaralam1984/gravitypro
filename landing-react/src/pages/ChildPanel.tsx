@@ -94,7 +94,7 @@ export default function ChildPanel() {
   const [alerts, setAlerts] = useState<Array<{id:string;type:string;userName:string;zoneName:string;eventType:string;message:string;timestamp:string;read:boolean}>>([])
   const [unreadAlerts, setUnreadAlerts] = useState(0)
   const [alertFilter, setAlertFilter] = useState<string>('all')
-  const [statusBarTime, setStatusBarTime] = useState('')
+  const [, setStatusBarTime] = useState('')
   const [gpsActive, setGpsActive] = useState(false)
   const [todayDistance, setTodayDistance] = useState<string>('—')
   const [todaySafeZones, setTodaySafeZones] = useState<number>(0)
@@ -840,18 +840,6 @@ export default function ChildPanel() {
     <div className={styles.pageWrapper}>
       <div className={styles.appFrame} id="appFrame">
 
-        {/* STATUS BAR */}
-        <div className={styles.statusBar}>
-          <span className={styles.statusBarTime}>{statusBarTime || '—'}</span>
-          <div className={styles.statusIcons}>
-            <div className={styles.signalBars}>
-              <span></span><span></span><span></span><span></span>
-            </div>
-            <span className={styles.wifiIcon}>📶</span>
-            <div className={styles.batteryShell}><div className={styles.batteryFill}></div></div>
-          </div>
-        </div>
-
         {/* HEADER */}
         <div className={styles.appHeader}>
           <div className={styles.headerLogo}>
@@ -875,6 +863,12 @@ export default function ChildPanel() {
               <div className={styles.headerGreetingName}>{headerUserName}</div>
             </div>
             <img className={styles.headerAvatar} src={headerAvatar} alt="User" />
+            <button onClick={doLogout} className={styles.logoutBtn}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Logout
+            </button>
           </div>
         </div>
 

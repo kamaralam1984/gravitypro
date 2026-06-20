@@ -270,7 +270,11 @@ export default function Login() {
 
   function doGoToPlan() {
     if (!detailsAllValid) return
-    setRegStep(4)
+    if (regAccountType === 'child') {
+      doRegisterFree()
+    } else {
+      setRegStep(4)
+    }
   }
 
   async function doRegisterFree() {
@@ -824,11 +828,11 @@ export default function Login() {
                 </div>
 
                 <button
-                  className={`${styles.btnPrimary} ${!detailsAllValid ? styles.btnDisabled : ''}`}
+                  className={`${styles.btnPrimary} ${!detailsAllValid ? styles.btnDisabled : ''} ${regLoading ? styles.btnLoading : ''}`}
                   type="submit"
-                  disabled={!detailsAllValid}
+                  disabled={!detailsAllValid || regLoading}
                 >
-                  Continue to Plan →
+                  {regLoading ? 'Creating Account...' : regAccountType === 'child' ? 'Create Account →' : 'Continue to Plan →'}
                 </button>
               </form>
             )}

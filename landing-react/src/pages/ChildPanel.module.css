@@ -1,12 +1,12 @@
-/* ── PHONE FRAME ── */
+/* ── APP FRAME ── */
 .appFrame {
   width: 100%;
-  max-width: 430px;
+  max-width: 480px;
   background: var(--cpBg, #050C08);
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 860px;
+  min-height: 100vh;
 }
 
 /* CSS Variables scoped to this component */
@@ -30,14 +30,8 @@
 
 @media (min-width: 600px) {
   .appFrame {
-    border-radius: 44px;
-    box-shadow:
-      0 0 0 10px #0A1A0F,
-      0 0 0 13px #1A3A24,
-      0 40px 100px rgba(0,0,0,.95),
-      0 0 80px rgba(0,230,118,0.12);
-    overflow: visible;
-    min-height: 860px;
+    border-right: 1px solid rgba(0,230,118,0.08);
+    border-left: 1px solid rgba(0,230,118,0.08);
   }
 }
 
@@ -48,13 +42,8 @@
   display: flex;
   justify-content: center;
   min-height: 100vh;
-  padding: 24px 16px;
   color: #FFFFFF;
   -webkit-font-smoothing: antialiased;
-}
-@media (max-width: 599px) {
-  .pageWrapper { padding: 0; }
-  .appFrame { min-height: 100vh; border-radius: 0; }
 }
 
 /* ── STATUS BAR ── */
@@ -104,9 +93,27 @@
   background: #050C08;
   border-bottom: 1px solid rgba(0,230,118,0.12);
   position: sticky;
-  top: 38px;
+  top: 0;
   z-index: 99;
 }
+.logoutBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255,82,82,0.1);
+  border: 1px solid rgba(255,82,82,0.25);
+  border-radius: 10px;
+  color: #FF5252;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  min-height: 36px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.logoutBtn:hover { background: rgba(255,82,82,0.2); border-color: rgba(255,82,82,0.4); }
 .headerLogo { display: flex; align-items: center; gap: 10px; }
 .navLogoIcon { display: flex; align-items: center; justify-content: center; }
 .logoSvg { overflow: visible; filter: drop-shadow(0 0 6px rgba(0,230,118,0.3)); transition: filter .3s; }
