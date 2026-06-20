@@ -12,6 +12,7 @@ export default function Home() {
   const [navScrolled, setNavScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeMapType, setActiveMapType] = useState<'dark' | 'light' | 'satellite' | 'street'>('dark')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const activeTileRef = useRef<L.TileLayer | null>(null)
 
   // Nav scroll effect
@@ -575,7 +576,10 @@ export default function Home() {
               GRAVITY LIVE <span className={styles.memberCount}>6 online</span>
             </div>
 
-            <div className={styles.mapSidebar}>
+            <div className={`${styles.mapSidebar} ${sidebarOpen ? styles.mapSidebarOpen : ''}`}>
+              <button className={styles.sidebarToggle} onClick={() => setSidebarOpen(o => !o)} title={sidebarOpen ? 'Hide panel' : 'Show panel'}>
+                {sidebarOpen ? '›' : '‹'}
+              </button>
               <div className={styles.sidebarTitle}>
                 <span className={styles.safeIcon}>✓</span> All 6 members safe
               </div>
