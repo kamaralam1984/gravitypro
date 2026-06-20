@@ -18,6 +18,10 @@
         "backgroundColor": "#050F08"
       },
       "package": "com.trackalways.gravity",
+      "versionCode": 1,
+      "minSdkVersion": 24,
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -34,15 +38,45 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.trackalways.gravity",
+      "buildNumber": "1",
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Gravity needs your location to keep your family safe and share your position with your circle.",
         "NSLocationAlwaysUsageDescription": "Gravity needs background location to track your position even when the app is closed.",
-        "NSLocationWhenInUseUsageDescription": "Gravity needs your location to show your position on the family map."
+        "NSLocationWhenInUseUsageDescription": "Gravity needs your location to show your position on the family map.",
+        "NSCameraUsageDescription": "Gravity needs camera access to update your profile photo.",
+        "NSPhotoLibraryUsageDescription": "Gravity needs photo library access to select your profile photo.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
       }
     },
     "plugins": [
-      ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Allow Gravity to use your location to keep your family connected and safe." }],
-      ["expo-notifications", { "sounds": ["./assets/notification.wav"] }]
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Gravity to use your location to keep your family connected and safe.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/notification.wav"]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 24,
+            "buildToolsVersion": "35.0.0"
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ]
     ],
     "scheme": "gravity",
     "platforms": ["ios", "android"],
