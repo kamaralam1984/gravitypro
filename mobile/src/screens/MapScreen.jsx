@@ -18,7 +18,7 @@ import {
   ScrollView,
   FlatList,
 } from 'react-native'
-import MapView, { Marker, Circle as MapCircle, PROVIDER_GOOGLE } from 'react-native-maps'
+import MapView, { Marker, Circle as MapCircle } from 'react-native-maps'
 import * as Location from 'expo-location'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -412,7 +412,6 @@ export default function MapScreen() {
       {/* ── Full-screen map ─────────────────────────────────────────────── */}
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
         customMapStyle={DARK_MAP_STYLE}
         showsUserLocation={false}

@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, Pressable, Animated, ScrollView,
   TextInput, Modal, Dimensions, ActivityIndicator, Alert, Platform,
 } from 'react-native'
-import MapView, { Circle as MapCircle, Marker, PROVIDER_GOOGLE } from 'react-native-maps'
+import MapView, { Circle as MapCircle, Marker } from 'react-native-maps'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import { Ionicons } from '@expo/vector-icons'
@@ -294,7 +294,6 @@ export default function SafeZonesScreen() {
       <View style={[styles.mapContainer, { height: MAP_HEIGHT }]}>
         <MapView
           ref={mapRef}
-          provider={PROVIDER_GOOGLE}
           style={styles.map}
           customMapStyle={DARK_MAP_STYLE}
           showsUserLocation
@@ -408,7 +407,6 @@ export default function SafeZonesScreen() {
               <View style={styles.miniMapWrap}>
                 <MapView
                   ref={modalMapRef}
-                  provider={PROVIDER_GOOGLE}
                   style={styles.miniMap}
                   customMapStyle={DARK_MAP_STYLE}
                   showsUserLocation

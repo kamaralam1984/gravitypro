@@ -10,7 +10,7 @@ import {
   Alert,
   Platform,
 } from 'react-native'
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'
+import MapView, { Marker } from 'react-native-maps'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
@@ -312,7 +312,6 @@ export default function HomeScreen() {
             ) : (
               <MapView
                 ref={mapRef}
-                provider={PROVIDER_GOOGLE}
                 style={styles.miniMap}
                 customMapStyle={DARK_MAP_STYLE}
                 region={mapRegion}
