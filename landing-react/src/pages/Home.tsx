@@ -169,9 +169,7 @@ export default function Home() {
         { name: 'Mom',      seed: 'woman-mom',  lat: 19.0820, lng: 72.8650, color: '#00E676', speed: null      },
         { name: 'Dad',      seed: 'man-dad',    lat: 19.0750, lng: 72.8850, color: '#00C853', speed: '28km/h'  },
         { name: 'Rahul',    seed: 'boy-rahul',  lat: 19.0880, lng: 72.8900, color: '#29B6F6', speed: '18km/h'  },
-        { name: 'Pinky',    seed: 'girl-pinky', lat: 19.0680, lng: 72.8780, color: '#FFB300', speed: '5km/h'   },
-        { name: 'Grand Pa', seed: 'oldman-gp',  lat: 19.0920, lng: 72.8620, color: '#AB47BC', speed: null      },
-        { name: 'Grand Mom',seed: 'woman-gm',   lat: 19.0650, lng: 72.8870, color: '#5E8B6E', speed: null      }
+        { name: 'Grand Pa', seed: 'oldman-gp',  lat: 19.0920, lng: 72.8620, color: '#AB47BC', speed: null      }
       ]
 
       type FamilyMember = typeof family[0]
@@ -450,17 +448,6 @@ export default function Home() {
                   <span className={styles.tooltipStatus}>Online · Active now</span>
                 </div>
               </div>
-              <div className={`${styles.familyAvatar} ${styles.avatarPinky}`}>
-                <div className={styles.familyAvatarImgWrapper}>
-                  <img src="https://picsum.photos/seed/girl-pinky/64/64" alt="Pinky" loading="lazy" />
-                  <span className={`${styles.avatarStatusDot} ${styles.yellow}`}></span>
-                </div>
-                <div className={styles.avatarName}>Pinky</div>
-                <div className={styles.avatarTooltip}>
-                  <span className={styles.tooltipName}>Pinky</span>
-                  <span className={styles.tooltipStatus}>Idle · 12 min ago</span>
-                </div>
-              </div>
               <div className={`${styles.familyAvatar} ${styles.avatarGrandpa}`}>
                 <div className={styles.familyAvatarImgWrapper}>
                   <img src="https://picsum.photos/seed/oldman-gp/64/64" alt="Grand Pa" loading="lazy" />
@@ -470,17 +457,6 @@ export default function Home() {
                 <div className={styles.avatarTooltip}>
                   <span className={styles.tooltipName}>Grand Pa</span>
                   <span className={styles.tooltipStatus}>Online · Active now</span>
-                </div>
-              </div>
-              <div className={`${styles.familyAvatar} ${styles.avatarGrandmom}`}>
-                <div className={styles.familyAvatarImgWrapper}>
-                  <img src="https://picsum.photos/seed/woman-gm/64/64" alt="Grand Mom" loading="lazy" />
-                  <span className={`${styles.avatarStatusDot} ${styles.grey}`}></span>
-                </div>
-                <div className={styles.avatarName}>Grand Mom</div>
-                <div className={styles.avatarTooltip}>
-                  <span className={styles.tooltipName}>Grand Mom</span>
-                  <span className={styles.tooltipStatus}>Offline · 2 hr ago</span>
                 </div>
               </div>
             </div>
@@ -571,16 +547,8 @@ export default function Home() {
               <div className={styles.memberInfo}><span className={styles.memberName}>Rahul</span><span className={`${styles.memberStatus} ${styles.online}`}>● College • 1min</span></div>
             </div>
             <div className={styles.memberChip}>
-              <img src="https://picsum.photos/seed/girl-pinky/40/40" className={styles.memberPhoto} alt="" />
-              <div className={styles.memberInfo}><span className={styles.memberName}>Pinky</span><span className={`${styles.memberStatus} ${styles.idle}`}>● Street • 8min</span></div>
-            </div>
-            <div className={styles.memberChip}>
               <img src="https://picsum.photos/seed/oldman-gp/40/40" className={styles.memberPhoto} alt="" />
               <div className={styles.memberInfo}><span className={styles.memberName}>Grand Pa</span><span className={`${styles.memberStatus} ${styles.online}`}>● Park • 3min</span></div>
-            </div>
-            <div className={styles.memberChip}>
-              <img src="https://picsum.photos/seed/woman-gm/40/40" className={styles.memberPhoto} alt="" />
-              <div className={styles.memberInfo}><span className={styles.memberName}>Grand Mom</span><span className={`${styles.memberStatus} ${styles.offline}`}>● Home • 22min</span></div>
             </div>
           </div>
         </div>
