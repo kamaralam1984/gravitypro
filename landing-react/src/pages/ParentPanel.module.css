@@ -73,6 +73,23 @@
   }
 }
 
+/* FULLSCREEN BUTTON */
+.fullscreenBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: rgba(0,230,118,0.08);
+  border: 1px solid rgba(0,230,118,0.2);
+  border-radius: 10px;
+  color: #00E676;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.fullscreenBtn:hover { background: rgba(0,230,118,0.18); border-color: rgba(0,230,118,0.4); }
+
 /* LOGOUT BUTTON */
 .logoutBtn {
   display: flex;
