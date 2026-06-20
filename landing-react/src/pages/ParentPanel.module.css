@@ -1197,16 +1197,9 @@
   to { transform: rotate(360deg); }
 }
 
-/* SCROLL REVEAL */
-.reveal {
-  opacity: 0;
-  transform: translateY(20px);
-  transition: opacity 0.5s cubic-bezier(0.16,1,0.3,1), transform 0.5s cubic-bezier(0.16,1,0.3,1);
-}
-.reveal.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
+/* SCROLL REVEAL — always visible to avoid timing issues with async data */
+.reveal { opacity: 1; transform: none; }
+.reveal.visible { opacity: 1; transform: none; }
 
 /* TOAST */
 .toast {
