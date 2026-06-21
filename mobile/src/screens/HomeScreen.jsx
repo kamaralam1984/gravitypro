@@ -10,7 +10,6 @@ import {
   Alert,
   Platform,
 } from 'react-native'
-import MapView, { Marker } from 'react-native-maps'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
@@ -21,7 +20,6 @@ import { MemberAvatar } from '../components/MemberAvatar'
 import { BatteryIndicator } from '../components/BatteryIndicator'
 import { userAPI, circleAPI, sosAPI } from '../services/api'
 import { Colors, Gradients } from '../theme/colors'
-import { DARK_MAP_STYLE } from '../theme/mapStyles'
 import { getCurrentLocation } from '../services/location'
 
 // ── Greeting helper ───────────────────────────────────────────────────────────
@@ -310,48 +308,14 @@ export default function HomeScreen() {
             {loading ? (
               <Shimmer style={styles.mapShimmer} />
             ) : (
-              <MapView
-                ref={mapRef}
-                style={styles.miniMap}
-                customMapStyle={DARK_MAP_STYLE}
-                region={mapRegion}
-                scrollEnabled={false}
-                zoomEnabled={false}
-                rotateEnabled={false}
-                pitchEnabled={false}
-                showsUserLocation={false}
-                showsCompass={false}
-                toolbarEnabled={false}
-                pointerEvents="none">
-                {/* Own location */}
-                {myLocation && (
-                  <Marker coordinate={myLocation} anchor={{ x: 0.5, y: 0.5 }} title="You">
-                    <View style={styles.myDot}>
-                      <LinearGradient colors={['#00E676', '#00C853']} style={styles.myDotInner}>
-                        <Ionicons name="person" size={10} color="#fff" />
-                      </LinearGradient>
-                    </View>
-                  </Marker>
-                )}
-                {/* Member locations */}
-                {members
-                  .filter(m => m.id !== user?.id && memberLocations[m.id])
-                  .map(member => (
-                    <Marker
-                      key={member.id}
-                      coordinate={memberLocations[member.id]}
-                      anchor={{ x: 0.5, y: 0.5 }}
-                      title={member.name}>
-                      <View style={styles.memberDot}>
-                        <View style={styles.memberDotInner}>
-                          <Text style={styles.memberDotInitial}>
-                            {member.name?.[0]?.toUpperCase() || '?'}
-                          </Text>
-                        </View>
-                      </View>
-                    </Marker>
-                  ))}
-              </MapView>
+              <LinearGradient
+                colors={['#042918', '#0A5C35', '#042918']}
+                style={styles.miniMap}>
+                <Ionicons name="map" size={36} color="rgba(0,230,118,0.3)" />
+                <Text style={styles.mapPreviewText}>
+                  {members.filter(m => m.id !== user?.id && memberLocations[m.id]).length} members tracked
+                </Text>
+              </LinearGradient>
             )}
 
             {/* "View Full Map" overlay */}
@@ -481,7 +445,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     position: 'relative',
   },
-  miniMap:      { ...StyleSheet.absoluteFillObject },
+  miniMap:      { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  mapPreviewText: { color: 'rgba(0,230,118,0.6)', fontSize: 13, fontWeight: '600' },
   mapShimmer:   { flex: 1, borderRadius: 20 },
   mapOverlayBtn: {
     position: 'absolute',

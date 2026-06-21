@@ -3,10 +3,10 @@ const router = express.Router()
 
 // Current APK version info — update this whenever a new build is released
 const APP_VERSION = {
-  version: '1.0.1',
-  versionCode: 2,
-  downloadUrl: 'https://expo.dev/artifacts/eas/vcLkPImEPK3rzDQINNegQPWXp4_RgYuNte2jQDMnFak.apk',
-  releaseNotes: 'Bug fixes: login crash resolved, maps improved',
+  version: '1.0.2',
+  versionCode: 3,
+  downloadUrl: 'https://expo.dev/artifacts/eas/UIYnXU5eMlptxTddCSStwM1OPJue5tovOMGFRl1vljU.apk',
+  releaseNotes: 'Fix: home screen crash resolved, app now works without Maps API key',
   forceUpdate: false,
 }
 

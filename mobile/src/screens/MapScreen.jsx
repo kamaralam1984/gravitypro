@@ -42,6 +42,8 @@ const SSE_BASE =
   (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') +
   '/api/v1/sse/stream'
 
+const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 const formatLastSeen = (ts) => {
@@ -410,7 +412,14 @@ export default function MapScreen() {
       <StatusBar style="light" />
 
       {/* ── Full-screen map ─────────────────────────────────────────────── */}
-      <MapView
+      {!MAPS_KEY && (
+        <View style={[StyleSheet.absoluteFill, styles.noMapPlaceholder]}>
+          <Ionicons name="map-outline" size={48} color="rgba(0,230,118,0.3)" />
+          <Text style={styles.noMapTitle}>Map Unavailable</Text>
+          <Text style={styles.noMapSub}>Google Maps API key not configured</Text>
+        </View>
+      )}
+      {MAPS_KEY && <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         customMapStyle={DARK_MAP_STYLE}
@@ -497,7 +506,7 @@ export default function MapScreen() {
             </Marker>
           </React.Fragment>
         ))}
-      </MapView>
+      </MapView>}
 
       {/* ── Header overlay ──────────────────────────────────────────────── */}
       <Animated.View
@@ -814,6 +823,9 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgDeep },
+  noMapPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.bgDeep },
+  noMapTitle: { color: Colors.text, fontSize: 18, fontWeight: '700', marginTop: 8 },
+  noMapSub: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
 
   // ── header ──
   header: {
