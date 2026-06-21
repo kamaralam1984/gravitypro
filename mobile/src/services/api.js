@@ -40,14 +40,14 @@ export const userAPI = {
   getMe: () => api.get('/users/me'),
   updateMe: (data) => api.patch('/users/me', data),
   getStats: () => api.get('/users/me/stats'),
-  postLocation: (data) => api.post('/users/me/location', data),
+  postLocation: (data) => api.post('/users/location', data),
   getLocationHistory: () => api.get('/users/me/location-history'),
 }
 
 // ── Circles ───────────────────────────────────────────────────────────────────
 export const circleAPI = {
-  getMy: () => api.get('/circles/my'),
-  getAll: () => api.get('/circles/my'),
+  getMy: () => api.get('/circles'),
+  getAll: () => api.get('/circles'),
   create: (data) => api.post('/circles', data),
   join: (invite_code) => api.post('/circles/join', { invite_code }),
   getMembers: (circleId) => api.get(`/circles/${circleId}/members`),
@@ -56,7 +56,7 @@ export const circleAPI = {
 
 // ── SOS ───────────────────────────────────────────────────────────────────────
 export const sosAPI = {
-  trigger: (data) => api.post('/sos/trigger', data),
+  trigger: (data) => api.post('/sos', data),
   getHistory: (circleId) => api.get(`/sos/history?circle_id=${circleId}`),
   resolve: (sosId) => api.patch(`/sos/${sosId}/resolve`),
 }

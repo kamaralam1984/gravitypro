@@ -23,9 +23,9 @@ import { Colors, Gradients } from '../theme/colors'
 
 const NativeEventSource = Platform.OS !== 'web' ? require('react-native-sse').default : null
 
-const SSE_URL = __DEV__
-  ? 'http://192.168.0.197:3021/api/v1/sse/stream'
-  : 'https://gravitypro.kvlbusinesssolutions.com/api/v1/sse/stream'
+const SSE_URL =
+  (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') +
+  '/api/v1/sse/stream'
 
 const TABS = ['All', 'SOS', 'Geofence']
 

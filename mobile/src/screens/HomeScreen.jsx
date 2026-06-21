@@ -163,7 +163,7 @@ export default function HomeScreen() {
             latitude: m.latitude,
             longitude: m.longitude,
             battery: m.battery_level,
-            timestamp: m.last_seen,
+            timestamp: m.location_updated_at || m.updated_at,
           }
         }
       }

@@ -279,7 +279,7 @@ export default function MapScreen() {
               latitude: m.latitude,
               longitude: m.longitude,
               battery: m.battery_level ?? null,
-              timestamp: m.last_seen || m.updated_at || null,
+              timestamp: m.location_updated_at || m.updated_at || null,
             }
           }
         }
