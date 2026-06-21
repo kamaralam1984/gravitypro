@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../store/authStore'
 import { mediaAPI, userAPI, subscriptionAPI } from '../services/api'
 import { stopBackgroundTracking } from '../services/location'
+import { promptAndUpdate } from '../services/appUpdates'
 import { GradientCard } from '../components/ui/GradientCard'
 import { Colors, Gradients } from '../theme/colors'
 
@@ -324,6 +325,12 @@ export default function ProfileScreen() {
             />
           </GradientCard>
 
+          {/* ── Check for Update ── */}
+          <Pressable style={styles.updateBtn} onPress={promptAndUpdate}>
+            <Ionicons name="cloud-download-outline" size={20} color={Colors.accent} />
+            <Text style={styles.updateText}>Check for Update</Text>
+          </Pressable>
+
           {/* ── Sign Out ── */}
           <Pressable style={styles.logoutBtn} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
@@ -416,6 +423,8 @@ const styles = StyleSheet.create({
   settingLabel: { flex: 1, fontSize: 15, color: Colors.textPrimary, fontWeight: '500' },
 
   // Sign out
+  updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(10,92,53,0.15)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(10,92,53,0.4)', marginBottom: 10 },
+  updateText: { color: Colors.accent, fontSize: 15, fontWeight: '700' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(229,57,53,0.1)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(229,57,53,0.25)' },
   logoutText: { color: Colors.danger, fontSize: 16, fontWeight: '700' },
   version: { textAlign: 'center', color: Colors.textMuted, fontSize: 12, paddingBottom: 8 },

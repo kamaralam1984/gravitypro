@@ -47,6 +47,8 @@ app.use('/api/v1/sos', sosRoutes)
 app.use('/api/v1/admin', adminRoutes)
 app.use('/api/v1/payments', paymentRoutes)
 app.use('/api/v1/subscriptions', subscriptionRoutes)
+const appRoutes = require('./routes/app')
+app.use('/api/v1/app', appRoutes)
 app.use('/webhooks/traccar', traccarWebhook)
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'gravity-backend', timestamp: new Date().toISOString() }))

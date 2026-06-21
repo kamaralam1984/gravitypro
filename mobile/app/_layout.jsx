@@ -9,6 +9,7 @@ import { useAuthStore } from '../src/store/authStore'
 import SplashScreen from '../src/screens/auth/SplashScreen'
 import AuthNavigator from '../src/navigation/AuthNavigator'
 import TabNavigator from '../src/navigation/TabNavigator'
+import UpdateBanner from '../src/components/ui/UpdateBanner'
 import { registerForPushNotifications } from '../src/services/notifications'
 import { syncOfflineLocations } from '../src/services/location'
 import { Colors } from '../src/theme/colors'
@@ -37,7 +38,6 @@ export default function RootLayout() {
   // Sync offline location queue whenever app comes to foreground
   useEffect(() => {
     if (!isAuthenticated) return
-    // Sync immediately on mount (covers cold-start after offline period)
     syncOfflineLocations()
     const sub = AppState.addEventListener('change', nextState => {
       if (appState.current.match(/inactive|background/) && nextState === 'active') {
@@ -67,6 +67,7 @@ export default function RootLayout() {
             <View style={{ flex: 1, backgroundColor: Colors.bgDeep }}>
               <StatusBar style="light" />
               {isAuthenticated ? <TabNavigator /> : <AuthNavigator />}
+              <UpdateBanner />
             </View>
           </NavigationContainer>
         </SafeAreaProvider>
