@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { NavigationContainer } from '@react-navigation/native'
 import { StatusBar } from 'expo-status-bar'
+import * as Updates from 'expo-updates'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from '../src/store/authStore'
 import SplashScreen from '../src/screens/auth/SplashScreen'
@@ -26,6 +27,23 @@ export default function RootLayout() {
 
   useEffect(() => {
     initialize()
+  }, [])
+
+  // Over-the-air JS updates — fetch & apply silently on launch (no reinstall needed).
+  // No-op in dev / Expo Go (Updates.isEnabled is false there).
+  useEffect(() => {
+    if (__DEV__ || !Updates.isEnabled) return
+    ;(async () => {
+      try {
+        const res = await Updates.checkForUpdateAsync()
+        if (res.isAvailable) {
+          await Updates.fetchUpdateAsync()
+          await Updates.reloadAsync()
+        }
+      } catch {
+        // offline or no update available — ignore
+      }
+    })()
   }, [])
 
   // Register push notifications once authenticated
