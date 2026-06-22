@@ -27,6 +27,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
+    "nodemailer": "^9.0.1",
     "pg": "^8.12.0",
     "razorpay": "^2.9.6",
     "stripe": "^22.2.2",
