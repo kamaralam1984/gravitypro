@@ -1,0 +1,47 @@
+# Gravity full stack — one command: docker compose up -d --build
+#
+#   backend : Express API (internal, port 8002) — needs backend/.env (real DATABASE_URL etc.)
+#   web     : Caddy serving the React SPA + proxying /api,/sse,/health,/webhooks,/telemetry
+#             to backend. Published on 80 (and 443 for TLS in production).
+#
+# Production (auto HTTPS): set SITE_ADDRESS to your domain, e.g.
+#   SITE_ADDRESS=gravitypro.kvlbusinesssolutions.com docker compose up -d --build
+
+services:
+  backend:
+    build: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: "8002"
+    expose:
+      - "8002"
+    restart: unless-stopped
+    networks:
+      - gravity
+
+  web:
+    build: ./landing-react
+    environment:
+      # local default ":80"; override with a domain in production for auto-TLS
+      SITE_ADDRESS: "${SITE_ADDRESS:-:80}"
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - gravity
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+networks:
+  gravity:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
