@@ -47,7 +47,7 @@ if (Platform.OS !== 'web') {
         try {
           const token = await storage.getItem('auth_token')
           if (token) {
-            await fetchWithTimeout(`${API_BASE}/api/v1/users/me/location`, {
+            await fetchWithTimeout(`${API_BASE}/api/v1/users/location`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -135,6 +135,24 @@ export const getCurrentLocation = async () => {
   const { status } = await Location.requestForegroundPermissionsAsync()
   if (status !== 'granted') throw new Error('Location permission denied')
   return Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+}
+
+// Report the device battery level to the backend (PATCH /users/location).
+// Uses expo-battery if available; safe no-op otherwise (no hard native dependency).
+export const reportBatteryLevel = async () => {
+  if (Platform.OS === 'web') return
+  try {
+    let Battery
+    try { Battery = require('expo-battery') } catch { return }
+    if (!Battery?.getBatteryLevelAsync) return
+    const level = await Battery.getBatteryLevelAsync() // 0..1, -1 if unknown
+    if (level == null || level < 0) return
+    const battery_level = Math.round(level * 100)
+    const { userAPI } = require('./api')
+    await userAPI.updateBattery({ battery_level })
+  } catch (e) {
+    // best-effort; ignore failures
+  }
 }
 
 // Manually trigger a queue flush (call on app foreground / login)

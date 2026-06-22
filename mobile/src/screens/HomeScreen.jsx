@@ -111,6 +111,8 @@ export default function HomeScreen() {
   const [stats, setStats]                   = useState(null)
   const [myLocation, setMyLocation]         = useState(null)
   const [sosSending, setSosSending]         = useState(false)
+  const [sosActive, setSosActive]           = useState(false)
+  const [safeSending, setSafeSending]       = useState(false)
   const [now, setNow]                       = useState(new Date())
 
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -221,12 +223,27 @@ export default function HomeScreen() {
         payload.longitude = myLocation.longitude
       }
       await sosAPI.trigger(payload)
+      setSosActive(true)
       Alert.alert('SOS Sent', 'Your family has been notified. Help is on the way.')
     } catch (e) {
       Alert.alert('Failed', 'Could not send SOS. Please try again.')
       console.error('SOS trigger error', e)
     } finally {
       setSosSending(false)
+    }
+  }
+
+  const handleMarkSafe = async () => {
+    setSafeSending(true)
+    try {
+      await sosAPI.markSafe({})
+      setSosActive(false)
+      Alert.alert("You're marked safe", 'Your family has been notified that you are okay.')
+    } catch (e) {
+      Alert.alert('Failed', 'Could not mark you as safe. Please try again.')
+      console.error('Mark safe error', e)
+    } finally {
+      setSafeSending(false)
     }
   }
 
@@ -380,6 +397,24 @@ export default function HomeScreen() {
               )}
             </LinearGradient>
           </Pressable>
+
+          {sosActive && (
+            <Pressable
+              onPress={handleMarkSafe}
+              disabled={safeSending}
+              style={({ pressed }) => [styles.safeBtn, pressed && { opacity: 0.85 }]}>
+              <LinearGradient
+                colors={['#00C853', '#0A5C35']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.safeBtnGrad}>
+                <View style={styles.safeBtnIconWrap}>
+                  <Ionicons name={safeSending ? 'time-outline' : 'checkmark-circle'} size={22} color="#fff" />
+                </View>
+                <Text style={styles.safeBtnText}>{safeSending ? 'Marking…' : "I'm Safe"}</Text>
+              </LinearGradient>
+            </Pressable>
+          )}
         </View>
 
       </Animated.ScrollView>
@@ -484,4 +519,8 @@ const styles = StyleSheet.create({
   sosBtnIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   sosBtnText: { fontSize: 20, fontWeight: '800', color: '#fff', flex: 1 },
   sosBtnSub:  { fontSize: 12, color: 'rgba(255,255,255,0.75)', position: 'absolute', bottom: 12, right: 24 },
+  safeBtn:     { borderRadius: 20, overflow: 'hidden', marginTop: 12, shadowColor: '#00C853', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 12 },
+  safeBtnGrad: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 18, gap: 14 },
+  safeBtnIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  safeBtnText: { fontSize: 18, fontWeight: '800', color: '#fff' },
 })

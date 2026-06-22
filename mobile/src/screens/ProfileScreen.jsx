@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Animated,
   Switch, Image, Alert, Platform, TextInput, ActivityIndicator,
+  Modal, FlatList,
 } from 'react-native'
+import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
@@ -10,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../store/authStore'
-import { mediaAPI, userAPI, subscriptionAPI } from '../services/api'
+import { mediaAPI, userAPI } from '../services/api'
 import { stopBackgroundTracking } from '../services/location'
 import { promptAndUpdate } from '../services/appUpdates'
 import { GradientCard } from '../components/ui/GradientCard'
@@ -30,13 +32,30 @@ export default function ProfileScreen() {
   const [nameValue, setNameValue] = useState(user?.name || '')
   const [savingName, setSavingName] = useState(false)
 
-  // Subscription
-  const [subscription, setSubscription] = useState(null)
-  const [loadingSub, setLoadingSub] = useState(true)
-
   // Settings toggles
   const [trackingEnabled, setTrackingEnabled] = useState(true)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+
+  // Location history
+  const [historyVisible, setHistoryVisible] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+  const [historyPoints, setHistoryPoints] = useState([])
+
+  const openHistory = async () => {
+    setHistoryVisible(true)
+    setHistoryError('')
+    setHistoryLoading(true)
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    try {
+      const res = await userAPI.getLocationHistory()
+      setHistoryPoints(res.history || res.locations || res.points || [])
+    } catch (e) {
+      setHistoryError('Could not load location history. Please try again.')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -47,12 +66,6 @@ export default function ProfileScreen() {
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.spring(avatarScale, { toValue: 1, tension: 60, friction: 8, useNativeDriver: true }),
     ]).start()
-
-    // Load subscription
-    subscriptionAPI.getMe()
-      .then(data => setSubscription(data))
-      .catch(() => setSubscription(null))
-      .finally(() => setLoadingSub(false))
   }, [])
 
   // Keep nameValue in sync if user updates externally
@@ -78,15 +91,16 @@ export default function ProfileScreen() {
     try {
       const ext = asset.uri.split('.').pop().toLowerCase()
       const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
-      // Step 1: Get presigned URL
-      const { uploadUrl, publicUrl } = await mediaAPI.getAvatarUploadUrl()
+      // Step 1: presign (backend returns { uploadUrl, key, publicUrl })
+      const { uploadUrl, publicUrl } = await mediaAPI.presignAvatar({ contentType, fileSize: asset.fileSize })
       // Step 2: Upload to R2
       await fetch(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': contentType },
         body: await (await fetch(asset.uri)).blob(),
       })
-      // Step 3: Update user profile
+      // Step 3: Confirm upload, then sync the profile
+      await mediaAPI.confirmAvatar({ publicUrl })
       const { user: updated } = await userAPI.updateMe({ avatar_url: publicUrl })
       updateUser(updated)
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -124,9 +138,32 @@ export default function ProfileScreen() {
     ])
   }
 
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account, location history, and remove you from all circles. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: async () => {
+            setDeletingAccount(true)
+            try {
+              await userAPI.deleteAccount()
+              await stopBackgroundTracking()
+              await logout()
+            } catch (e) {
+              setDeletingAccount(false)
+              Alert.alert('Delete failed', 'Could not delete your account. Please try again.')
+            }
+          },
+        },
+      ]
+    )
+  }
+
   const initials = user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'
   const accountType = user?.role === 'child' ? 'Child' : 'Parent'
-  const isFreePlan = !subscription || subscription.plan_id === 'free' || subscription.plan_id == null
 
   return (
     <View style={styles.container}>
@@ -252,53 +289,6 @@ export default function ProfileScreen() {
             </View>
           </GradientCard>
 
-          {/* ── Subscription card ── */}
-          <GradientCard style={styles.section}>
-            <Text style={styles.sectionTitle}>Subscription</Text>
-            {loadingSub ? (
-              <ActivityIndicator size="small" color={Colors.accent} style={{ marginVertical: 12 }} />
-            ) : subscription ? (
-              <>
-                <View style={styles.subHeader}>
-                  <View>
-                    <Text style={styles.planName}>{subscription.display_name || 'Free Plan'}</Text>
-                    <View style={[styles.subStatusBadge, { backgroundColor: subscription.status === 'active' ? 'rgba(0,230,118,0.15)' : 'rgba(229,57,53,0.15)' }]}>
-                      <Text style={[styles.subStatusText, { color: subscription.status === 'active' ? Colors.online : Colors.danger }]}>
-                        {subscription.status === 'active' ? 'Active' : subscription.status || 'Inactive'}
-                      </Text>
-                    </View>
-                  </View>
-                  {isFreePlan && (
-                    <Pressable
-                      style={styles.upgradeBtn}
-                      onPress={() => Alert.alert('Coming Soon', 'Plan upgrades will be available soon!')}>
-                      <Text style={styles.upgradeBtnText}>Upgrade</Text>
-                    </Pressable>
-                  )}
-                </View>
-                {Array.isArray(subscription.features) && subscription.features.length > 0 && (
-                  <View style={styles.featuresList}>
-                    {subscription.features.map((f, i) => (
-                      <View key={i} style={styles.featureRow}>
-                        <Ionicons name="checkmark-circle" size={15} color={Colors.online} />
-                        <Text style={styles.featureText}>{f}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </>
-            ) : (
-              <View style={styles.subFallback}>
-                <Text style={styles.planName}>Free Plan</Text>
-                <Pressable
-                  style={styles.upgradeBtn}
-                  onPress={() => Alert.alert('Coming Soon', 'Plan upgrades will be available soon!')}>
-                  <Text style={styles.upgradeBtnText}>Upgrade Plan</Text>
-                </Pressable>
-              </View>
-            )}
-          </GradientCard>
-
           {/* ── Settings toggles ── */}
           <GradientCard style={styles.section}>
             <Text style={styles.sectionTitle}>Settings</Text>
@@ -325,6 +315,17 @@ export default function ProfileScreen() {
             />
           </GradientCard>
 
+          {/* ── Privacy ── */}
+          <GradientCard style={styles.section}>
+            <Text style={styles.sectionTitle}>Privacy</Text>
+            <SettingRow
+              icon="time-outline"
+              label="Location History"
+              chevron
+              onPress={openHistory}
+            />
+          </GradientCard>
+
           {/* ── Check for Update ── */}
           <Pressable style={styles.updateBtn} onPress={promptAndUpdate}>
             <Ionicons name="cloud-download-outline" size={20} color={Colors.accent} />
@@ -337,9 +338,90 @@ export default function ProfileScreen() {
             <Text style={styles.logoutText}>Sign Out</Text>
           </Pressable>
 
+          {/* ── Delete Account ── */}
+          <Pressable style={styles.deleteBtn} onPress={handleDeleteAccount} disabled={deletingAccount}>
+            {deletingAccount
+              ? <ActivityIndicator size="small" color={Colors.danger} />
+              : <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+            }
+            <Text style={styles.deleteText}>Delete Account</Text>
+          </Pressable>
+
           <Text style={styles.version}>Gravity v1.0.0 by Trackalways</Text>
         </Animated.View>
       </ScrollView>
+
+      {/* ── Location History Modal ── */}
+      <Modal
+        visible={historyVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setHistoryVisible(false)}>
+        <BlurView intensity={30} style={StyleSheet.absoluteFill} />
+        <View style={[styles.historyOverlay, { paddingTop: insets.top + 60, paddingBottom: insets.bottom }]}>
+          <GradientCard style={styles.historyCard}>
+            <View style={styles.historyHandle} />
+            <View style={styles.historyHeaderRow}>
+              <View style={styles.historyTitleBlock}>
+                <Text style={styles.historyTitle}>Location History</Text>
+                <Text style={styles.historySubtitle}>Your recent recorded positions</Text>
+              </View>
+              <Pressable onPress={() => setHistoryVisible(false)} style={styles.historyCloseBtn} hitSlop={8}>
+                <Ionicons name="close" size={20} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+
+            {historyLoading ? (
+              <View style={styles.historyCenter}>
+                <ActivityIndicator size="large" color={Colors.accent} />
+                <Text style={styles.historyMutedText}>Loading history…</Text>
+              </View>
+            ) : historyError ? (
+              <View style={styles.historyCenter}>
+                <Ionicons name="alert-circle-outline" size={32} color={Colors.danger} />
+                <Text style={styles.historyMutedText}>{historyError}</Text>
+                <Pressable onPress={openHistory} style={styles.historyRetryBtn}>
+                  <Text style={styles.historyRetryText}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : historyPoints.length === 0 ? (
+              <View style={styles.historyCenter}>
+                <Ionicons name="location-outline" size={32} color={Colors.textMuted} />
+                <Text style={styles.historyMutedText}>No location history yet.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={historyPoints}
+                keyExtractor={(item, i) => String(item.id || item.recorded_at || item.created_at || i)}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 8 }}
+                renderItem={({ item }) => {
+                  const lat = item.latitude ?? item.lat
+                  const lng = item.longitude ?? item.lng
+                  const acc = item.accuracy ?? item.accuracy_meters
+                  const ts = item.recorded_at || item.created_at || item.timestamp
+                  return (
+                    <View style={styles.historyRow}>
+                      <View style={styles.historyDot}>
+                        <Ionicons name="location" size={14} color={Colors.accent} />
+                      </View>
+                      <View style={styles.historyRowContent}>
+                        <Text style={styles.historyCoords}>
+                          {lat != null ? Number(lat).toFixed(5) : '—'}, {lng != null ? Number(lng).toFixed(5) : '—'}
+                        </Text>
+                        <Text style={styles.historyMeta}>
+                          {ts ? new Date(ts).toLocaleString() : 'Unknown time'}
+                          {acc != null ? ` · ±${Math.round(acc)}m` : ''}
+                        </Text>
+                      </View>
+                    </View>
+                  )
+                }}
+              />
+            )}
+          </GradientCard>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -427,5 +509,26 @@ const styles = StyleSheet.create({
   updateText: { color: Colors.accent, fontSize: 15, fontWeight: '700' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(229,57,53,0.1)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(229,57,53,0.25)' },
   logoutText: { color: Colors.danger, fontSize: 16, fontWeight: '700' },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, marginTop: 4 },
+  deleteText: { color: Colors.danger, fontSize: 14, fontWeight: '600', opacity: 0.85 },
   version: { textAlign: 'center', color: Colors.textMuted, fontSize: 12, paddingBottom: 8 },
+
+  // Location history modal
+  historyOverlay: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 14 },
+  historyCard: { padding: 20, gap: 12, maxHeight: '80%', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  historyHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: 'center', marginBottom: 2 },
+  historyHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  historyTitleBlock: { flex: 1 },
+  historyTitle: { fontSize: 19, fontWeight: '800', color: Colors.textPrimary },
+  historySubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  historyCloseBtn: { padding: 6, backgroundColor: Colors.bgMid, borderRadius: 10 },
+  historyCenter: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, gap: 12 },
+  historyMutedText: { color: Colors.textMuted, fontSize: 14, textAlign: 'center' },
+  historyRetryBtn: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: 10, backgroundColor: Colors.bgGlassStrong, borderWidth: 1, borderColor: Colors.border },
+  historyRetryText: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  historyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.divider },
+  historyDot: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(0,200,83,0.12)', alignItems: 'center', justifyContent: 'center' },
+  historyRowContent: { flex: 1, gap: 2 },
+  historyCoords: { fontSize: 14, color: Colors.textPrimary, fontWeight: '700', fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }) },
+  historyMeta: { fontSize: 12, color: Colors.textMuted },
 })

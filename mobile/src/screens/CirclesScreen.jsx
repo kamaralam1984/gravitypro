@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import * as Clipboard from 'expo-clipboard'
 import { circleAPI } from '../services/api'
+import { useCircleStore } from '../store/circleStore'
 import { Colors, Gradients } from '../theme/colors'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
@@ -71,14 +72,34 @@ function MemberRow({ member, isAdmin, onRemove }) {
 
 // ─── Circle Card ─────────────────────────────────────────────────────────────
 
-function CircleCard({ circle, index, onCopy, onToast }) {
+function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
   const slideAnim = useRef(new Animated.Value(40)).current
   const fadeAnim = useRef(new Animated.Value(0)).current
   const expandAnim = useRef(new Animated.Value(0)).current
   const [expanded, setExpanded] = useState(false)
   const [members, setMembers] = useState([])
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [nameDraft, setNameDraft] = useState(circle.name)
+  const [savingName, setSavingName] = useState(false)
   const isAdminOfCircle = circle.created_by != null // simplified; backend would clarify
+
+  const handleRename = async () => {
+    const trimmed = nameDraft.trim()
+    if (!trimmed || trimmed === circle.name) { setRenaming(false); return }
+    setSavingName(true)
+    try {
+      await circleAPI.update(circle.id, { name: trimmed })
+      onRenamed && onRenamed(circle.id, trimmed)
+      setRenaming(false)
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      onToast('Circle renamed')
+    } catch (e) {
+      Alert.alert('Error', e.error || 'Failed to rename circle')
+    } finally {
+      setSavingName(false)
+    }
+  }
 
   useEffect(() => {
     setTimeout(() => {
@@ -133,6 +154,29 @@ function CircleCard({ circle, index, onCopy, onToast }) {
     )
   }
 
+  const handleLeave = () => {
+    Alert.alert(
+      'Leave Circle',
+      `Are you sure you want to leave "${circle.name}"? You'll stop sharing your location with this group.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave', style: 'destructive',
+          onPress: async () => {
+            try {
+              await circleAPI.leave(circle.id)
+              if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+              onToast('Left circle')
+              onLeft && onLeft(circle.id)
+            } catch (e) {
+              Alert.alert('Error', e.error || 'Failed to leave circle')
+            }
+          },
+        },
+      ]
+    )
+  }
+
   const handleCopy = async () => {
     try {
       await Clipboard.setStringAsync(circle.invite_code)
@@ -153,7 +197,40 @@ function CircleCard({ circle, index, onCopy, onToast }) {
           </LinearGradient>
 
           <View style={styles.circleInfo}>
-            <Text style={styles.circleName}>{circle.name}</Text>
+            {renaming ? (
+              <View style={styles.renameRow}>
+                <TextInput
+                  style={styles.renameInput}
+                  value={nameDraft}
+                  onChangeText={setNameDraft}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleRename}
+                  placeholderTextColor={Colors.textMuted}
+                  maxLength={40}
+                />
+                <Pressable onPress={handleRename} style={styles.renameSaveBtn} hitSlop={8} disabled={savingName}>
+                  {savingName
+                    ? <ActivityIndicator size="small" color={Colors.accent} />
+                    : <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+                </Pressable>
+                <Pressable onPress={() => { setRenaming(false); setNameDraft(circle.name) }} style={styles.renameSaveBtn} hitSlop={8}>
+                  <Ionicons name="close" size={18} color={Colors.textMuted} />
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.nameRow}>
+                <Text style={styles.circleName}>{circle.name}</Text>
+                {isAdminOfCircle && (
+                  <Pressable
+                    onPress={(e) => { e.stopPropagation?.(); setNameDraft(circle.name); setRenaming(true) }}
+                    hitSlop={8}
+                    style={styles.renamePencil}>
+                    <Ionicons name="pencil-outline" size={14} color={Colors.accentSoft} />
+                  </Pressable>
+                )}
+              </View>
+            )}
             <View style={styles.inviteChipRow}>
               <Text style={styles.inviteChip}>{circle.invite_code}</Text>
             </View>
@@ -210,6 +287,10 @@ function CircleCard({ circle, index, onCopy, onToast }) {
         <View style={styles.circleFooter}>
           <Ionicons name="shield-checkmark" size={13} color={Colors.accentSoft} />
           <Text style={styles.circleStatus}>Active · Location sharing on</Text>
+          <Pressable onPress={handleLeave} style={styles.leaveBtn} hitSlop={8}>
+            <Ionicons name="exit-outline" size={14} color={Colors.danger} />
+            <Text style={styles.leaveBtnText}>Leave circle</Text>
+          </Pressable>
         </View>
       </GradientCard>
     </Animated.View>
@@ -220,6 +301,8 @@ function CircleCard({ circle, index, onCopy, onToast }) {
 
 export default function CirclesScreen() {
   const insets = useSafeAreaInsets()
+  const removeCircleFromStore = useCircleStore(s => s.removeCircle)
+  const setStoreCircles = useCircleStore(s => s.setCircles)
   const [circles, setCircles] = useState([])
   const [loading, setLoading] = useState(true)
   const [showFABSheet, setShowFABSheet] = useState(false)
@@ -244,6 +327,7 @@ export default function CirclesScreen() {
     try {
       const res = await circleAPI.getMy()
       setCircles(res.circles || [])
+      setStoreCircles(res.circles || [])
     } catch (e) {
       console.error('Failed to load circles', e)
     } finally {
@@ -258,6 +342,15 @@ export default function CirclesScreen() {
   const showToast = (msg) => {
     setToast(msg)
     setToastKey(k => k + 1)
+  }
+
+  const handleLeftCircle = (circleId) => {
+    setCircles(prev => prev.filter(c => c.id !== circleId))
+    removeCircleFromStore(circleId)
+  }
+
+  const handleRenamedCircle = (circleId, name) => {
+    setCircles(prev => prev.map(c => (c.id === circleId ? { ...c, name } : c)))
   }
 
   const openFABSheet = () => {
@@ -366,6 +459,8 @@ export default function CirclesScreen() {
                 circle={circle}
                 index={index}
                 onToast={showToast}
+                onLeft={handleLeftCircle}
+                onRenamed={handleRenamedCircle}
               />
             ))}
           </Animated.View>
@@ -622,6 +717,11 @@ const styles = StyleSheet.create({
   },
   circleInfo: { flex: 1, gap: 4 },
   circleName: { fontSize: 17, fontWeight: '700', color: Colors.textPrimary },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  renamePencil: { padding: 2 },
+  renameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  renameInput: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.textWhite, borderBottomWidth: 1, borderBottomColor: Colors.accent, paddingVertical: 2 },
+  renameSaveBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bgGlass },
   inviteChipRow: { flexDirection: 'row' },
   inviteChip: {
     fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }),
@@ -713,7 +813,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.divider,
   },
-  circleStatus: { fontSize: 12, color: Colors.textMuted },
+  circleStatus: { fontSize: 12, color: Colors.textMuted, flex: 1 },
+  leaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(229,57,53,0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  leaveBtnText: { color: Colors.danger, fontSize: 12, fontWeight: '700' },
 
   // FAB
   fab: {

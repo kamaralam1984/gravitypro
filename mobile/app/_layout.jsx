@@ -11,7 +11,7 @@ import AuthNavigator from '../src/navigation/AuthNavigator'
 import TabNavigator from '../src/navigation/TabNavigator'
 import UpdateBanner from '../src/components/ui/UpdateBanner'
 import { registerForPushNotifications } from '../src/services/notifications'
-import { syncOfflineLocations } from '../src/services/location'
+import { syncOfflineLocations, reportBatteryLevel } from '../src/services/location'
 import { Colors } from '../src/theme/colors'
 
 const queryClient = new QueryClient()
@@ -39,9 +39,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isAuthenticated) return
     syncOfflineLocations()
+    reportBatteryLevel()
     const sub = AppState.addEventListener('change', nextState => {
       if (appState.current.match(/inactive|background/) && nextState === 'active') {
         syncOfflineLocations()
+        reportBatteryLevel()
       }
       appState.current = nextState
     })
