@@ -36,6 +36,7 @@ export const authAPI = {
   verifyEmail: (email, otp) => api.post('/auth/verify-email', { email, otp }),       // SIGNUP -> { verified, email_token, already_registered }
   verifyEmailOtp: (email, otp) => api.post('/auth/verify-email-otp', { email, otp }), // LOGIN  -> { user, token }
   registerFree: (data) => api.post('/auth/register-free', data),
+  registerWithPayment: (data) => api.post('/auth/register-with-payment', data),
   register: (data) => api.post('/auth/register', data),
   google: (id_token) => api.post('/auth/google', { id_token }),
 }
@@ -105,6 +106,7 @@ export const paymentAPI = {
   getPlans: () => api.get('/payments/plans'),
   getGateways: (currency) => api.get(`/payments/gateways?currency=${currency}`),
   createOrder: (data) => api.post('/payments/create-order', data),
+  createOrderAnon: (data) => api.post('/payments/create-order-anon', data),
   verify: (data) => api.post('/payments/verify', data),
   checkStatus: (orderId) => api.get(`/payments/status/${orderId}`),
 }
