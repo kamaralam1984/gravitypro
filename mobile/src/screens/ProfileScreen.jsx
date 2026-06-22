@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../store/authStore'
-import { mediaAPI, userAPI } from '../services/api'
+import { mediaAPI, userAPI, subscriptionAPI } from '../services/api'
 import { stopBackgroundTracking } from '../services/location'
 import { registerForPushNotifications } from '../services/notifications'
 import { promptAndUpdate } from '../services/appUpdates'
@@ -35,6 +35,11 @@ export default function ProfileScreen() {
   const [editingEmail, setEditingEmail] = useState(false)
   const [emailValue, setEmailValue] = useState(user?.email || '')
   const [savingEmail, setSavingEmail] = useState(false)
+
+  // Subscription
+  const [subscription, setSubscription] = useState(null)
+  const [loadingSub, setLoadingSub] = useState(false)
+  const isFreePlan = !subscription || !subscription.plan_id || subscription.plan_id === 'free' || subscription.status !== 'active'
 
   // Settings toggles
   const [trackingEnabled, setTrackingEnabled] = useState(true)
@@ -70,6 +75,14 @@ export default function ProfileScreen() {
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.spring(avatarScale, { toValue: 1, tension: 60, friction: 8, useNativeDriver: true }),
     ]).start()
+  }, [])
+
+  useEffect(() => {
+    setLoadingSub(true)
+    subscriptionAPI.getMe()
+      .then(res => setSubscription(res.subscription || res))
+      .catch(() => {})
+      .finally(() => setLoadingSub(false))
   }, [])
 
   // Keep nameValue/emailValue in sync if user updates externally

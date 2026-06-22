@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import Slider from '@react-native-community/slider'
 import { circleAPI, geofenceAPI } from '../services/api'
+import { getCurrentLocation } from '../services/location'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
 import { Colors, Gradients } from '../theme/colors'
@@ -107,6 +108,7 @@ export default function SafeZonesScreen() {
   const [error, setError] = useState('')
   const [pickingOnMap, setPickingOnMap] = useState(false)
   const [editingZone, setEditingZone] = useState(null)
+  const [userLocation, setUserLocation] = useState(null)
   const mapRef = useRef(null)
   const modalMapRef = useRef(null)
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -120,6 +122,15 @@ export default function SafeZonesScreen() {
 
   const loadData = async () => {
     setLoading(true)
+    // Get user location in background for map default region
+    getCurrentLocation().then(loc => {
+      setUserLocation({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      })
+    }).catch(() => {})
     try {
       const res = await circleAPI.getMy()
       const circs = res.circles || []
@@ -265,7 +276,7 @@ export default function SafeZonesScreen() {
     )
   }
 
-  // Compute initial map region from zones or default
+  // Compute initial map region: zones > user location > India center
   const mapRegion = safeZones.length > 0
     ? {
         latitude: safeZones[0].center_lat,
@@ -273,11 +284,11 @@ export default function SafeZonesScreen() {
         latitudeDelta: 0.05,
         longitudeDelta: 0.05,
       }
-    : {
-        latitude: 37.7749,
-        longitude: -122.4194,
-        latitudeDelta: 0.1,
-        longitudeDelta: 0.1,
+    : userLocation || {
+        latitude: 20.5937,
+        longitude: 78.9629,
+        latitudeDelta: 8,
+        longitudeDelta: 8,
       }
 
   return (

@@ -38,9 +38,7 @@ export const flushOfflineQueue = async (token) => {
   const queue = await readQueue()
   if (!queue.length) return 0
 
-  const BASE = (process.env.EXPO_PUBLIC_API_URL || (__DEV__
-    ? 'http://192.168.0.197:3021'
-    : 'https://gravitypro.kvlbusinesssolutions.com')) + '/api/v1'
+  const BASE = (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') + '/api/v1'
 
   const controller = new AbortController()
   const tid = setTimeout(() => controller.abort(), 12000)
