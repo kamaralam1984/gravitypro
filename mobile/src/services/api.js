@@ -42,6 +42,8 @@ export const userAPI = {
   getStats: () => api.get('/users/me/stats'),
   postLocation: (data) => api.post('/users/location', data),
   getLocationHistory: () => api.get('/users/me/location-history'),
+  clearPushToken: () => api.delete('/users/me/push-token'),
+  deleteAccount: () => api.delete('/users/me'),
 }
 
 // ── Circles ───────────────────────────────────────────────────────────────────
@@ -57,6 +59,7 @@ export const circleAPI = {
 // ── SOS ───────────────────────────────────────────────────────────────────────
 export const sosAPI = {
   trigger: (data) => api.post('/sos', data),
+  safe: (data) => api.post('/sos/safe', data),
   getHistory: (circleId) => api.get(`/sos/history?circle_id=${circleId}`),
   resolve: (sosId) => api.patch(`/sos/${sosId}/resolve`),
 }
@@ -71,12 +74,10 @@ export const geofenceAPI = {
 }
 
 // ── Media ─────────────────────────────────────────────────────────────────────
-// Usage:
-//   const { uploadUrl, publicUrl } = await mediaAPI.getAvatarUploadUrl()
-//   await fetch(uploadUrl, { method: 'PUT', body: fileBlob })
-//   await userAPI.updateMe({ avatar_url: publicUrl })
 export const mediaAPI = {
-  getAvatarUploadUrl: () => api.get('/media/avatar-upload-url'),
+  uploadAvatar: (formData) => api.post('/media/avatar/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 }
 
 // ── Subscriptions ─────────────────────────────────────────────────────────────

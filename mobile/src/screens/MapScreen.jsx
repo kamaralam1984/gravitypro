@@ -11,14 +11,12 @@ import {
   StyleSheet,
   Animated,
   Pressable,
-  Image,
   Platform,
   TouchableOpacity,
   Modal,
   ScrollView,
-  FlatList,
 } from 'react-native'
-import MapView, { Marker, Circle as MapCircle } from 'react-native-maps'
+import { WebView } from 'react-native-webview'
 import * as Location from 'expo-location'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -27,12 +25,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useAuthStore } from '../store/authStore'
 import { MemberAvatar } from '../components/MemberAvatar'
-import { PulseRing } from '../components/PulseRing'
 import { BatteryIndicator } from '../components/BatteryIndicator'
 import { circleAPI, sosAPI, geofenceAPI, userAPI } from '../services/api'
 import { storage } from '../utils/storage'
 import { Colors } from '../theme/colors'
-import { DARK_MAP_STYLE } from '../theme/mapStyles'
+
+const getBatteryLevel = async () => {
+  try {
+    const Battery = require('expo-battery')
+    const level = await Battery.getBatteryLevelAsync()
+    return level >= 0 ? Math.round(level * 100) : null
+  } catch {
+    return null
+  }
+}
 
 // ── SSE (NativeEventSource) ───────────────────────────────────────────────────
 const NativeEventSource =
@@ -42,7 +48,124 @@ const SSE_BASE =
   (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') +
   '/api/v1/sse/stream'
 
-const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+// ── Tile layer configs (same as website ParentPanel / ChildPanel) ─────────────
+const TILE_LAYERS = {
+  dark:      { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',           opts: '{subdomains:"abcd",maxZoom:19}' },
+  light:     { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',          opts: '{subdomains:"abcd",maxZoom:19}' },
+  satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts: '{maxZoom:19}' },
+  street:    { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', opts: '{subdomains:"abcd",maxZoom:19}' },
+}
+
+// ── Leaflet HTML ──────────────────────────────────────────────────────────────
+
+function buildLeafletHTML({ myLocation, members, memberLocations, safeZones, user, mapType = 'dark', locationHistory = [] }) {
+  const center = myLocation
+    ? [myLocation.latitude, myLocation.longitude]
+    : [20.5937, 78.9629]
+  const zoom = myLocation ? 14 : 5
+
+  const tile = TILE_LAYERS[mapType] || TILE_LAYERS.dark
+
+  // Build tile layer entries for JS switcher
+  const tileLayersJS = Object.entries(TILE_LAYERS).map(([key, t]) =>
+    `"${key}": L.tileLayer("${t.url}", ${t.opts})`
+  ).join(',\n    ')
+
+  const markersJS = []
+
+  if (myLocation) {
+    markersJS.push(`
+      var myIcon = L.divIcon({
+        className: '',
+        html: '<div style="width:32px;height:32px;border-radius:50%;background:#00E676;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,230,118,0.5);display:flex;align-items:center;justify-content:center;font-size:16px;text-align:center;line-height:26px;">👤</div>',
+        iconSize:[32,32], iconAnchor:[16,16]
+      });
+      L.marker([${myLocation.latitude},${myLocation.longitude}],{icon:myIcon}).addTo(map).bindPopup('<b>You</b>',{className:'gravity-popup'});
+    `)
+  }
+
+  members.filter(m => m.id !== user?.id && memberLocations[m.id]).forEach(m => {
+    const loc = memberLocations[m.id]
+    const initials = (m.name || '?')[0].toUpperCase()
+    const color = '#2196F3'
+    const safeId = m.id.replace(/-/g, '_')
+    const safeName = (m.name || '?').replace(/'/g, "\\'")
+    markersJS.push(`
+      var icon_${safeId} = L.divIcon({
+        className: '',
+        html: '<div onclick="window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:\\"memberTap\\",id:\\"${m.id}\\"}))" style="width:38px;height:38px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 8px rgba(33,150,243,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:14px;text-align:center;line-height:32px;cursor:pointer;">${initials}</div>',
+        iconSize:[38,38], iconAnchor:[19,19]
+      });
+      L.marker([${loc.latitude},${loc.longitude}],{icon:icon_${safeId}}).addTo(map).bindPopup('<b>${safeName}</b>',{className:'gravity-popup'});
+    `)
+  })
+
+  safeZones.forEach(z => {
+    const safeName = z.name.replace(/'/g, "\\'")
+    markersJS.push(`
+      L.circle([${z.center_lat},${z.center_lng}],{radius:${z.radius_meters},color:'#00E676',fillColor:'#00E676',fillOpacity:0.12,weight:2}).addTo(map).bindPopup('<b>${safeName}</b>',{className:'gravity-popup'});
+    `)
+  })
+
+  if (locationHistory.length > 1) {
+    const sorted = [...locationHistory].reverse()
+    const points = sorted.map(p => `[${p.latitude},${p.longitude}]`).join(',')
+    markersJS.push(`
+      L.polyline([${points}],{color:'#00E676',weight:3,opacity:0.65,dashArray:'6,4'}).addTo(map);
+      L.circleMarker([${sorted[0].latitude},${sorted[0].longitude}],{radius:6,color:'#00C853',fillColor:'#00C853',fillOpacity:1}).addTo(map).bindPopup('<b>Start</b>',{className:'gravity-popup'});
+      L.circleMarker([${sorted[sorted.length-1].latitude},${sorted[sorted.length-1].longitude}],{radius:6,color:'#FF8A00',fillColor:'#FF8A00',fillOpacity:1}).addTo(map).bindPopup('<b>Latest</b>',{className:'gravity-popup'});
+    `)
+  }
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body,#map{width:100%;height:100%;background:#0a1a0e}
+  .gravity-popup .leaflet-popup-content-wrapper{background:#0F2518;border:1px solid #1a4a2a;border-radius:8px;color:#e0ffe8;font-family:sans-serif;font-size:13px;}
+  .gravity-popup .leaflet-popup-tip{background:#0F2518;}
+  .leaflet-control-zoom{border:none!important;background:transparent!important;}
+  .leaflet-control-zoom a{background:#0F2518!important;color:#00E676!important;border:1px solid #1a4a2a!important;margin-bottom:2px!important;border-radius:6px!important;}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+var currentTile;
+var tileLayers = {
+    ${tileLayersJS}
+};
+var map = L.map('map',{zoomControl:false,attributionControl:false}).setView([${center[0]},${center[1]}],${zoom});
+currentTile = tileLayers["${mapType}"];
+currentTile.addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+${markersJS.join('\n')}
+map.on('click',function(e){
+  if(window.ReactNativeWebView)
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'mapTap',lat:e.latlng.lat,lng:e.latlng.lng}));
+});
+// Handle messages from React Native (tile switch, pan)
+document.addEventListener('message', handleMsg);
+window.addEventListener('message', handleMsg);
+function handleMsg(e){
+  try{
+    var d = JSON.parse(e.data);
+    if(d.type==='setTile' && tileLayers[d.tile]){
+      if(currentTile) map.removeLayer(currentTile);
+      currentTile = tileLayers[d.tile];
+      currentTile.addTo(map);
+      currentTile.bringToBack();
+    } else if(d.type==='panTo'){
+      map.setView([d.lat,d.lng],d.zoom||16,{animate:true});
+    }
+  }catch(_){}
+}
+</script>
+</body></html>`
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -68,13 +191,15 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets()
 
   // ── refs ──────────────────────────────────────────────────────────────────
-  const mapRef = useRef(null)
+  const webViewRef = useRef(null)
   const esRef = useRef(null)           // EventSource
   const locationSubRef = useRef(null)  // Location.watchPositionAsync subscription
   const lastLocationPost = useRef(0)
 
   // ── state ─────────────────────────────────────────────────────────────────
   const [myLocation, setMyLocation] = useState(null)
+  const [mapType, setMapType] = useState('dark')
+  const [showMapTypePicker, setShowMapTypePicker] = useState(false)
   const [circles, setCircles] = useState([])
   const [activeCircle, setActiveCircle] = useState(null)
   const [members, setMembers] = useState([])
@@ -82,6 +207,11 @@ export default function MapScreen() {
   const [safeZones, setSafeZones] = useState([])
   const [selectedMember, setSelectedMember] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
+
+  // ── History ───────────────────────────────────────────────────────────────
+  const [showHistory, setShowHistory] = useState(false)
+  const [locationHistory, setLocationHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
 
   // ── SOS ───────────────────────────────────────────────────────────────────
   const [sosModalVisible, setSosModalVisible] = useState(false)
@@ -233,13 +363,16 @@ export default function MapScreen() {
           const now = Date.now()
           if (now - lastLocationPost.current > 30_000) {
             lastLocationPost.current = now
-            userAPI
-              .postLocation({
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
-                accuracy: loc.coords.accuracy ?? undefined,
-              })
-              .catch(() => {})
+            getBatteryLevel().then(battery_level => {
+              userAPI
+                .postLocation({
+                  latitude: loc.coords.latitude,
+                  longitude: loc.coords.longitude,
+                  accuracy: loc.coords.accuracy ?? undefined,
+                  battery_level,
+                })
+                .catch(() => {})
+            })
           }
         }
       )
@@ -335,30 +468,55 @@ export default function MapScreen() {
     }
   }, [sosSending, activeCircle, myLocation, showToast])
 
+  // ── WebView helpers ───────────────────────────────────────────────────────
+  const panMapTo = useCallback((lat, lng, zoom = 16) => {
+    webViewRef.current?.injectJavaScript(
+      `map.setView([${lat},${lng}],${zoom},{animate:true});true;`
+    )
+  }, [])
+
+  const switchMapTile = useCallback((type) => {
+    setMapType(type)
+    webViewRef.current?.injectJavaScript(
+      `(function(){var t=tileLayers["${type}"];if(currentTile)map.removeLayer(currentTile);currentTile=t;t.addTo(map);t.bringToBack();})(true);`
+    )
+  }, [])
+
   // ── member tap ────────────────────────────────────────────────────────────
   const handleMemberTap = useCallback(
     (member) => {
       setSelectedMember(member)
       showCard()
       const loc = memberLocations[member.id]
-      if (loc && mapRef.current) {
-        mapRef.current.animateToRegion(
-          { ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 },
-          600
-        )
-      }
+      if (loc) panMapTo(loc.latitude, loc.longitude, 16)
     },
-    [memberLocations, showCard]
+    [memberLocations, showCard, panMapTo]
   )
 
   // ── center on self ────────────────────────────────────────────────────────
   const centerOnMe = useCallback(() => {
-    if (!myLocation || !mapRef.current) return
-    mapRef.current.animateToRegion(
-      { ...myLocation, latitudeDelta: 0.01, longitudeDelta: 0.01 },
-      800
-    )
-  }, [myLocation])
+    if (!myLocation) return
+    panMapTo(myLocation.latitude, myLocation.longitude, 16)
+  }, [myLocation, panMapTo])
+
+  // ── history toggle ────────────────────────────────────────────────────────
+  const toggleHistory = useCallback(async () => {
+    if (showHistory) {
+      setShowHistory(false)
+      setLocationHistory([])
+      return
+    }
+    setLoadingHistory(true)
+    try {
+      const res = await userAPI.getLocationHistory()
+      setLocationHistory(res?.locations || [])
+      setShowHistory(true)
+    } catch (e) {
+      showToast('Failed to load history', Colors.warning)
+    } finally {
+      setLoadingHistory(false)
+    }
+  }, [showHistory, showToast])
 
   // ── lifecycle: mount ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -411,102 +569,26 @@ export default function MapScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* ── Full-screen map ─────────────────────────────────────────────── */}
-      {!MAPS_KEY && (
-        <View style={[StyleSheet.absoluteFill, styles.noMapPlaceholder]}>
-          <Ionicons name="map-outline" size={48} color="rgba(0,230,118,0.3)" />
-          <Text style={styles.noMapTitle}>Map Unavailable</Text>
-          <Text style={styles.noMapSub}>Google Maps API key not configured</Text>
-        </View>
-      )}
-      {MAPS_KEY && <MapView
-        ref={mapRef}
+      {/* ── Full-screen Leaflet map (same system as website parent/child panel) ── */}
+      <WebView
+        ref={webViewRef}
+        source={{ html: buildLeafletHTML({ myLocation, members, memberLocations, safeZones, user, mapType, locationHistory }) }}
         style={StyleSheet.absoluteFill}
-        customMapStyle={DARK_MAP_STYLE}
-        showsUserLocation={false}
-        showsCompass={false}
-        toolbarEnabled={false}
-        onPress={() => selectedMember && hideCard()}
-        initialRegion={
-          myLocation
-            ? { ...myLocation, latitudeDelta: 0.04, longitudeDelta: 0.04 }
-            : { latitude: 1.2921, longitude: 36.8219, latitudeDelta: 60, longitudeDelta: 60 }
-        }>
-
-        {/* Own location — pulsing green dot */}
-        {myLocation && (
-          <Marker coordinate={myLocation} title="You" anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.myMarkerWrap}>
-              <PulseRing color={Colors.accent} size={52} active />
-              <LinearGradient
-                colors={['#00E676', '#00C853']}
-                style={styles.myMarkerGrad}>
-                <Ionicons name="person" size={16} color="#fff" />
-              </LinearGradient>
-            </View>
-          </Marker>
-        )}
-
-        {/* Family member markers */}
-        {members
-          .filter((m) => m.id !== user?.id && memberLocations[m.id])
-          .map((member) => {
-            const loc = memberLocations[member.id]
-            const online = isOnlineMember(loc)
-            const isSelected = selectedMember?.id === member.id
-            return (
-              <Marker
-                key={member.id}
-                coordinate={loc}
-                anchor={{ x: 0.5, y: 0.5 }}
-                onPress={() => handleMemberTap(member)}>
-                <View style={styles.memberMarkerWrap}>
-                  {online && (
-                    <PulseRing
-                      color={isSelected ? Colors.accent : Colors.info}
-                      size={48}
-                      active
-                    />
-                  )}
-                  <View style={[styles.memberRing, isSelected && styles.memberRingSelected]}>
-                    {member.avatar_url ? (
-                      <Image source={{ uri: member.avatar_url }} style={styles.memberImage} />
-                    ) : (
-                      <View style={styles.memberInitialWrap}>
-                        <Text style={styles.memberInitial}>
-                          {member.name?.[0]?.toUpperCase() || '?'}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {isSelected && <View style={styles.selectedPip} />}
-                </View>
-              </Marker>
-            )
-          })}
-
-        {/* Safe zone circles */}
-        {safeZones.map((zone) => (
-          <React.Fragment key={zone.id}>
-            <MapCircle
-              center={{ latitude: zone.center_lat, longitude: zone.center_lng }}
-              radius={zone.radius_meters}
-              fillColor={Colors.mapPolygonFill}
-              strokeColor={Colors.mapPolygonStroke}
-              strokeWidth={2}
-            />
-            <Marker
-              coordinate={{ latitude: zone.center_lat, longitude: zone.center_lng }}
-              anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges={false}>
-              <View style={styles.zoneLabelWrap}>
-                <Ionicons name="shield-checkmark" size={10} color={Colors.accent} />
-                <Text style={styles.zoneLabelText}>{zone.name}</Text>
-              </View>
-            </Marker>
-          </React.Fragment>
-        ))}
-      </MapView>}
+        javaScriptEnabled
+        originWhitelist={['*']}
+        onMessage={(e) => {
+          try {
+            const data = JSON.parse(e.nativeEvent.data)
+            if (data.type === 'memberTap') {
+              const member = members.find((m) => m.id === data.id)
+              if (member) handleMemberTap(member)
+            } else if (data.type === 'mapTap') {
+              if (selectedMember) hideCard()
+              if (showMapTypePicker) setShowMapTypePicker(false)
+            }
+          } catch (_) {}
+        }}
+      />
 
       {/* ── Header overlay ──────────────────────────────────────────────── */}
       <Animated.View
@@ -588,6 +670,53 @@ export default function MapScreen() {
           <Text style={styles.toastText}>{toast.message}</Text>
         </Animated.View>
       )}
+
+      {/* ── Map type picker panel ─────────────────────────────────────── */}
+      {showMapTypePicker && (
+        <View style={[styles.mapTypePicker, { bottom: insets.bottom + 162, right: 16 }]}>
+          {[
+            { key: 'dark', label: 'Dark', icon: 'moon' },
+            { key: 'light', label: 'Light', icon: 'sunny' },
+            { key: 'satellite', label: 'Satellite', icon: 'earth' },
+            { key: 'street', label: 'Street', icon: 'map' },
+          ].map((t) => (
+            <TouchableOpacity
+              key={t.key}
+              style={[styles.mapTypeBtn, mapType === t.key && styles.mapTypeBtnActive]}
+              onPress={() => { switchMapTile(t.key); setShowMapTypePicker(false) }}
+              activeOpacity={0.75}>
+              <Ionicons name={t.icon} size={14} color={mapType === t.key ? '#fff' : Colors.textMuted} />
+              <Text style={[styles.mapTypeTxt, mapType === t.key && styles.mapTypeTxtActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* ── History FAB ─────────────────────────────────────────────────── */}
+      <Pressable
+        style={[styles.locateFab, { bottom: insets.bottom + 108, right: 204 }]}
+        onPress={toggleHistory}
+        disabled={loadingHistory}>
+        <LinearGradient
+          colors={showHistory ? ['#0A5C35', '#063d24'] : ['#0D7A45', '#0A5C35']}
+          style={styles.locateFabGrad}>
+          {loadingHistory
+            ? <Ionicons name="sync" size={18} color="#fff" />
+            : <Ionicons name="time" size={20} color={showHistory ? Colors.accent : '#fff'} />
+          }
+        </LinearGradient>
+      </Pressable>
+
+      {/* ── Layers FAB ──────────────────────────────────────────────────── */}
+      <Pressable
+        style={[styles.locateFab, { bottom: insets.bottom + 108, right: 148 }]}
+        onPress={() => setShowMapTypePicker((v) => !v)}>
+        <LinearGradient
+          colors={showMapTypePicker ? ['#0A5C35', '#063d24'] : ['#0D7A45', '#0A5C35']}
+          style={styles.locateFabGrad}>
+          <Ionicons name="layers" size={20} color="#fff" />
+        </LinearGradient>
+      </Pressable>
 
       {/* ── Locate-me FAB ───────────────────────────────────────────────── */}
       <Pressable
@@ -695,14 +824,7 @@ export default function MapScreen() {
             {selectedLoc && (
               <TouchableOpacity
                 style={styles.viewOnMapBtn}
-                onPress={() => {
-                  if (mapRef.current && selectedLoc) {
-                    mapRef.current.animateToRegion(
-                      { ...selectedLoc, latitudeDelta: 0.005, longitudeDelta: 0.005 },
-                      700
-                    )
-                  }
-                }}>
+                onPress={() => panMapTo(selectedLoc.latitude, selectedLoc.longitude, 17)}>
                 <Ionicons name="navigate" size={15} color={Colors.accent} />
                 <Text style={styles.viewOnMapText}>Center on map</Text>
               </TouchableOpacity>
@@ -787,16 +909,8 @@ export default function MapScreen() {
             <TouchableOpacity
               style={[styles.sosSendBtn, { marginTop: 20 }]}
               onPress={() => {
-                if (sosAlert?.latitude && sosAlert?.longitude && mapRef.current) {
-                  mapRef.current.animateToRegion(
-                    {
-                      latitude: sosAlert.latitude,
-                      longitude: sosAlert.longitude,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
-                    },
-                    800
-                  )
+                if (sosAlert?.latitude && sosAlert?.longitude) {
+                  panMapTo(sosAlert.latitude, sosAlert.longitude, 16)
                 }
                 setSosAlert(null)
               }}
@@ -1000,6 +1114,29 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   zoneLabelText: { fontSize: 11, fontWeight: '700', color: Colors.accent },
+
+  // ── map type picker ──
+  mapTypePicker: {
+    position: 'absolute',
+    backgroundColor: 'rgba(10,26,14,0.96)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.2)',
+    overflow: 'hidden',
+    elevation: 12,
+  },
+  mapTypeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,230,118,0.1)',
+  },
+  mapTypeBtnActive: { backgroundColor: 'rgba(13,122,69,0.5)' },
+  mapTypeTxt: { fontSize: 13, color: Colors.textMuted, fontWeight: '600' },
+  mapTypeTxtActive: { color: '#fff' },
 
   // ── locate FAB ──
   locateFab: {

@@ -100,6 +100,12 @@ router.post("/me/push-token", authenticate, async (req, res) => {
   res.json({ ok: true })
 })
 
+// DELETE /api/v1/users/me/push-token — clear push token (disable notifications)
+router.delete("/me/push-token", authenticate, async (req, res) => {
+  await query("UPDATE users SET push_token = NULL WHERE id = $1", [req.user.id]).catch(() => {})
+  res.json({ ok: true })
+})
+
 router.patch('/me', authenticate, validate(updateSchema), async (req, res) => {
   const { name, email, push_token } = req.body
   try {

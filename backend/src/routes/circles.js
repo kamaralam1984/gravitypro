@@ -79,6 +79,20 @@ router.get('/:circleId/members', authenticate, async (req, res) => {
   res.json({ members: result.rows })
 })
 
+// DELETE /api/v1/circles/:circleId/members/:userId — remove member (admin only)
+router.delete('/:circleId/members/:userId', authenticate, async (req, res) => {
+  const { circleId, userId } = req.params
+  const caller = await query('SELECT role FROM circle_members WHERE circle_id=$1 AND user_id=$2', [circleId, req.user.id])
+  if (!caller.rows.length) return res.status(403).json({ error: 'Not a member of this circle' })
+  if (caller.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only admins can remove members' })
+  if (userId === req.user.id) return res.status(400).json({ error: 'Use leave endpoint to remove yourself' })
+  const target = await query('SELECT role FROM circle_members WHERE circle_id=$1 AND user_id=$2', [circleId, userId])
+  if (!target.rows.length) return res.status(404).json({ error: 'Member not found in this circle' })
+  if (target.rows[0].role === 'admin') return res.status(400).json({ error: 'Cannot remove another admin' })
+  await query('DELETE FROM circle_members WHERE circle_id=$1 AND user_id=$2', [circleId, userId])
+  res.json({ success: true })
+})
+
 // PATCH /api/v1/circles/:circleId — update circle name (admin only)
 router.patch('/:circleId', authenticate, async (req, res) => {
   const { name } = req.body

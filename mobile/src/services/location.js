@@ -3,6 +3,16 @@ import * as Location from 'expo-location'
 
 const LOCATION_TASK_NAME = 'gravity-background-location'
 
+const getBatteryLevel = async () => {
+  try {
+    const Battery = require('expo-battery')
+    const level = await Battery.getBatteryLevelAsync()
+    return level >= 0 ? Math.round(level * 100) : null
+  } catch {
+    return null
+  }
+}
+
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
 const TRACCAR_ENDPOINT = `${API_BASE}/telemetry`
 
@@ -47,13 +57,14 @@ if (Platform.OS !== 'web') {
         try {
           const token = await storage.getItem('auth_token')
           if (token) {
-            await fetchWithTimeout(`${API_BASE}/api/v1/users/me/location`, {
+            const battery_level = await getBatteryLevel()
+            await fetchWithTimeout(`${API_BASE}/api/v1/users/location`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + token,
               },
-              body: JSON.stringify({ latitude, longitude, accuracy, battery_level: null }),
+              body: JSON.stringify({ latitude, longitude, accuracy, battery_level }),
             })
           }
         } catch (e) {

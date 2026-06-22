@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Animated,
-  Switch, Image, Alert, Platform, TextInput, ActivityIndicator,
+  Switch, Image, Alert, Platform, TextInput, ActivityIndicator, Linking,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../store/authStore'
 import { mediaAPI, userAPI, subscriptionAPI } from '../services/api'
 import { stopBackgroundTracking } from '../services/location'
+import { registerForPushNotifications } from '../services/notifications'
 import { promptAndUpdate } from '../services/appUpdates'
 import { GradientCard } from '../components/ui/GradientCard'
 import { Colors, Gradients } from '../theme/colors'
@@ -29,6 +30,9 @@ export default function ProfileScreen() {
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(user?.name || '')
   const [savingName, setSavingName] = useState(false)
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [emailValue, setEmailValue] = useState(user?.email || '')
+  const [savingEmail, setSavingEmail] = useState(false)
 
   // Subscription
   const [subscription, setSubscription] = useState(null)
@@ -55,10 +59,14 @@ export default function ProfileScreen() {
       .finally(() => setLoadingSub(false))
   }, [])
 
-  // Keep nameValue in sync if user updates externally
+  // Keep nameValue/emailValue in sync if user updates externally
   useEffect(() => {
     if (!editingName) setNameValue(user?.name || '')
   }, [user?.name, editingName])
+
+  useEffect(() => {
+    if (!editingEmail) setEmailValue(user?.email || '')
+  }, [user?.email, editingEmail])
 
   const handlePickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -76,21 +84,15 @@ export default function ProfileScreen() {
     const asset = result.assets[0]
     setUploadingAvatar(true)
     try {
-      const ext = asset.uri.split('.').pop().toLowerCase()
+      const ext = (asset.uri.split('.').pop() || 'jpg').toLowerCase()
       const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
-      // Step 1: Get presigned URL
-      const { uploadUrl, publicUrl } = await mediaAPI.getAvatarUploadUrl()
-      // Step 2: Upload to R2
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': contentType },
-        body: await (await fetch(asset.uri)).blob(),
-      })
-      // Step 3: Update user profile
-      const { user: updated } = await userAPI.updateMe({ avatar_url: publicUrl })
-      updateUser(updated)
+      const form = new FormData()
+      form.append('avatar', { uri: asset.uri, name: `avatar.${ext}`, type: contentType })
+      const { avatar_url } = await mediaAPI.uploadAvatar(form)
+      updateUser({ ...user, avatar_url })
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     } catch (e) {
+      console.error('Avatar upload error:', e)
       Alert.alert('Upload failed', 'Could not upload photo. Please try again.')
     } finally {
       setUploadingAvatar(false)
@@ -110,6 +112,43 @@ export default function ProfileScreen() {
     } finally {
       setSavingName(false)
     }
+  }
+
+  const handleSaveEmail = async () => {
+    if (!emailValue.trim()) return
+    setSavingEmail(true)
+    try {
+      const { user: updated } = await userAPI.updateMe({ email: emailValue.trim() })
+      updateUser(updated)
+      setEditingEmail(false)
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    } catch (e) {
+      Alert.alert('Save failed', 'Could not update your email. Please try again.')
+    } finally {
+      setSavingEmail(false)
+    }
+  }
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Forever', style: 'destructive',
+          onPress: async () => {
+            try {
+              await stopBackgroundTracking()
+              await userAPI.deleteAccount()
+              await logout()
+            } catch (e) {
+              Alert.alert('Error', 'Could not delete account. Please try again.')
+            }
+          },
+        },
+      ]
+    )
   }
 
   const handleLogout = () => {
@@ -223,8 +262,39 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{user?.email || '—'}</Text>
+                {editingEmail ? (
+                  <TextInput
+                    style={styles.nameInput}
+                    value={emailValue}
+                    onChangeText={setEmailValue}
+                    autoFocus
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    onSubmitEditing={handleSaveEmail}
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                ) : (
+                  <Text style={styles.infoValue}>{user?.email || '—'}</Text>
+                )}
               </View>
+              {editingEmail ? (
+                <View style={styles.editActions}>
+                  <Pressable onPress={() => { setEditingEmail(false); setEmailValue(user?.email || '') }} style={styles.cancelBtn}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={handleSaveEmail} style={styles.saveBtn} disabled={savingEmail}>
+                    {savingEmail
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.saveBtnText}>Save</Text>
+                    }
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable onPress={() => { setEditingEmail(true); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}>
+                  <Ionicons name="pencil-outline" size={18} color={Colors.accentSoft} />
+                </Pressable>
+              )}
             </View>
 
             {/* Phone row */}
@@ -271,7 +341,7 @@ export default function ProfileScreen() {
                   {isFreePlan && (
                     <Pressable
                       style={styles.upgradeBtn}
-                      onPress={() => Alert.alert('Coming Soon', 'Plan upgrades will be available soon!')}>
+                      onPress={() => Linking.openURL('https://gravitypro.kvlbusinesssolutions.com/checkout?plan=family')}>
                       <Text style={styles.upgradeBtnText}>Upgrade</Text>
                     </Pressable>
                   )}
@@ -292,7 +362,7 @@ export default function ProfileScreen() {
                 <Text style={styles.planName}>Free Plan</Text>
                 <Pressable
                   style={styles.upgradeBtn}
-                  onPress={() => Alert.alert('Coming Soon', 'Plan upgrades will be available soon!')}>
+                  onPress={() => Linking.openURL('https://gravitypro.kvlbusinesssolutions.com/checkout?plan=family')}>
                   <Text style={styles.upgradeBtnText}>Upgrade Plan</Text>
                 </Pressable>
               </View>
@@ -317,9 +387,14 @@ export default function ProfileScreen() {
               icon="notifications"
               label="Push Notifications"
               value={notificationsEnabled}
-              onToggle={(v) => {
+              onToggle={async (v) => {
                 setNotificationsEnabled(v)
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                if (v) {
+                  await registerForPushNotifications().catch(() => {})
+                } else {
+                  await userAPI.clearPushToken().catch(() => {})
+                }
               }}
               toggle
             />
@@ -335,6 +410,12 @@ export default function ProfileScreen() {
           <Pressable style={styles.logoutBtn} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
             <Text style={styles.logoutText}>Sign Out</Text>
+          </Pressable>
+
+          {/* ── Delete Account ── */}
+          <Pressable style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
+            <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+            <Text style={styles.deleteAccountText}>Delete Account</Text>
           </Pressable>
 
           <Text style={styles.version}>Gravity v1.0.0 by Trackalways</Text>
@@ -427,5 +508,7 @@ const styles = StyleSheet.create({
   updateText: { color: Colors.accent, fontSize: 15, fontWeight: '700' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(229,57,53,0.1)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(229,57,53,0.25)' },
   logoutText: { color: Colors.danger, fontSize: 16, fontWeight: '700' },
+  deleteAccountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10 },
+  deleteAccountText: { color: Colors.danger, fontSize: 13, fontWeight: '500', textDecorationLine: 'underline' },
   version: { textAlign: 'center', color: Colors.textMuted, fontSize: 12, paddingBottom: 8 },
 })

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -20,6 +21,7 @@ import { GradientCard } from '../components/ui/GradientCard'
 import { circleAPI, geofenceAPI, sosAPI } from '../services/api'
 import { storage } from '../utils/storage'
 import { Colors, Gradients } from '../theme/colors'
+import { useAuthStore } from '../store/authStore'
 
 const NativeEventSource = Platform.OS !== 'web' ? require('react-native-sse').default : null
 
@@ -258,8 +260,10 @@ function EmptyState({ tab }) {
 
 export default function AlertsScreen() {
   const insets = useSafeAreaInsets()
+  const user = useAuthStore(s => s.user)
 
   const [activeCircle, setActiveCircle] = useState(null)
+  const [sendingSafe, setSendingSafe] = useState(false)
   const [sosItems, setSosItems]         = useState([])
   const [geoItems, setGeoItems]         = useState([])
   const [activeTab, setActiveTab]       = useState('All')
@@ -384,6 +388,27 @@ export default function AlertsScreen() {
     sseRef.current = es
   }
 
+  // ── Mark as Safe ────────────────────────────────────────────────────────────
+
+  const handleMarkSafe = useCallback(async () => {
+    setSendingSafe(true)
+    try {
+      await sosAPI.safe({ message: "I'm safe!" })
+      bannerKey.current += 1
+      setBanner({
+        key: bannerKey.current,
+        type: 'geofence',
+        eventType: 'enter',
+        title: 'Safe notification sent',
+        body: 'Your circle has been notified you are safe.',
+      })
+    } catch (e) {
+      Alert.alert('Error', 'Could not send safe notification. Try again.')
+    } finally {
+      setSendingSafe(false)
+    }
+  }, [])
+
   // ── Resolve SOS ─────────────────────────────────────────────────────────────
 
   const handleResolve = useCallback((sosId) => {
@@ -424,10 +449,26 @@ export default function AlertsScreen() {
       <LinearGradient
         colors={['rgba(5,15,8,0.98)', 'rgba(5,15,8,0.9)']}
         style={[styles.header, { paddingTop: insets.top + 14 }]}>
-        <Text style={styles.headerTitle}>Alerts</Text>
-        <Text style={styles.headerSubtitle}>
-          {activeCircle ? activeCircle.name : 'Your safety events'}
-        </Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerTitle}>Alerts</Text>
+            <Text style={styles.headerSubtitle}>
+              {activeCircle ? activeCircle.name : 'Your safety events'}
+            </Text>
+          </View>
+          <Pressable
+            onPress={handleMarkSafe}
+            disabled={sendingSafe}
+            style={({ pressed }) => [styles.safeBtn, pressed && { opacity: 0.75 }]}>
+            <LinearGradient colors={['#0D7A45', '#0A5C35']} style={styles.safeBtnGrad}>
+              {sendingSafe
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="checkmark-circle" size={16} color="#fff" />
+              }
+              <Text style={styles.safeBtnText}>{sendingSafe ? 'Sending…' : "I'm Safe"}</Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
 
         {/* Filter tabs */}
         <ScrollView
@@ -505,8 +546,12 @@ const styles = StyleSheet.create({
 
   // Header
   header: { paddingHorizontal: 20, paddingBottom: 12 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { fontSize: 28, fontWeight: '800', color: Colors.textWhite },
   headerSubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  safeBtn: { borderRadius: 20, overflow: 'hidden' },
+  safeBtnGrad: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9 },
+  safeBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   tabScroll: { marginTop: 14 },
   tabRow: { flexDirection: 'row', gap: 8, paddingBottom: 2 },
   tab: {
