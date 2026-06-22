@@ -19,7 +19,7 @@ function validateName(name: string): boolean {
 
 type Tab = 'login' | 'register'
 type LoginStep = 1 | 2
-type RegStep = 1 | 2 | 3 | 4
+type RegStep = 1 | 2 | 3
 
 const COUNTRIES = [
   { code: 'IN', label: 'India' },
@@ -32,17 +32,6 @@ const COUNTRIES = [
   { code: 'PK', label: 'Pakistan' },
   { code: 'OT', label: 'Other' },
 ]
-
-function loadRazorpay(): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (window.Razorpay) { resolve(true); return }
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.onload = () => resolve(true)
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
-}
 
 export default function Login() {
   const navigate = useNavigate()
@@ -270,11 +259,7 @@ export default function Login() {
 
   function doGoToPlan() {
     if (!detailsAllValid) return
-    if (regAccountType === 'child') {
-      doRegisterFree()
-    } else {
-      setRegStep(4)
-    }
+    doRegisterFree()
   }
 
   async function doRegisterFree() {
@@ -298,86 +283,6 @@ export default function Login() {
     } catch (err: unknown) {
       setRegError(err instanceof Error ? err.message : 'Registration failed')
       setRegStep(3)
-    } finally {
-      setRegLoading(false)
-    }
-  }
-
-  async function doRegisterPaid(plan: 'family' | 'premium') {
-    setRegError('')
-    setRegLoading(true)
-    try {
-      const ok = await loadRazorpay()
-      if (!ok) throw new Error('Failed to load payment gateway. Please try again.')
-
-      const orderRes = await fetch(API + '/payments/create-order-anon', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone_token: regPhoneToken,
-          plan,
-          gateway: 'razorpay',
-          currency: 'INR',
-          name: regName.trim(),
-          email: regEmail.trim(),
-        }),
-      })
-      const orderData = await orderRes.json()
-      if (!orderRes.ok) throw new Error(orderData.error || 'Failed to create payment order')
-
-      const { orderId, clientData } = orderData
-
-      await new Promise<void>((resolve, reject) => {
-        const rzp = new window.Razorpay({
-          key: clientData?.key,
-          order_id: orderId,
-          name: 'Gravity Family Safety',
-          description: plan === 'family' ? 'Family Plan — ₹299/mo' : 'Premium Plan — ₹499/mo',
-          image: '/favicon.ico',
-          prefill: {
-            name: regName.trim(),
-            email: regEmail.trim(),
-          },
-          theme: { color: '#00E676' },
-          handler: async (response: {
-            razorpay_order_id: string
-            razorpay_payment_id: string
-            razorpay_signature: string
-          }) => {
-            try {
-              const regRes = await fetch(API + '/auth/register-with-payment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  phone_token: regPhoneToken,
-                  name: regName.trim(),
-                  email: regEmail.trim(),
-                  account_type: regAccountType,
-                  country_code: regCountry,
-                  plan,
-                  gateway: 'razorpay',
-                  gatewayOrderId: response.razorpay_order_id,
-                  gatewayPaymentId: response.razorpay_payment_id,
-                  signature: response.razorpay_signature,
-                }),
-              })
-              const regData = await regRes.json()
-              if (!regRes.ok) throw new Error(regData.error || 'Registration failed after payment')
-              onLoginSuccess(regData)
-              resolve()
-            } catch (e) {
-              reject(e)
-            }
-          },
-          modal: {
-            ondismiss: () => reject(new Error('Payment cancelled')),
-          },
-        })
-        rzp.open()
-      })
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Payment failed'
-      if (msg !== 'Payment cancelled') setRegError(msg)
     } finally {
       setRegLoading(false)
     }
@@ -442,7 +347,7 @@ export default function Login() {
   function RegDots() {
     // steps 2, 3, 4 show progress; step 1 = phone entry (no dots yet)
     if (regStep === 1) return null
-    const dots = [2, 3, 4] as RegStep[]
+    const dots = [2, 3] as RegStep[]
     return (
       <div className={styles.progressDots}>
         {dots.map((s) => (
@@ -460,7 +365,6 @@ export default function Login() {
     1: 'Phone Number',
     2: 'Verify Phone',
     3: 'Your Details',
-    4: 'Choose Plan',
   }
 
   return (
@@ -832,92 +736,9 @@ export default function Login() {
                   type="submit"
                   disabled={!detailsAllValid || regLoading}
                 >
-                  {regLoading ? 'Creating Account...' : regAccountType === 'child' ? 'Create Account →' : 'Continue to Plan →'}
+                  {regLoading ? 'Creating Account...' : 'Create Account →'}
                 </button>
               </form>
-            )}
-
-            {/* REG STEP 4 — Plan Selection */}
-            {regStep === 4 && (
-              <div>
-                <div className={styles.planGrid}>
-
-                  {/* FREE */}
-                  <div className={styles.planCard}>
-                    <div className={styles.planName}>Free Forever</div>
-                    <div className={styles.planPrice}>
-                      <span className={styles.planCurrency}>₹</span>0
-                      <span className={styles.planPer}>/month</span>
-                    </div>
-                    <ul className={styles.planFeatures}>
-                      <li>Up to 2 family members</li>
-                      <li>Real-time location</li>
-                      <li>Basic SOS alerts</li>
-                    </ul>
-                    <button
-                      className={`${styles.planBtn} ${regLoading ? styles.btnLoading : ''}`}
-                      onClick={doRegisterFree}
-                      disabled={regLoading}
-                    >
-                      {regLoading ? <span className={styles.spinner} /> : 'Create Free Account'}
-                    </button>
-                  </div>
-
-                  {/* FAMILY — highlighted */}
-                  <div className={`${styles.planCard} ${styles.planCardFeatured}`}>
-                    <div className={styles.planBadge}>Most Popular</div>
-                    <div className={styles.planName}>Family</div>
-                    <div className={styles.planPrice}>
-                      <span className={styles.planCurrency}>₹</span>299
-                      <span className={styles.planPer}>/month</span>
-                    </div>
-                    <ul className={styles.planFeatures}>
-                      <li>Up to 6 family members</li>
-                      <li>Geofence alerts</li>
-                      <li>Location history 30 days</li>
-                      <li>Priority support</li>
-                    </ul>
-                    <button
-                      className={`${styles.planBtn} ${styles.planBtnPrimary} ${regLoading ? styles.btnLoading : ''}`}
-                      onClick={() => doRegisterPaid('family')}
-                      disabled={regLoading}
-                    >
-                      {regLoading ? <span className={styles.spinner} /> : 'Pay ₹299 & Create Account'}
-                    </button>
-                  </div>
-
-                  {/* PREMIUM */}
-                  <div className={styles.planCard}>
-                    <div className={styles.planName}>Premium</div>
-                    <div className={styles.planPrice}>
-                      <span className={styles.planCurrency}>₹</span>499
-                      <span className={styles.planPer}>/month</span>
-                    </div>
-                    <ul className={styles.planFeatures}>
-                      <li>Unlimited members</li>
-                      <li>Advanced analytics</li>
-                      <li>Location history 90 days</li>
-                      <li>24/7 dedicated support</li>
-                    </ul>
-                    <button
-                      className={`${styles.planBtn} ${regLoading ? styles.btnLoading : ''}`}
-                      onClick={() => doRegisterPaid('premium')}
-                      disabled={regLoading}
-                    >
-                      {regLoading ? <span className={styles.spinner} /> : 'Pay ₹499 & Create Account'}
-                    </button>
-                  </div>
-
-                </div>
-
-                <button
-                  type="button"
-                  className={styles.backBtn}
-                  onClick={() => { setRegStep(3); setRegError('') }}
-                >
-                  ← Back to details
-                </button>
-              </div>
             )}
 
             <div className={styles.formFooter}>
