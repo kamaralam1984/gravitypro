@@ -5,8 +5,6 @@ import ParentPanel from './pages/ParentPanel'
 import ChildPanel from './pages/ChildPanel'
 import AdminLogin from './pages/AdminLogin'
 import AdminPanel from './pages/AdminPanel'
-import Pricing from './pages/Pricing'
-import Checkout from './pages/Checkout'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import Share from './pages/Share'
@@ -18,8 +16,8 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/pricing" element={<Pricing />} />
-        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/pricing" element={<Navigate to="/" replace />} />
+        <Route path="/checkout" element={<Navigate to="/" replace />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/share" element={<Share />} />

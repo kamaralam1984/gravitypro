@@ -1,0 +1,54 @@
+# Gravity web edge (Caddy) — serves the React SPA and proxies API to the backend.
+# SITE_ADDRESS:
+#   local/dev  -> :80            (default)
+#   production -> gravitypro.kvlbusinesssolutions.com  (Caddy auto-provisions TLS on 443)
+{
+	admin off
+}
+
+{$SITE_ADDRESS::80} {
+	# ---------- Traccar OsmAnd telemetry ----------
+	handle /telemetry* {
+		reverse_proxy backend:8002
+	}
+
+	# ---------- SSE — buffering MUST be off ----------
+	@sse path /api/v1/sse/*
+	handle @sse {
+		reverse_proxy backend:8002 {
+			flush_interval -1
+		}
+	}
+
+	# ---------- REST API ----------
+	handle /api/* {
+		reverse_proxy backend:8002
+	}
+
+	# ---------- Webhooks ----------
+	handle /webhooks/* {
+		reverse_proxy backend:8002
+	}
+
+	# ---------- Health ----------
+	handle /health {
+		reverse_proxy backend:8002
+	}
+
+	# ---------- Static SPA (client-side routing fallback) ----------
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	# ---------- Security headers ----------
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	encode gzip
+}

@@ -68,12 +68,18 @@ function FieldStatus({ valid, show }) {
 }
 
 export default function RegisterScreen({ navigation }) {
-  // step: 0 = phone, 1 = otp, 2 = profile
+  // step: 0 = phone, 1 = phone otp, 2 = profile, 3 = email otp
   const [step, setStep] = useState(0)
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''))
   const [phoneToken, setPhoneToken] = useState(null)
   const [devBanner, setDevBanner] = useState('')
+
+  // Email OTP
+  const [emailOtp, setEmailOtp] = useState(Array(OTP_LENGTH).fill(''))
+  const [emailToken, setEmailToken] = useState(null)
+  const [emailDevBanner, setEmailDevBanner] = useState('')
+  const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false)
 
   // Profile fields
   const [name, setName] = useState('')
@@ -88,6 +94,7 @@ export default function RegisterScreen({ navigation }) {
   const login = useAuthStore(s => s.login)
   const shakeAnim = useRef(new Animated.Value(0)).current
   const otpRefs = useRef([])
+  const emailOtpRefs = useRef([])
 
   const shake = () => {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
@@ -163,24 +170,77 @@ export default function RegisterScreen({ navigation }) {
     }
   }
 
-  // ── Step 2: Create Account ──────────────────────────────────────────────────
+  // ── Email OTP box helpers ─────────────────────────────────────────────────────
+  const handleEmailOtpChange = (text, index) => {
+    const digit = text.replace(/\D/g, '').slice(-1)
+    const next = [...emailOtp]
+    next[index] = digit
+    setEmailOtp(next)
+    if (digit && index < OTP_LENGTH - 1) emailOtpRefs.current[index + 1]?.focus()
+  }
+
+  const handleEmailOtpKeyPress = (e, index) => {
+    if (e.nativeEvent.key === 'Backspace' && !emailOtp[index] && index > 0) {
+      emailOtpRefs.current[index - 1]?.focus()
+    }
+  }
+
+  // ── Step 2 -> 3: send email OTP ───────────────────────────────────────────────
   const canSubmit = isValidName(name) && isValidEmail(email)
 
-  const handleRegister = async () => {
+  const handleSendEmailOtp = async () => {
+    const trimmed = email.trim().toLowerCase()
     if (!canSubmit) { setError('Please fill in a valid name and email'); shake(); return }
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setEmailDevBanner(''); setEmailAlreadyRegistered(false)
     try {
+      const res = await authAPI.sendEmailOtp(trimmed)
+      if (res?.dev_otp) {
+        const digits = String(res.dev_otp).split('').slice(0, OTP_LENGTH)
+        while (digits.length < OTP_LENGTH) digits.push('')
+        setEmailOtp(digits)
+        setEmailDevBanner(`Dev mode: OTP auto-filled (${res.dev_otp})`)
+      } else {
+        setEmailOtp(Array(OTP_LENGTH).fill(''))
+      }
+      setStep(3)
+      setTimeout(() => emailOtpRefs.current[0]?.focus(), 200)
+    } catch (err) {
+      if (err?.status === 429) setError('Too many requests. Please wait a moment and try again.')
+      else setError(err?.error || err?.message || 'Failed to send email code. Please try again.')
+      shake()
+    } finally { setLoading(false) }
+  }
+
+  // ── Step 3: verify email OTP -> email_token -> register ───────────────────────
+  const handleVerifyEmailAndRegister = async () => {
+    const code = emailOtp.join('')
+    if (code.length < OTP_LENGTH) { setError('Enter all 6 digits'); shake(); return }
+    setLoading(true); setError(''); setEmailAlreadyRegistered(false)
+    try {
+      const verifyRes = await authAPI.verifyEmail(email.trim().toLowerCase(), code)
+      if (verifyRes?.already_registered) {
+        setEmailAlreadyRegistered(true)
+        shake()
+        return
+      }
+      const token = verifyRes.email_token
       const res = await authAPI.registerFree({
         phone_token: phoneToken,
+        email_token: token,
         name: name.trim(),
-        email: email.trim(),
         account_type: accountType,
         country_code: countryCode,
       })
+      setEmailToken(token)
       await login(res.user, res.token)
     } catch (err) {
-      setError(err?.error || err?.message || 'Registration failed. Please try again.')
-      shake()
+      if (err?.already_registered || err?.code === 'ALREADY_REGISTERED') {
+        setEmailAlreadyRegistered(true)
+        shake()
+      } else {
+        setError(err?.error || err?.message || 'Verification failed. Check the code and try again.')
+        shake()
+      }
     } finally { setLoading(false) }
   }
 
@@ -198,7 +258,7 @@ export default function RegisterScreen({ navigation }) {
             </LinearGradient>
             <Text style={styles.brand}>Join Gravity</Text>
             <Text style={styles.subtitle}>Connect with your family circle</Text>
-            <StepDots current={step} total={3} />
+            <StepDots current={step} total={4} />
           </View>
 
           <Animated.View style={[styles.form, { transform: [{ translateX: shakeAnim }] }]}>
@@ -401,13 +461,86 @@ export default function RegisterScreen({ navigation }) {
                 )}
 
                 <PremiumButton
-                  title="Create Account"
-                  onPress={handleRegister}
+                  title="Continue"
+                  onPress={handleSendEmailOtp}
                   loading={loading}
                   disabled={!canSubmit}
+                  icon={<Ionicons name="arrow-forward-circle-outline" size={20} color="#fff" />}
+                  style={{ marginTop: 8 }}
+                />
+              </>
+            )}
+
+            {/* ── STEP 3: Email OTP ────────────────────────────────────────── */}
+            {step === 3 && (
+              <>
+                {/* Email dev banner */}
+                {!!emailDevBanner && (
+                  <View style={styles.devBanner}>
+                    <Ionicons name="bug-outline" size={16} color="#FFD600" />
+                    <Text style={styles.devBannerText}>{emailDevBanner}</Text>
+                  </View>
+                )}
+
+                {/* Email recap */}
+                <View style={styles.phoneRecap}>
+                  <Ionicons name="mail-outline" size={16} color={Colors.accentSoft} />
+                  <Text style={styles.phoneRecapText}>{email.trim().toLowerCase()}</Text>
+                  <Pressable onPress={() => { setStep(2); setError(''); setEmailDevBanner(''); setEmailAlreadyRegistered(false) }}>
+                    <Text style={styles.changeLink}>Change</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Enter Email Code</Text>
+                  <View style={styles.otpRow}>
+                    {emailOtp.map((digit, i) => (
+                      <TextInput
+                        key={i}
+                        ref={el => emailOtpRefs.current[i] = el}
+                        style={[styles.otpBox, digit ? styles.otpBoxFilled : null]}
+                        value={digit}
+                        onChangeText={text => handleEmailOtpChange(text, i)}
+                        onKeyPress={e => handleEmailOtpKeyPress(e, i)}
+                        keyboardType="number-pad"
+                        maxLength={1}
+                        textAlign="center"
+                        selectTextOnFocus
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                {/* Email already registered notice */}
+                {emailAlreadyRegistered && (
+                  <View style={styles.infoBox}>
+                    <Ionicons name="information-circle" size={16} color={Colors.accent} />
+                    <Text style={styles.infoText}>Email already registered. </Text>
+                    <Pressable onPress={() => navigation?.navigate('Login')}>
+                      <Text style={styles.inlineLink}>Sign in instead.</Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {!!error && !emailAlreadyRegistered && (
+                  <View style={styles.errorBox}>
+                    <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
+
+                <PremiumButton
+                  title="Verify & Create Account"
+                  onPress={handleVerifyEmailAndRegister}
+                  loading={loading}
                   icon={<Ionicons name="checkmark-circle-outline" size={20} color="#fff" />}
                   style={{ marginTop: 8 }}
                 />
+
+                <Pressable onPress={handleSendEmailOtp} style={styles.resendRow}>
+                  <Text style={styles.resendText}>Didn't receive it? </Text>
+                  <Text style={styles.resendLink}>Resend Code</Text>
+                </Pressable>
               </>
             )}
 

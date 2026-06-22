@@ -64,8 +64,8 @@ export const registerForPushNotifications = async () => {
     const apiToken = await storage.getItem('auth_token')
     if (apiToken && token) {
       const apiBase = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
-      await fetch(`${apiBase}/api/v1/users/me`, {
-        method: 'PATCH',
+      await fetch(`${apiBase}/api/v1/users/me/push-token`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + apiToken,

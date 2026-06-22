@@ -18,6 +18,7 @@ function validateName(name: string): boolean {
 }
 
 type Tab = 'login' | 'register'
+type LoginMethod = 'phone' | 'email'
 type LoginStep = 1 | 2
 type RegStep = 1 | 2 | 3 | 4
 
@@ -33,17 +34,6 @@ const COUNTRIES = [
   { code: 'OT', label: 'Other' },
 ]
 
-function loadRazorpay(): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (window.Razorpay) { resolve(true); return }
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.onload = () => resolve(true)
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
-}
-
 export default function Login() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -51,8 +41,10 @@ export default function Login() {
   const [activeTab, setActiveTab] = useState<Tab>('login')
 
   // ── LOGIN STATE ──────────────────────────────────────────────
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('phone')
   const [loginStep, setLoginStep] = useState<LoginStep>(1)
   const [loginPhone, setLoginPhone] = useState('')
+  const [loginEmail, setLoginEmail] = useState('')
   const [loginOtp, setLoginOtp] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
@@ -71,6 +63,11 @@ export default function Login() {
   const [regAccountType, setRegAccountType] = useState<'parent' | 'child'>('parent')
   const [regCountry, setRegCountry] = useState('IN')
 
+  // Step 4 — email OTP verification
+  const [regEmailOtp, setRegEmailOtp] = useState('')
+  const [regEmailToken, setRegEmailToken] = useState('')
+  const [regEmailDevBanner, setRegEmailDevBanner] = useState('')
+
   // Step 3 — touched state for live validation
   const [nameTouched, setNameTouched] = useState(false)
   const [emailTouched, setEmailTouched] = useState(false)
@@ -86,6 +83,7 @@ export default function Login() {
   // OTP input ref for auto-focus
   const loginOtpRef = useRef<HTMLInputElement>(null)
   const regOtpRef = useRef<HTMLInputElement>(null)
+  const regEmailOtpRef = useRef<HTMLInputElement>(null)
 
   // ── REDIRECT IF ALREADY LOGGED IN ────────────────────────────
   useEffect(() => {
@@ -121,6 +119,7 @@ export default function Login() {
 
   useEffect(() => {
     if (regStep === 2) setTimeout(() => regOtpRef.current?.focus(), 80)
+    if (regStep === 4) setTimeout(() => regEmailOtpRef.current?.focus(), 80)
   }, [regStep])
 
   // ── HELPERS ──────────────────────────────────────────────────
@@ -147,8 +146,19 @@ export default function Login() {
     setRegOtp('')
     setRegDevBanner('')
     setRegPhoneToken('')
+    setRegEmailOtp('')
+    setRegEmailToken('')
+    setRegEmailDevBanner('')
     setNameTouched(false)
     setEmailTouched(false)
+  }
+
+  function switchLoginMethod(method: LoginMethod) {
+    setLoginMethod(method)
+    setLoginStep(1)
+    setLoginOtp('')
+    setLoginDevBanner('')
+    setLoginError('')
   }
 
   // ── LOGIN ACTIONS ────────────────────────────────────────────
@@ -195,6 +205,61 @@ export default function Login() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, otp }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Login failed')
+      onLoginSuccess(data)
+    } catch (err: unknown) {
+      setLoginError(err instanceof Error ? err.message : 'Login failed')
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  // ── LOGIN (EMAIL) ACTIONS ────────────────────────────────────
+  async function doLoginSendEmailOtp() {
+    setLoginError('')
+    const email = loginEmail.trim()
+    if (!email || !validateEmail(email)) {
+      setLoginError('Please enter a valid email address.')
+      return
+    }
+    setLoginLoading(true)
+    try {
+      const res = await fetch(API + '/auth/send-email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send email OTP')
+      if (data.dev_otp) {
+        const otp = String(data.dev_otp)
+        setLoginOtp(otp)
+        setLoginDevBanner(otp)
+      }
+      setLoginStep(2)
+    } catch (err: unknown) {
+      setLoginError(err instanceof Error ? err.message : 'Failed to send email OTP')
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  async function doLoginVerifyEmail() {
+    setLoginError('')
+    const email = loginEmail.trim()
+    const otp = loginOtp.trim()
+    if (!otp || otp.length < 6) {
+      setLoginError('Please enter the 6-digit OTP.')
+      return
+    }
+    setLoginLoading(true)
+    try {
+      const res = await fetch(API + '/auth/verify-email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Login failed')
@@ -270,14 +335,75 @@ export default function Login() {
 
   function doGoToPlan() {
     if (!detailsAllValid) return
-    if (regAccountType === 'child') {
-      doRegisterFree()
-    } else {
+    doRegSendEmailOtp()
+  }
+
+  // Details → send email OTP, advance to step 4
+  async function doRegSendEmailOtp() {
+    setRegError('')
+    const email = regEmail.trim()
+    if (!email || !validateEmail(email)) {
+      setRegError('Please enter a valid email address.')
+      return
+    }
+    setRegLoading(true)
+    try {
+      const res = await fetch(API + '/auth/send-email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send email OTP')
+      if (data.dev_otp) {
+        const otp = String(data.dev_otp)
+        setRegEmailOtp(otp)
+        setRegEmailDevBanner(otp)
+      }
       setRegStep(4)
+    } catch (err: unknown) {
+      setRegError(err instanceof Error ? err.message : 'Failed to send email OTP')
+    } finally {
+      setRegLoading(false)
     }
   }
 
-  async function doRegisterFree() {
+  // Step 4 — verify email OTP, get email_token, then register
+  async function doRegVerifyEmail() {
+    setRegError('')
+    const email = regEmail.trim()
+    const otp = regEmailOtp.trim()
+    if (!otp || otp.length < 6) {
+      setRegError('Please enter the 6-digit OTP.')
+      return
+    }
+    setRegLoading(true)
+    try {
+      const res = await fetch(API + '/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Email verification failed')
+      if (data.already_registered) {
+        setRegError('This email is already registered. Please sign in instead.')
+        switchTab('login')
+        switchLoginMethod('email')
+        setLoginEmail(email)
+        return
+      }
+      const emailToken = data.email_token as string
+      setRegEmailToken(emailToken)
+      await doRegisterFree(emailToken)
+    } catch (err: unknown) {
+      setRegError(err instanceof Error ? err.message : 'Email verification failed')
+    } finally {
+      setRegLoading(false)
+    }
+  }
+
+  async function doRegisterFree(emailToken?: string) {
     setRegError('')
     setRegLoading(true)
     try {
@@ -286,8 +412,8 @@ export default function Login() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone_token: regPhoneToken,
+          email_token: emailToken ?? regEmailToken,
           name: regName.trim(),
-          email: regEmail.trim(),
           account_type: regAccountType,
           country_code: regCountry,
         }),
@@ -297,87 +423,7 @@ export default function Login() {
       onLoginSuccess(data)
     } catch (err: unknown) {
       setRegError(err instanceof Error ? err.message : 'Registration failed')
-      setRegStep(3)
-    } finally {
-      setRegLoading(false)
-    }
-  }
-
-  async function doRegisterPaid(plan: 'family' | 'premium') {
-    setRegError('')
-    setRegLoading(true)
-    try {
-      const ok = await loadRazorpay()
-      if (!ok) throw new Error('Failed to load payment gateway. Please try again.')
-
-      const orderRes = await fetch(API + '/payments/create-order-anon', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone_token: regPhoneToken,
-          plan,
-          gateway: 'razorpay',
-          currency: 'INR',
-          name: regName.trim(),
-          email: regEmail.trim(),
-        }),
-      })
-      const orderData = await orderRes.json()
-      if (!orderRes.ok) throw new Error(orderData.error || 'Failed to create payment order')
-
-      const { orderId, clientData } = orderData
-
-      await new Promise<void>((resolve, reject) => {
-        const rzp = new window.Razorpay({
-          key: clientData?.key,
-          order_id: orderId,
-          name: 'Gravity Family Safety',
-          description: plan === 'family' ? 'Family Plan — ₹299/mo' : 'Premium Plan — ₹499/mo',
-          image: '/favicon.ico',
-          prefill: {
-            name: regName.trim(),
-            email: regEmail.trim(),
-          },
-          theme: { color: '#00E676' },
-          handler: async (response: {
-            razorpay_order_id: string
-            razorpay_payment_id: string
-            razorpay_signature: string
-          }) => {
-            try {
-              const regRes = await fetch(API + '/auth/register-with-payment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  phone_token: regPhoneToken,
-                  name: regName.trim(),
-                  email: regEmail.trim(),
-                  account_type: regAccountType,
-                  country_code: regCountry,
-                  plan,
-                  gateway: 'razorpay',
-                  gatewayOrderId: response.razorpay_order_id,
-                  gatewayPaymentId: response.razorpay_payment_id,
-                  signature: response.razorpay_signature,
-                }),
-              })
-              const regData = await regRes.json()
-              if (!regRes.ok) throw new Error(regData.error || 'Registration failed after payment')
-              onLoginSuccess(regData)
-              resolve()
-            } catch (e) {
-              reject(e)
-            }
-          },
-          modal: {
-            ondismiss: () => reject(new Error('Payment cancelled')),
-          },
-        })
-        rzp.open()
-      })
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Payment failed'
-      if (msg !== 'Payment cancelled') setRegError(msg)
+      setRegStep(4)
     } finally {
       setRegLoading(false)
     }
@@ -460,7 +506,7 @@ export default function Login() {
     1: 'Phone Number',
     2: 'Verify Phone',
     3: 'Your Details',
-    4: 'Choose Plan',
+    4: 'Verify Email',
   }
 
   return (
@@ -519,6 +565,31 @@ export default function Login() {
               <p className={styles.panelSub}>Sign in to keep your family connected</p>
             </div>
 
+            {/* METHOD TOGGLE — Phone / Email */}
+            <div className={styles.methodToggle}>
+              <button
+                type="button"
+                className={`${styles.methodBtn} ${loginMethod === 'phone' ? styles.methodBtnActive : ''}`}
+                onClick={() => switchLoginMethod('phone')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                </svg>
+                Phone
+              </button>
+              <button
+                type="button"
+                className={`${styles.methodBtn} ${loginMethod === 'email' ? styles.methodBtnActive : ''}`}
+                onClick={() => switchLoginMethod('email')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+                Email
+              </button>
+            </div>
+
             {loginError && (
               <div className={styles.errorBanner}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -529,7 +600,7 @@ export default function Login() {
             )}
 
             {/* STEP 1 — Phone */}
-            {loginStep === 1 && (
+            {loginStep === 1 && loginMethod === 'phone' && (
               <form onSubmit={(e) => { e.preventDefault(); doLoginSendOtp() }}>
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel} htmlFor="login-phone">Phone Number</label>
@@ -568,12 +639,54 @@ export default function Login() {
               </form>
             )}
 
+            {/* STEP 1 — Email */}
+            {loginStep === 1 && loginMethod === 'email' && (
+              <form onSubmit={(e) => { e.preventDefault(); doLoginSendEmailOtp() }}>
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel} htmlFor="login-email">Email Address</label>
+                  <div className={styles.fieldWrap}>
+                    <span className={styles.fieldIcon}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                      </svg>
+                    </span>
+                    <input
+                      type="email"
+                      id="login-email"
+                      className={styles.fieldInput}
+                      placeholder="priya@example.com"
+                      autoComplete="email"
+                      inputMode="email"
+                      value={loginEmail}
+                      onChange={(e) => { setLoginEmail(e.target.value); setLoginError('') }}
+                    />
+                  </div>
+                </div>
+                <button
+                  className={`${styles.btnPrimary} ${loginLoading ? styles.btnLoading : ''}`}
+                  type="submit"
+                  disabled={loginLoading}
+                >
+                  {loginLoading ? <span className={styles.spinner} /> : (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                      </svg>
+                      Send OTP
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
             {/* STEP 2 — OTP + Sign In */}
             {loginStep === 2 && (
-              <form onSubmit={(e) => { e.preventDefault(); doLoginVerify() }}>
+              <form onSubmit={(e) => { e.preventDefault(); loginMethod === 'email' ? doLoginVerifyEmail() : doLoginVerify() }}>
                 {loginDevBanner && <DevBanner otp={loginDevBanner} />}
                 <p className={styles.stepHint}>
-                  OTP sent to <strong>{loginPhone}</strong>
+                  OTP sent to <strong>{loginMethod === 'email' ? loginEmail : loginPhone}</strong>
                 </p>
                 <OtpInput
                   value={loginOtp}
@@ -832,92 +945,48 @@ export default function Login() {
                   type="submit"
                   disabled={!detailsAllValid || regLoading}
                 >
-                  {regLoading ? 'Creating Account...' : regAccountType === 'child' ? 'Create Account →' : 'Continue to Plan →'}
+                  {regLoading ? 'Sending Email OTP...' : 'Continue →'}
                 </button>
               </form>
             )}
 
-            {/* REG STEP 4 — Plan Selection */}
+            {/* REG STEP 4 — Email OTP Verify */}
             {regStep === 4 && (
-              <div>
-                <div className={styles.planGrid}>
-
-                  {/* FREE */}
-                  <div className={styles.planCard}>
-                    <div className={styles.planName}>Free Forever</div>
-                    <div className={styles.planPrice}>
-                      <span className={styles.planCurrency}>₹</span>0
-                      <span className={styles.planPer}>/month</span>
-                    </div>
-                    <ul className={styles.planFeatures}>
-                      <li>Up to 2 family members</li>
-                      <li>Real-time location</li>
-                      <li>Basic SOS alerts</li>
-                    </ul>
-                    <button
-                      className={`${styles.planBtn} ${regLoading ? styles.btnLoading : ''}`}
-                      onClick={doRegisterFree}
-                      disabled={regLoading}
-                    >
-                      {regLoading ? <span className={styles.spinner} /> : 'Create Free Account'}
-                    </button>
-                  </div>
-
-                  {/* FAMILY — highlighted */}
-                  <div className={`${styles.planCard} ${styles.planCardFeatured}`}>
-                    <div className={styles.planBadge}>Most Popular</div>
-                    <div className={styles.planName}>Family</div>
-                    <div className={styles.planPrice}>
-                      <span className={styles.planCurrency}>₹</span>299
-                      <span className={styles.planPer}>/month</span>
-                    </div>
-                    <ul className={styles.planFeatures}>
-                      <li>Up to 6 family members</li>
-                      <li>Geofence alerts</li>
-                      <li>Location history 30 days</li>
-                      <li>Priority support</li>
-                    </ul>
-                    <button
-                      className={`${styles.planBtn} ${styles.planBtnPrimary} ${regLoading ? styles.btnLoading : ''}`}
-                      onClick={() => doRegisterPaid('family')}
-                      disabled={regLoading}
-                    >
-                      {regLoading ? <span className={styles.spinner} /> : 'Pay ₹299 & Create Account'}
-                    </button>
-                  </div>
-
-                  {/* PREMIUM */}
-                  <div className={styles.planCard}>
-                    <div className={styles.planName}>Premium</div>
-                    <div className={styles.planPrice}>
-                      <span className={styles.planCurrency}>₹</span>499
-                      <span className={styles.planPer}>/month</span>
-                    </div>
-                    <ul className={styles.planFeatures}>
-                      <li>Unlimited members</li>
-                      <li>Advanced analytics</li>
-                      <li>Location history 90 days</li>
-                      <li>24/7 dedicated support</li>
-                    </ul>
-                    <button
-                      className={`${styles.planBtn} ${regLoading ? styles.btnLoading : ''}`}
-                      onClick={() => doRegisterPaid('premium')}
-                      disabled={regLoading}
-                    >
-                      {regLoading ? <span className={styles.spinner} /> : 'Pay ₹499 & Create Account'}
-                    </button>
-                  </div>
-
-                </div>
-
+              <form onSubmit={(e) => { e.preventDefault(); doRegVerifyEmail() }}>
+                {regEmailDevBanner && <DevBanner otp={regEmailDevBanner} />}
+                <p className={styles.stepHint}>
+                  OTP sent to <strong>{regEmail}</strong>
+                </p>
+                <OtpInput
+                  value={regEmailOtp}
+                  onChange={(v) => { setRegEmailOtp(v); setRegError('') }}
+                  inputRef={regEmailOtpRef}
+                />
                 <button
-                  type="button"
-                  className={styles.backBtn}
-                  onClick={() => { setRegStep(3); setRegError('') }}
+                  className={`${styles.btnPrimary} ${regLoading ? styles.btnLoading : ''}`}
+                  type="submit"
+                  disabled={regLoading || regEmailOtp.length < 6}
                 >
-                  ← Back to details
+                  {regLoading ? <span className={styles.spinner} /> : (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      Verify Email &amp; Create Account
+                    </>
+                  )}
                 </button>
-              </div>
+                <div className={styles.resendRow}>
+                  Didn&apos;t receive it?{' '}
+                  <button
+                    type="button"
+                    className={styles.resendBtn}
+                    onClick={() => { setRegStep(3); setRegEmailOtp(''); setRegEmailDevBanner(''); setRegError('') }}
+                  >
+                    Change email / Resend
+                  </button>
+                </div>
+              </form>
             )}
 
             <div className={styles.formFooter}>

@@ -9,6 +9,7 @@ import MapScreen from '../screens/MapScreen'
 import CirclesScreen from '../screens/CirclesScreen'
 import AlertsScreen from '../screens/AlertsScreen'
 import ProfileScreen from '../screens/ProfileScreen'
+import WebPanelScreen from '../screens/WebPanelScreen'
 import { Colors } from '../theme/colors'
 
 const Tab = createBottomTabNavigator()
@@ -32,6 +33,7 @@ const TAB_ICONS = {
   Map: { active: 'map', inactive: 'map-outline' },
   Circles: { active: 'people', inactive: 'people-outline' },
   Alerts: { active: 'notifications', inactive: 'notifications-outline' },
+  Panel: { active: 'grid', inactive: 'grid-outline' },
   Profile: { active: 'person', inactive: 'person-outline' },
 }
 
@@ -103,6 +105,11 @@ export default function TabNavigator({ unresolvedSosCount = 0 }) {
             fontWeight: '700',
           },
         }}
+      />
+      <Tab.Screen
+        name="Panel"
+        component={WebPanelScreen}
+        options={{ tabBarLabel: 'Dashboard' }}
       />
       <Tab.Screen
         name="Profile"

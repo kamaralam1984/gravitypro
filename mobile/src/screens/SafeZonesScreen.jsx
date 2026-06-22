@@ -28,7 +28,7 @@ const formatCoord = (n) => (Math.round(n * 10000) / 10000).toFixed(4)
 
 // ─── Zone Card ────────────────────────────────────────────────────────────────
 
-function ZoneCard({ zone, index, onDelete, onFocus }) {
+function ZoneCard({ zone, index, onDelete, onFocus, onEdit }) {
   const slideAnim = useRef(new Animated.Value(40)).current
   const fadeAnim = useRef(new Animated.Value(0)).current
 
@@ -60,9 +60,14 @@ function ZoneCard({ zone, index, onDelete, onFocus }) {
           </View>
         </Pressable>
 
-        <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
-          <Ionicons name="trash-outline" size={18} color={Colors.danger} />
-        </Pressable>
+        <View style={styles.zoneActions}>
+          <Pressable onPress={() => onEdit(zone)} style={styles.editBtn} hitSlop={6}>
+            <Ionicons name="create-outline" size={18} color={Colors.accent} />
+          </Pressable>
+          <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
+            <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+          </Pressable>
+        </View>
       </GradientCard>
     </Animated.View>
   )
@@ -101,6 +106,7 @@ export default function SafeZonesScreen() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [pickingOnMap, setPickingOnMap] = useState(false)
+  const [editingZone, setEditingZone] = useState(null)
   const mapRef = useRef(null)
   const modalMapRef = useRef(null)
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -159,6 +165,7 @@ export default function SafeZonesScreen() {
   }, [])
 
   const openCreateModal = () => {
+    setEditingZone(null)
     setShowCreateModal(true)
     setSelectedLocation(null)
     setZoneName('')
@@ -167,6 +174,27 @@ export default function SafeZonesScreen() {
     setPickingOnMap(false)
     Animated.spring(modalAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }).start()
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+  }
+
+  const openEditModal = (zone) => {
+    setEditingZone(zone)
+    setShowCreateModal(true)
+    setSelectedLocation({ latitude: zone.center_lat, longitude: zone.center_lng })
+    setZoneName(zone.name)
+    setRadius(zone.radius_meters)
+    setError('')
+    setPickingOnMap(false)
+    Animated.spring(modalAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }).start()
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    // Recenter the modal mini-map on the zone being edited
+    setTimeout(() => {
+      modalMapRef.current?.animateToRegion({
+        latitude: zone.center_lat,
+        longitude: zone.center_lng,
+        latitudeDelta: (zone.radius_meters / 111000) * 4,
+        longitudeDelta: (zone.radius_meters / 111000) * 4,
+      }, 500)
+    }, 400)
   }
 
   const closeCreateModal = () => {
@@ -192,18 +220,23 @@ export default function SafeZonesScreen() {
     setCreating(true)
     setError('')
     try {
-      await geofenceAPI.create({
-        circle_id: activeCircle.id,
+      const payload = {
         name: zoneName.trim(),
         center_lat: selectedLocation.latitude,
         center_lng: selectedLocation.longitude,
         radius_meters: radius,
-      })
+      }
+      if (editingZone) {
+        await geofenceAPI.update(editingZone.id, payload)
+      } else {
+        await geofenceAPI.create({ circle_id: activeCircle.id, ...payload })
+      }
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       closeCreateModal()
+      setEditingZone(null)
       await loadZones(activeCircle.id)
     } catch (e) {
-      setError(e.error || 'Failed to create safe zone')
+      setError(e.error || `Failed to ${editingZone ? 'update' : 'create'} safe zone`)
     } finally {
       setCreating(false)
     }
@@ -370,6 +403,7 @@ export default function SafeZonesScreen() {
                 index={index}
                 onDelete={handleDeleteZone}
                 onFocus={focusZoneOnMap}
+                onEdit={openEditModal}
               />
             ))
           )}
@@ -395,7 +429,7 @@ export default function SafeZonesScreen() {
                   <Ionicons name="shield-checkmark-outline" size={20} color={Colors.accent} />
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.modalTitle}>Create Safe Zone</Text>
+                  <Text style={styles.modalTitle}>{editingZone ? 'Edit Safe Zone' : 'Create Safe Zone'}</Text>
                   <Text style={styles.modalSubtitle}>Tap the map to set the center</Text>
                 </View>
                 <Pressable onPress={closeCreateModal} style={styles.modalCloseBtn} hitSlop={8}>
@@ -507,7 +541,7 @@ export default function SafeZonesScreen() {
 
               {/* Create button */}
               <PremiumButton
-                title="Create Safe Zone"
+                title={editingZone ? 'Save Changes' : 'Create Safe Zone'}
                 onPress={handleCreateZone}
                 loading={creating}
                 disabled={!selectedLocation || !zoneName.trim()}
@@ -679,6 +713,14 @@ const styles = StyleSheet.create({
   zoneName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
   zoneRadius: { fontSize: 12, color: Colors.accentSoft, fontWeight: '600' },
   zoneCoords: { fontSize: 11, color: Colors.textMuted, letterSpacing: 0.3 },
+  zoneActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  editBtn: {
+    padding: 9,
+    backgroundColor: 'rgba(0,200,83,0.1)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,83,0.2)',
+  },
   deleteBtn: {
     padding: 9,
     backgroundColor: 'rgba(229,57,53,0.1)',
