@@ -4,6 +4,7 @@ import {
   Switch, Image, Alert, Platform, TextInput, ActivityIndicator, Linking,
   Modal, FlatList,
 } from 'react-native'
+import { WebView } from 'react-native-webview'
 import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -21,6 +22,7 @@ import { Colors, Gradients } from '../theme/colors'
 
 export default function ProfileScreen() {
   const user = useAuthStore(s => s.user)
+  const token = useAuthStore(s => s.token)
   const updateUser = useAuthStore(s => s.updateUser)
   const logout = useAuthStore(s => s.logout)
   const insets = useSafeAreaInsets()
@@ -39,7 +41,12 @@ export default function ProfileScreen() {
   // Subscription
   const [subscription, setSubscription] = useState(null)
   const [loadingSub, setLoadingSub] = useState(false)
+  const [cancellingSubscription, setCancellingSubscription] = useState(false)
   const isFreePlan = !subscription || !subscription.plan_id || subscription.plan_id === 'free' || subscription.status !== 'active'
+
+  // In-app payment WebView
+  const [paymentVisible, setPaymentVisible] = useState(false)
+  const [paymentPlan, setPaymentPlan] = useState('family')
 
   // Settings toggles
   const [trackingEnabled, setTrackingEnabled] = useState(true)
@@ -161,6 +168,67 @@ export default function ProfileScreen() {
     } finally {
       setSavingEmail(false)
     }
+  }
+
+  // Currency from country code
+  const getCurrency = () => {
+    const cc = (user?.country_code || '').toUpperCase()
+    if (cc === 'IN') return 'INR'
+    if (cc === 'KE' || cc === 'TZ' || cc === 'UG') return 'KES'
+    if (cc === 'GB') return 'GBP'
+    if (cc === 'DE' || cc === 'FR' || cc === 'IT' || cc === 'ES' || cc === 'NL') return 'EUR'
+    return 'USD'
+  }
+
+  const openPayment = (plan = 'family') => {
+    setPaymentPlan(plan)
+    setPaymentVisible(true)
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+  }
+
+  const handlePaymentMessage = (event) => {
+    if (event.nativeEvent.data === 'payment_success') {
+      setPaymentVisible(false)
+      // Refresh subscription data
+      subscriptionAPI.getMe()
+        .then(res => setSubscription(res.subscription || res))
+        .catch(() => {})
+      Alert.alert('Payment Successful', 'Your plan has been activated!')
+    }
+  }
+
+  const refreshSubscription = () => {
+    setLoadingSub(true)
+    subscriptionAPI.getMe()
+      .then(res => setSubscription(res.subscription || res))
+      .catch(() => {})
+      .finally(() => setLoadingSub(false))
+  }
+
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      'Cancel Subscription',
+      'Are you sure you want to cancel? You will lose access to premium features at the end of your billing period.',
+      [
+        { text: 'Keep Plan', style: 'cancel' },
+        {
+          text: 'Cancel Plan',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingSubscription(true)
+            try {
+              await subscriptionAPI.cancel()
+              await refreshSubscription()
+              Alert.alert('Subscription Cancelled', 'Your plan has been cancelled. Access continues until end of billing period.')
+            } catch (e) {
+              Alert.alert('Error', 'Could not cancel subscription. Please try again.')
+            } finally {
+              setCancellingSubscription(false)
+            }
+          },
+        },
+      ]
+    )
   }
 
   const handleLogout = () => {
@@ -373,11 +441,16 @@ export default function ProfileScreen() {
                       </Text>
                     </View>
                   </View>
-                  {isFreePlan && (
-                    <Pressable
-                      style={styles.upgradeBtn}
-                      onPress={() => Linking.openURL('https://gravitypro.kvlbusinesssolutions.com/checkout?plan=family')}>
+                  {isFreePlan ? (
+                    <Pressable style={styles.upgradeBtn} onPress={() => openPayment('family')}>
                       <Text style={styles.upgradeBtnText}>Upgrade</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable style={styles.cancelSubBtn} onPress={handleCancelSubscription} disabled={cancellingSubscription}>
+                      {cancellingSubscription
+                        ? <ActivityIndicator size="small" color={Colors.danger} />
+                        : <Text style={styles.cancelSubText}>Cancel</Text>
+                      }
                     </Pressable>
                   )}
                 </View>
@@ -395,9 +468,7 @@ export default function ProfileScreen() {
             ) : (
               <View style={styles.subFallback}>
                 <Text style={styles.planName}>Free Plan</Text>
-                <Pressable
-                  style={styles.upgradeBtn}
-                  onPress={() => Linking.openURL('https://gravitypro.kvlbusinesssolutions.com/checkout?plan=family')}>
+                <Pressable style={styles.upgradeBtn} onPress={() => openPayment('family')}>
                   <Text style={styles.upgradeBtnText}>Upgrade Plan</Text>
                 </Pressable>
               </View>
@@ -471,6 +542,53 @@ export default function ProfileScreen() {
           <Text style={styles.version}>Gravity v1.0.0 by Trackalways</Text>
         </Animated.View>
       </ScrollView>
+
+      {/* ── In-App Payment Modal ── */}
+      <Modal
+        visible={paymentVisible}
+        animationType="slide"
+        onRequestClose={() => setPaymentVisible(false)}>
+        <View style={styles.paymentModal}>
+          {/* Header */}
+          <View style={[styles.paymentHeader, { paddingTop: insets.top + 10 }]}>
+            <Text style={styles.paymentHeaderTitle}>Upgrade Plan</Text>
+            <Pressable onPress={() => setPaymentVisible(false)} style={styles.paymentCloseBtn} hitSlop={8}>
+              <Ionicons name="close" size={22} color={Colors.textMuted} />
+            </Pressable>
+          </View>
+          {/* WebView with SSO injection */}
+          <WebView
+            source={{
+              uri: `https://gravitypro.kvlbusinesssolutions.com/checkout?plan=${paymentPlan}&currency=${getCurrency()}`,
+            }}
+            injectedJavaScriptBeforeContentLoaded={`
+              (function() {
+                try {
+                  localStorage.setItem('gravity_token', ${JSON.stringify(token || '')});
+                  localStorage.setItem('gravity_user', ${JSON.stringify(JSON.stringify(user || {}))});
+                  var origPush = history.pushState.bind(history);
+                  history.pushState = function(s, t, url) {
+                    origPush(s, t, url);
+                    if (url && (url.includes('/parent/panel') || url.includes('/child/panel'))) {
+                      window.ReactNativeWebView && window.ReactNativeWebView.postMessage('payment_success');
+                    }
+                  };
+                } catch(e) {}
+              })();
+              true;
+            `}
+            onMessage={handlePaymentMessage}
+            startInLoadingState
+            renderLoading={() => (
+              <View style={styles.paymentLoading}>
+                <ActivityIndicator size="large" color={Colors.accent} />
+                <Text style={styles.paymentLoadingText}>Loading checkout…</Text>
+              </View>
+            )}
+            style={{ flex: 1 }}
+          />
+        </View>
+      </Modal>
 
       {/* ── Location History Modal ── */}
       <Modal
@@ -608,6 +726,14 @@ const styles = StyleSheet.create({
   accountBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(0,230,118,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
   accountBadgeText: { color: Colors.online, fontSize: 12, fontWeight: '700' },
 
+  // Payment modal
+  paymentModal: { flex: 1, backgroundColor: Colors.bgDeep },
+  paymentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12, backgroundColor: Colors.bgDeep, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  paymentHeaderTitle: { fontSize: 18, fontWeight: '800', color: Colors.textWhite },
+  paymentCloseBtn: { padding: 8, backgroundColor: Colors.bgGlass, borderRadius: 10 },
+  paymentLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: Colors.bgDeep },
+  paymentLoadingText: { color: Colors.textMuted, fontSize: 14 },
+
   // Subscription
   subHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   planName: { fontSize: 17, fontWeight: '700', color: Colors.textWhite, marginBottom: 4 },
@@ -615,6 +741,8 @@ const styles = StyleSheet.create({
   subStatusText: { fontSize: 12, fontWeight: '700' },
   upgradeBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8 },
   upgradeBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  cancelSubBtn: { borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(229,57,53,0.4)', backgroundColor: 'rgba(229,57,53,0.1)' },
+  cancelSubText: { color: Colors.danger, fontWeight: '700', fontSize: 13 },
   featuresList: { gap: 6, marginTop: 4 },
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   featureText: { color: Colors.textSecondary, fontSize: 14 },

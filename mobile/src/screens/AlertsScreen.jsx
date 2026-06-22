@@ -359,6 +359,22 @@ export default function AlertsScreen() {
       }
     })
 
+    es.addEventListener('sos_safe', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        bannerKey.current += 1
+        setBanner({
+          key: bannerKey.current,
+          type: 'geofence',
+          eventType: 'enter',
+          title: `${data.name || 'Someone'} is safe`,
+          body: data.message || 'They reported being safe',
+        })
+      } catch (err) {
+        console.error('SSE sos_safe parse error', err)
+      }
+    })
+
     es.addEventListener('geofence_event', (e) => {
       try {
         const data = JSON.parse(e.data)

@@ -50,7 +50,9 @@ export const userAPI = {
   getLocationHistory: () => api.get('/users/me/location-history'),
   clearPushToken: () => api.delete('/users/me/push-token'),
   registerPushToken: (push_token) => api.post('/users/me/push-token', { push_token }),
-  search: (q) => api.get(`/users/search?q=${encodeURIComponent(q)}`),
+  search: (phone) => api.get(`/users/search?phone=${encodeURIComponent(phone)}`),
+  getPublicLocation: (uid) => api.get(`/users/public-location?uid=${encodeURIComponent(uid)}`),
+  batchPostLocations: (locations) => api.post('/locations/batch', { locations }),
   deleteAccount: () => api.delete('/users/me'),
 }
 
@@ -96,6 +98,15 @@ export const mediaAPI = {
   confirmAvatar: (data) => api.post('/media/avatar/confirm', data),
   presignCircleIcon: (circleId, data) => api.post(`/media/circle/${circleId}/icon/presign`, data),
   confirmCircleIcon: (circleId, data) => api.post(`/media/circle/${circleId}/icon/confirm`, data),
+}
+
+// ── Payments ──────────────────────────────────────────────────────────────────
+export const paymentAPI = {
+  getPlans: () => api.get('/payments/plans'),
+  getGateways: (currency) => api.get(`/payments/gateways?currency=${currency}`),
+  createOrder: (data) => api.post('/payments/create-order', data),
+  verify: (data) => api.post('/payments/verify', data),
+  checkStatus: (orderId) => api.get(`/payments/status/${orderId}`),
 }
 
 // ── Subscriptions ─────────────────────────────────────────────────────────────

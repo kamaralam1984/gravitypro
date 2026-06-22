@@ -216,6 +216,7 @@ export default function MapScreen() {
   // ── SOS ───────────────────────────────────────────────────────────────────
   const [sosModalVisible, setSosModalVisible] = useState(false)
   const [sosSending, setSosSending] = useState(false)
+  const [sosMessage, setSosMessage] = useState('SOS! I need help!')
 
   // ── toast ─────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState(null)               // { message, color }
@@ -315,6 +316,15 @@ export default function MapScreen() {
         try {
           const data = JSON.parse(e.data)
           setSosAlert(data)
+        } catch (_) {}
+      })
+
+      es.addEventListener('sos_safe', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          showToast(`${data.name || 'Someone'} is safe`, Colors.success)
+          // Dismiss active SOS overlay if it's from the same user
+          setSosAlert(prev => (prev && prev.userId === data.userId) ? null : prev)
         } catch (_) {}
       })
 
@@ -454,7 +464,7 @@ export default function MapScreen() {
     try {
       await sosAPI.trigger({
         circle_id: activeCircle.id,
-        message: 'SOS! I need help!',
+        message: sosMessage || 'SOS! I need help!',
         latitude: myLocation?.latitude ?? null,
         longitude: myLocation?.longitude ?? null,
       })
@@ -854,6 +864,18 @@ export default function MapScreen() {
             <Text style={styles.sosModalSubtitle}>
               Your family will be notified immediately with your current location.
             </Text>
+
+            {/* Quick message chips */}
+            <View style={styles.sosChipRow}>
+              {['SOS! I need help!', 'Medical emergency', 'Fire emergency', "I'm lost", 'Call me now'].map(msg => (
+                <Pressable
+                  key={msg}
+                  onPress={() => setSosMessage(msg)}
+                  style={[styles.sosChip, sosMessage === msg && styles.sosChipActive]}>
+                  <Text style={[styles.sosChipText, sosMessage === msg && styles.sosChipTextActive]}>{msg}</Text>
+                </Pressable>
+              ))}
+            </View>
 
             <View style={styles.sosModalBtns}>
               {/* Cancel */}
@@ -1314,6 +1336,35 @@ const styles = StyleSheet.create({
     color: '#FF8A80',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  sosChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    width: '100%',
+    marginBottom: 16,
+    justifyContent: 'center',
+  },
+  sosChip: {
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(255,23,68,0.3)',
+    backgroundColor: 'rgba(255,23,68,0.07)',
+  },
+  sosChipActive: {
+    borderColor: '#FF1744',
+    backgroundColor: 'rgba(255,23,68,0.2)',
+  },
+  sosChipText: {
+    color: '#FF8A80',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sosChipTextActive: {
+    color: '#fff',
+    fontWeight: '700',
   },
   sosModalBtns: {
     flexDirection: 'row',
