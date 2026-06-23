@@ -5,6 +5,7 @@ const path = require('path')
 const PORT = process.env.PORT || 8090
 const API_PORT = process.env.API_PORT || 8002
 const DIST = path.join(__dirname, 'dist')
+const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR || path.join(__dirname, 'downloads')
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -19,6 +20,7 @@ const MIME = {
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
   '.ttf': 'font/ttf',
+  '.apk': 'application/vnd.android.package-archive',
 }
 
 const server = http.createServer((req, res) => {
@@ -71,6 +73,51 @@ const server = http.createServer((req, res) => {
     }
 
     req.pipe(proxy, { end: true })
+    return
+  }
+
+  if (req.url.startsWith('/downloads/')) {
+    const reqPath = req.url.split('?')[0]
+    const filename = path.basename(decodeURIComponent(reqPath))
+
+    // Reject anything that isn't a plain, safe filename (no traversal / separators)
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\') || !/^[A-Za-z0-9._-]+$/.test(filename)) {
+      res.writeHead(400)
+      res.end('Bad Request')
+      return
+    }
+
+    const downloadPath = path.join(DOWNLOADS_DIR, filename)
+    if (!downloadPath.startsWith(DOWNLOADS_DIR + path.sep)) {
+      res.writeHead(403)
+      res.end('Forbidden')
+      return
+    }
+
+    let stat
+    try {
+      stat = fs.statSync(downloadPath)
+    } catch (e) {
+      res.writeHead(404)
+      res.end('Not Found')
+      return
+    }
+    if (!stat.isFile()) {
+      res.writeHead(404)
+      res.end('Not Found')
+      return
+    }
+
+    const dlExt = path.extname(filename)
+    const dlType = MIME[dlExt] || 'application/octet-stream'
+    res.writeHead(200, {
+      'Content-Type': dlType,
+      'Content-Length': stat.size,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    })
+    const stream = fs.createReadStream(downloadPath)
+    stream.on('error', () => { if (!res.headersSent) res.writeHead(500); res.end() })
+    stream.pipe(res)
     return
   }
 

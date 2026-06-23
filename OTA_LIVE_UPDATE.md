@@ -2,6 +2,62 @@
 
 This sets up **automatic live updates** so changes reach users without a Play Store / App Store update.
 
+## Two-track auto-update
+
+GravityPro keeps users current through **two independent tracks**:
+
+**(a) OTA — for already-installed apps (JS/UI changes).**
+A push that touches `mobile/**` runs `eas update --channel production`
+(`.github/workflows/ota-update.yml`, or `./scripts/ota-update.sh`). Installed
+apps live-update on next launch — **no reinstall, no store release**. This
+covers the React Native screens (Map, Circles, Alerts, Profile, parental
+screens) but **not** native modules/SDK changes.
+
+**(b) Download page — for NEW installs / native changes.**
+The site always serves the latest APK at
+<https://gravitypro.kvlbusinesssolutions.com/downloads/GravityPro.apk> (linked
+from the `/#download` section; served by `landing-react/server.cjs` from a
+`downloads/` dir, deployed on the VPS at
+`/var/www/gravitypro/landing-react/downloads/GravityPro.apk`). Each **native
+release** rebuilds the APK (EAS `preview` profile) and refreshes that file, via:
+
+- `./scripts/publish-apk.sh` (local), or
+- `build-deploy-push.sh --apk` (or `PUBLISH_APK=1 ./build-deploy-push.sh`), or
+- the **APK Release** GitHub Action (`.github/workflows/apk-release.yml`),
+  triggered manually or by a push to `shivam-repo` with `[apk]` in the commit
+  message.
+
+**Which track for which change?**
+
+| Change | Track |
+|---|---|
+| JS / UI on a native screen | (a) OTA — auto on `mobile/**` push |
+| Backend / API / data | neither — fetched live |
+| New native module, permission, SDK, or version bump | (b) rebuild APK **and** publish a fresh OTA |
+| Brand-new install | (b) download page |
+
+> **Expo account:** the Expo `projectId` now lives under the **`gravitypro`**
+> account. `EXPO_TOKEN` must be a token for that account (used by both the OTA
+> and APK Release workflows and the local scripts). A new `projectId` is written
+> into `mobile/app.json` when the teammate runs `eas init`.
+
+> **Version-freeze caveat (see below):** OTA only reaches installs whose app
+> version matches `mobile/app.json → expo.version`. After a native release that
+> bumps the version, publish a fresh OTA so the new version line is covered too,
+> and refresh the download-page APK so new installs get the latest build.
+
+### First-time seed (one manual VPS step)
+
+The download page needs a `GravityPro.apk` to exist before automation overwrites
+it. After the first EAS APK build, copy it onto the VPS once:
+
+```bash
+scp GravityPro.apk USER@HOST:/var/www/gravitypro/landing-react/downloads/GravityPro.apk
+```
+
+(or download the `GravityPro-apk` artifact from the APK Release workflow run and
+copy that). Subsequent native releases overwrite it automatically.
+
 ## What auto-updates (and what does not)
 
 | You change… | Reaches installed app automatically? | How |

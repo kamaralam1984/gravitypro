@@ -359,6 +359,7 @@ export default function Home() {
 
         <ul className={styles.navLinks}>
           <li><a href="#features">Features</a></li>
+          <li><a href="#download">Download</a></li>
           <li><Link to="/parent">For Parents</Link></li>
           <li><Link to="/child">For Children</Link></li>
           <li><Link to="/login?redirect=/parent/panel">Parent Panel</Link></li>
@@ -376,6 +377,7 @@ export default function Home() {
 
       <div className={`${styles.navMobileMenu}${mobileMenuOpen ? ' ' + styles.navMobileMenuOpen : ''}`}>
         <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
+        <a href="#download" onClick={() => setMobileMenuOpen(false)}>Download</a>
         <Link to="/parent" onClick={() => setMobileMenuOpen(false)}>For Parents</Link>
         <Link to="/child" onClick={() => setMobileMenuOpen(false)}>For Children</Link>
         <Link to="/login?redirect=/parent/panel" onClick={() => setMobileMenuOpen(false)}>Parent Panel</Link>
@@ -705,6 +707,20 @@ export default function Home() {
         </div>
       </section>
 
+
+      {/* DOWNLOAD */}
+      <section id="download" className={styles.downloadSection}>
+        <h2 className={styles.downloadHeadline}>Download Gravity for <span>Android</span></h2>
+        <p className={styles.downloadSubtext}>Keep your family safe — get the app on your phone.</p>
+        <a
+          className={styles.downloadBtn}
+          href="https://gravitypro.kvlbusinesssolutions.com/downloads/GravityPro.apk"
+          download
+        >
+          Download for Android (APK)
+        </a>
+        <p className={styles.downloadNote}>Always the latest version • Installed apps auto-update — no reinstall needed.</p>
+      </section>
 
       {/* FOOTER */}
       <footer id="footer" className={styles.footerSection}>

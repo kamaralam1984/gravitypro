@@ -2037,6 +2037,32 @@
 }
 .downloadSubtext { font-size: 20px; color: #A5C9AE; margin-bottom: 8px; line-height: 1.6; }
 .downloadNote { font-size: 14px; color: #5E8B6E; margin-top: 8px; }
+.downloadBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 28px 0 4px;
+  padding: 18px 40px;
+  background: linear-gradient(135deg, #00E676 0%, #00C853 100%);
+  color: #02160B;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  text-decoration: none;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 12px 44px rgba(0, 230, 118, 0.35);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.downloadBtn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 56px rgba(0, 230, 118, 0.45);
+  text-decoration: none;
+}
 .storeBadges {
   display: flex;
   flex-direction: row;
