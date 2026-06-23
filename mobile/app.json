@@ -2,11 +2,18 @@
   "expo": {
     "name": "Gravity",
     "slug": "gravity",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#050F08",
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": {
+      "url": "https://u.expo.dev/aacddc46-fdbb-45a7-9f01-2dd951ffcaa5",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -18,29 +25,80 @@
         "backgroundColor": "#050F08"
       },
       "package": "com.trackalways.gravity",
+      "versionCode": 4,
+      "minSdkVersion": 24,
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES"
       ]
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.trackalways.gravity",
+      "buildNumber": "2",
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Gravity needs your location to keep your family safe and share your position with your circle.",
         "NSLocationAlwaysUsageDescription": "Gravity needs background location to track your position even when the app is closed.",
-        "NSLocationWhenInUseUsageDescription": "Gravity needs your location to show your position on the family map."
+        "NSLocationWhenInUseUsageDescription": "Gravity needs your location to show your position on the family map.",
+        "NSCameraUsageDescription": "Gravity needs camera access to update your profile photo.",
+        "NSPhotoLibraryUsageDescription": "Gravity needs photo library access to select your profile photo.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
       }
     },
     "plugins": [
-      ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Allow Gravity to use your location to keep your family connected and safe." }],
-      ["expo-notifications", { "sounds": ["./assets/notification.wav"] }]
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Gravity to use your location to keep your family connected and safe.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/notification.wav"]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 24,
+            "buildToolsVersion": "35.0.0",
+            "ndkVersion": "27.1.12297006",
+            "kotlinVersion": "2.0.21"
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ]
     ],
     "scheme": "gravity",
-    "platforms": ["ios", "android"]
+    "platforms": ["ios", "android", "web"],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "aacddc46-fdbb-45a7-9f01-2dd951ffcaa5"
+      }
+    },
+    "owner": "gravitynew"
   }
 }

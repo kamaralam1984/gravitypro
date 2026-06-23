@@ -24,8 +24,8 @@ export const useAuthStore = create((set, get) => ({
   login: async (user, token) => {
     await storage.setItem('auth_token', token)
     await storage.setItem('user_data', JSON.stringify(user))
-    await storage.setItem('user_phone', user.phone)
-    set({ user, token, isAuthenticated: true })
+    if (user?.phone) await storage.setItem('user_phone', user.phone)
+    set({ user, token, isAuthenticated: true, isLoading: false })
   },
 
   updateUser: (userData) => {

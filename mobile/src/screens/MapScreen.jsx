@@ -1,40 +1,53 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+} from 'react'
 import {
   View,
   Text,
   StyleSheet,
   Animated,
   Pressable,
-  Image,
   Platform,
   TouchableOpacity,
-  Alert,
+  Modal,
+  ScrollView,
+  FlatList,
 } from 'react-native'
-import MapView, { Marker, Circle as MapCircle, PROVIDER_GOOGLE } from 'react-native-maps'
 import * as Location from 'expo-location'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
 import { useAuthStore } from '../store/authStore'
 import { MemberAvatar } from '../components/MemberAvatar'
-import { PulseRing } from '../components/PulseRing'
 import { BatteryIndicator } from '../components/BatteryIndicator'
-import { circleAPI } from '../services/api'
-import { getCurrentLocation, startBackgroundTracking } from '../services/location'
+import { circleAPI, sosAPI, geofenceAPI, userAPI } from '../services/api'
+import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
+import { storage } from '../utils/storage'
 import { Colors } from '../theme/colors'
-import { DARK_MAP_STYLE } from '../theme/mapStyles'
-import api from '../services/api'
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── SSE (NativeEventSource) ───────────────────────────────────────────────────
+const NativeEventSource =
+  Platform.OS !== 'web' ? require('react-native-sse').default : null
+
+const SSE_BASE =
+  (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') +
+  '/api/v1/sse/stream'
+
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 const formatLastSeen = (ts) => {
   if (!ts) return 'Unknown'
   const diff = Date.now() - new Date(ts).getTime()
-  if (diff < 60000) return 'Just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return `${Math.floor(diff / 86400000)}d ago`
+  if (diff < 60_000) return 'Just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
 const isOnlineMember = (loc) => {
@@ -49,30 +62,41 @@ export default function MapScreen() {
   const user = useAuthStore((s) => s.user)
   const insets = useSafeAreaInsets()
 
-  // map state
+  // ── refs ──────────────────────────────────────────────────────────────────
   const mapRef = useRef(null)
+  const esRef = useRef(null)           // EventSource
+  const locationSubRef = useRef(null)  // Location.watchPositionAsync subscription
+  const lastLocationPost = useRef(0)
+
+  // ── state ─────────────────────────────────────────────────────────────────
   const [myLocation, setMyLocation] = useState(null)
   const [circles, setCircles] = useState([])
   const [activeCircle, setActiveCircle] = useState(null)
   const [members, setMembers] = useState([])
-  const [memberLocations, setMemberLocations] = useState({})
+  const [memberLocations, setMemberLocations] = useState({})  // { [userId]: { latitude, longitude, battery, timestamp } }
+  const [safeZones, setSafeZones] = useState([])
   const [selectedMember, setSelectedMember] = useState(null)
-
-  // loading / error
   const [refreshing, setRefreshing] = useState(false)
 
-  // intervals
-  const pollRef = useRef(null)
-  const locationSyncRef = useRef(null)
+  // ── SOS ───────────────────────────────────────────────────────────────────
+  const [sosModalVisible, setSosModalVisible] = useState(false)
+  const [sosSending, setSosSending] = useState(false)
 
-  // animations
+  // ── toast ─────────────────────────────────────────────────────────────────
+  const [toast, setToast] = useState(null)               // { message, color }
+  const toastTimer = useRef(null)
+
+  // ── SOS alert overlay (incoming) ─────────────────────────────────────────
+  const [sosAlert, setSosAlert] = useState(null)          // { userId, name, message, latitude, longitude }
+
+  // ── animations ───────────────────────────────────────────────────────────
   const headerAnim = useRef(new Animated.Value(0)).current
-  const cardAnim = useRef(new Animated.Value(200)).current   // slide-up card
+  const cardAnim = useRef(new Animated.Value(200)).current
   const cardOpacity = useRef(new Animated.Value(0)).current
   const sosPulse = useRef(new Animated.Value(1)).current
+  const toastAnim = useRef(new Animated.Value(0)).current
 
   // ── animation setup ───────────────────────────────────────────────────────
-
   useEffect(() => {
     Animated.timing(headerAnim, {
       toValue: 1,
@@ -80,17 +104,30 @@ export default function MapScreen() {
       useNativeDriver: true,
     }).start()
 
-    // SOS pulsing loop
     Animated.loop(
       Animated.sequence([
         Animated.timing(sosPulse, { toValue: 1.15, duration: 700, useNativeDriver: true }),
-        Animated.timing(sosPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(sosPulse, { toValue: 1.0, duration: 700, useNativeDriver: true }),
       ])
     ).start()
   }, [])
 
-  // ── card show / hide ──────────────────────────────────────────────────────
+  // ── toast helper ──────────────────────────────────────────────────────────
+  const showToast = useCallback((message, color = Colors.accent) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    setToast({ message, color })
+    toastAnim.setValue(0)
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.delay(2500),
+      Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => {
+      setToast(null)
+      toastTimer.current = null
+    })
+  }, [toastAnim])
 
+  // ── card show / hide ──────────────────────────────────────────────────────
   const showCard = useCallback(() => {
     Animated.parallel([
       Animated.spring(cardAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }),
@@ -105,111 +142,195 @@ export default function MapScreen() {
     ]).start(() => setSelectedMember(null))
   }, [cardAnim, cardOpacity])
 
-  // ── location ──────────────────────────────────────────────────────────────
-
-  const initLocation = async () => {
-    try {
-      const loc = await getCurrentLocation()
-      const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude }
-      setMyLocation(coord)
-      await startBackgroundTracking()
-    } catch (e) {
-      console.error('[MapScreen] location init:', e)
+  // ── SSE ───────────────────────────────────────────────────────────────────
+  const connectSSE = useCallback(async () => {
+    // tear down existing connection
+    if (esRef.current) {
+      try { esRef.current.close() } catch (_) {}
+      esRef.current = null
     }
-  }
+    if (!NativeEventSource) return
 
-  const syncLocationToServer = useCallback(async () => {
-    if (!myLocation) return
     try {
-      const loc = await getCurrentLocation()
-      const { latitude, longitude } = loc.coords
-      setMyLocation({ latitude, longitude })
-      // POST location to backend (same endpoint background task uses via Traccar,
-      // but also update via our API so SSE can broadcast to circle members)
-      await api.post('/locations', {
-        latitude,
-        longitude,
-        accuracy: loc.coords.accuracy,
-        battery_level: null, // expo-battery not imported here; omit gracefully
-      }).catch(() => {})
-    } catch (e) {
-      console.error('[MapScreen] syncLocation:', e)
+      const token = await storage.getItem('auth_token')
+      if (!token) return
+
+      const es = new NativeEventSource(SSE_BASE, {
+        headers: { Authorization: 'Bearer ' + token },
+      })
+
+      es.addEventListener('location_update', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          const { userId, latitude, longitude, battery_level, timestamp } = data
+          if (!userId || latitude == null || longitude == null) return
+          setMemberLocations((prev) => ({
+            ...prev,
+            [userId]: {
+              latitude: Number(latitude),
+              longitude: Number(longitude),
+              battery: battery_level ?? prev[userId]?.battery ?? null,
+              timestamp: timestamp || new Date().toISOString(),
+            },
+          }))
+        } catch (_) {}
+      })
+
+      es.addEventListener('sos_alert', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          setSosAlert(data)
+        } catch (_) {}
+      })
+
+      es.addEventListener('geofence_event', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          const { name, eventType, zoneName } = data
+          const verb = eventType === 'enter' ? 'entered' : 'left'
+          showToast(`${name || 'Someone'} ${verb} ${zoneName || 'a zone'}`, Colors.info)
+        } catch (_) {}
+      })
+
+      es.onerror = () => {
+        // silent — reconnect handled by activeCircle effect
+      }
+
+      esRef.current = es
+    } catch (err) {
+      console.error('[MapScreen] SSE connect error:', err)
     }
-  }, [myLocation])
+  }, [showToast])
 
-  // ── circles & members ─────────────────────────────────────────────────────
-
-  const loadCircles = async () => {
+  // ── own location tracking ─────────────────────────────────────────────────
+  const initLocation = useCallback(async () => {
     try {
-      const res = await circleAPI.getAll()
-      const list = res.circles || []
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        console.warn('[MapScreen] location permission denied')
+        return
+      }
+
+      const sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 5000,
+          distanceInterval: 10,
+        },
+        (loc) => {
+          const coord = {
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          }
+          setMyLocation(coord)
+
+          // Throttled POST to server (max once per 30 s)
+          const now = Date.now()
+          if (now - lastLocationPost.current > 30_000) {
+            lastLocationPost.current = now
+            userAPI
+              .postLocation({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+                accuracy: loc.coords.accuracy ?? undefined,
+              })
+              .catch(() => {})
+          }
+        }
+      )
+
+      locationSubRef.current = sub
+    } catch (e) {
+      console.error('[MapScreen] initLocation:', e)
+    }
+  }, [])
+
+  // ── circles ───────────────────────────────────────────────────────────────
+  const loadCircles = useCallback(async () => {
+    try {
+      const res = await circleAPI.getMy()
+      const list = res?.circles || []
       setCircles(list)
-      if (list.length && !activeCircle) setActiveCircle(list[0])
+      if (list.length > 0) {
+        setActiveCircle((prev) => prev ?? list[0])
+      }
     } catch (e) {
       console.error('[MapScreen] loadCircles:', e)
     }
-  }
+  }, [])
 
+  // ── members ───────────────────────────────────────────────────────────────
   const loadMembers = useCallback(async (circleId) => {
     if (!circleId) return
     try {
       const res = await circleAPI.getMembers(circleId)
-      const list = res.members || []
+      const list = res?.members || []
       setMembers(list)
-      const locs = {}
-      for (const m of list) {
-        if (m.latitude && m.longitude) {
-          locs[m.id] = {
-            latitude: m.latitude,
-            longitude: m.longitude,
-            battery: m.battery_level,
-            timestamp: m.last_seen || m.updated_at,
+      setMemberLocations((prev) => {
+        const locs = { ...prev }
+        for (const m of list) {
+          if (m.latitude != null && m.longitude != null) {
+            locs[m.id] = {
+              latitude: Number(m.latitude),
+              longitude: Number(m.longitude),
+              battery: m.battery_level ?? null,
+              timestamp: m.location_updated_at || m.updated_at || null,
+            }
           }
         }
-      }
-      setMemberLocations(locs)
+        return locs
+      })
     } catch (e) {
       console.error('[MapScreen] loadMembers:', e)
     }
   }, [])
 
+  // ── safe zones ────────────────────────────────────────────────────────────
+  const loadSafeZones = useCallback(async (circleId) => {
+    if (!circleId) return
+    try {
+      const res = await geofenceAPI.getByCircle(circleId)
+      setSafeZones(res?.safe_zones || [])
+    } catch (e) {
+      console.error('[MapScreen] loadSafeZones:', e)
+    }
+  }, [])
+
+  // ── refresh ───────────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
     setRefreshing(true)
     await loadCircles()
-    if (activeCircle) await loadMembers(activeCircle.id)
+    if (activeCircle) {
+      await Promise.all([
+        loadMembers(activeCircle.id),
+        loadSafeZones(activeCircle.id),
+      ])
+    }
     setRefreshing(false)
-  }, [activeCircle, loadMembers])
+  }, [activeCircle, loadCircles, loadMembers, loadSafeZones])
 
-  // ── SOS ───────────────────────────────────────────────────────────────────
+  // ── SOS send ──────────────────────────────────────────────────────────────
+  const sendSOS = useCallback(async () => {
+    if (sosSending || !activeCircle) return
+    setSosSending(true)
+    try {
+      await sosAPI.trigger({
+        circle_id: activeCircle.id,
+        message: 'SOS! I need help!',
+        latitude: myLocation?.latitude ?? null,
+        longitude: myLocation?.longitude ?? null,
+      })
+      setSosModalVisible(false)
+      showToast('SOS sent to your family', Colors.danger)
+    } catch (e) {
+      console.error('[MapScreen] SOS error:', e)
+      showToast('Failed to send SOS. Try again.', Colors.warning)
+    } finally {
+      setSosSending(false)
+    }
+  }, [sosSending, activeCircle, myLocation, showToast])
 
-  const handleSOS = async () => {
-    Alert.alert(
-      'Send SOS Alert',
-      'This will alert all family members with your current location.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'SEND SOS',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.post('/sos', {
-                latitude: myLocation?.latitude ?? null,
-                longitude: myLocation?.longitude ?? null,
-                message: 'SOS! I need help!',
-              })
-              Alert.alert('SOS Sent', 'Your family has been notified.')
-            } catch (e) {
-              Alert.alert('Error', 'Could not send SOS. Please try again.')
-            }
-          },
-        },
-      ]
-    )
-  }
-
-  // ── tap member marker ─────────────────────────────────────────────────────
-
+  // ── member tap ────────────────────────────────────────────────────────────
   const handleMemberTap = useCallback(
     (member) => {
       setSelectedMember(member)
@@ -226,133 +347,156 @@ export default function MapScreen() {
   )
 
   // ── center on self ────────────────────────────────────────────────────────
-
-  const centerOnMe = () => {
+  const centerOnMe = useCallback(() => {
     if (!myLocation || !mapRef.current) return
     mapRef.current.animateToRegion(
       { ...myLocation, latitudeDelta: 0.01, longitudeDelta: 0.01 },
       800
     )
-  }
+  }, [myLocation])
 
-  // ── lifecycle ─────────────────────────────────────────────────────────────
-
+  // ── lifecycle: mount ──────────────────────────────────────────────────────
   useEffect(() => {
     initLocation()
     loadCircles()
-    return () => {
-      clearInterval(pollRef.current)
-      clearInterval(locationSyncRef.current)
-    }
-  }, [])
 
+    return () => {
+      // cleanup location watch
+      if (locationSubRef.current) {
+        locationSubRef.current.remove()
+        locationSubRef.current = null
+      }
+      // cleanup SSE
+      if (esRef.current) {
+        try { esRef.current.close() } catch (_) {}
+        esRef.current = null
+      }
+      if (toastTimer.current) clearTimeout(toastTimer.current)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── lifecycle: active circle changed ─────────────────────────────────────
   useEffect(() => {
     if (!activeCircle) return
+
     loadMembers(activeCircle.id)
+    loadSafeZones(activeCircle.id)
+    connectSSE()
 
-    clearInterval(pollRef.current)
-    pollRef.current = setInterval(() => loadMembers(activeCircle.id), 10000)
-
-    return () => clearInterval(pollRef.current)
-  }, [activeCircle, loadMembers])
-
-  useEffect(() => {
-    clearInterval(locationSyncRef.current)
-    locationSyncRef.current = setInterval(syncLocationToServer, 30000)
-    return () => clearInterval(locationSyncRef.current)
-  }, [syncLocationToServer])
+    return () => {
+      if (esRef.current) {
+        try { esRef.current.close() } catch (_) {}
+        esRef.current = null
+      }
+    }
+  }, [activeCircle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── derived ───────────────────────────────────────────────────────────────
-
-  const onlineCount = members.filter((m) => isOnlineMember(memberLocations[m.id])).length
+  const onlineCount = useMemo(
+    () => members.filter((m) => isOnlineMember(memberLocations[m.id])).length,
+    [members, memberLocations]
+  )
   const selectedLoc = selectedMember ? memberLocations[selectedMember.id] : null
 
+  // ── distances for the selected member ──────────────────────────────────────
+  // Nearest safe zone (name + distance) and distance from the parent (myLocation).
+  const { nearestZone, nearestZoneDist, parentDist } = useMemo(() => {
+    if (!selectedLoc || selectedLoc.latitude == null || selectedLoc.longitude == null) {
+      return { nearestZone: null, nearestZoneDist: null, parentDist: null }
+    }
+    const mLat = Number(selectedLoc.latitude)
+    const mLng = Number(selectedLoc.longitude)
+
+    let zone = null
+    let zoneDist = null
+    for (const z of safeZones) {
+      const zLat = Number(z.center_lat)
+      const zLng = Number(z.center_lng)
+      if (isNaN(zLat) || isNaN(zLng)) continue
+      const d = haversineMeters(mLat, mLng, zLat, zLng)
+      if (zoneDist == null || d < zoneDist) {
+        zoneDist = d
+        zone = z
+      }
+    }
+
+    let pDist = null
+    if (myLocation && myLocation.latitude != null && myLocation.longitude != null) {
+      pDist = haversineMeters(
+        mLat,
+        mLng,
+        Number(myLocation.latitude),
+        Number(myLocation.longitude)
+      )
+    }
+
+    return { nearestZone: zone, nearestZoneDist: zoneDist, parentDist: pDist }
+  }, [selectedLoc, safeZones, myLocation])
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  RENDER
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* ── Full-screen map ── */}
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_GOOGLE}
-        style={StyleSheet.absoluteFill}
-        customMapStyle={DARK_MAP_STYLE}
-        showsUserLocation={false}
-        showsCompass={false}
-        toolbarEnabled={false}
-        onPress={() => selectedMember && hideCard()}
-        initialRegion={
-          myLocation
-            ? { ...myLocation, latitudeDelta: 0.04, longitudeDelta: 0.04 }
-            : { latitude: 1.2921, longitude: 36.8219, latitudeDelta: 60, longitudeDelta: 60 }
-        }>
-
-        {/* Own location — pulsing green dot */}
-        {myLocation && (
-          <Marker coordinate={myLocation} title="You" anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.myMarkerWrap}>
-              <PulseRing color={Colors.accent} size={52} active />
-              <LinearGradient
-                colors={['#00E676', '#00C853']}
-                style={styles.myMarkerGrad}>
-                <Ionicons name="person" size={16} color="#fff" />
-              </LinearGradient>
-            </View>
-          </Marker>
-        )}
-
-        {/* Family member markers */}
-        {members
+      {/* ── Full-screen map (free Leaflet/OSM via FamilyMap) ──────────────── */}
+      <FamilyMap
+        style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]}
+        me={myLocation}
+        zones={safeZones}
+        members={members
           .filter((m) => m.id !== user?.id && memberLocations[m.id])
-          .map((member) => {
-            const loc = memberLocations[member.id]
-            const online = isOnlineMember(loc)
-            const isSelected = selectedMember?.id === member.id
-            return (
-              <Marker
-                key={member.id}
-                coordinate={loc}
-                anchor={{ x: 0.5, y: 0.5 }}
-                onPress={() => handleMemberTap(member)}>
-                <View style={styles.memberMarkerWrap}>
-                  {online && (
-                    <PulseRing
-                      color={isSelected ? Colors.accent : Colors.info}
-                      size={48}
-                      active
-                    />
-                  )}
+          .map((m) => ({
+            id: m.id,
+            name: m.name,
+            latitude: memberLocations[m.id].latitude,
+            longitude: memberLocations[m.id].longitude,
+            battery_level: memberLocations[m.id].battery,
+            account_type: m.account_type,
+          }))}
+      />
+      {/* ── Member selector row (taps open the detail card; WebView markers
+            aren't directly tappable from RN) ──────────────────────────── */}
+      {members.filter((m) => m.id !== user?.id && memberLocations[m.id]).length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[styles.memberPickRow, { bottom: insets.bottom + 180 }]}
+          contentContainerStyle={styles.memberPickContent}
+        >
+          {members
+            .filter((m) => m.id !== user?.id && memberLocations[m.id])
+            .map((member) => {
+              const isSelected = selectedMember?.id === member.id
+              const online = isOnlineMember(memberLocations[member.id])
+              return (
+                <TouchableOpacity
+                  key={member.id}
+                  style={[styles.memberPickChip, isSelected && styles.memberPickChipActive]}
+                  onPress={() => handleMemberTap(member)}
+                  activeOpacity={0.8}
+                >
                   <View
                     style={[
-                      styles.memberRing,
-                      isSelected && styles.memberRingSelected,
-                    ]}>
-                    {member.avatar_url ? (
-                      <Image
-                        source={{ uri: member.avatar_url }}
-                        style={styles.memberImage}
-                      />
-                    ) : (
-                      <View style={styles.memberInitialWrap}>
-                        <Text style={styles.memberInitial}>
-                          {member.name?.[0]?.toUpperCase() || '?'}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {/* Accuracy circle hint */}
-                  {isSelected && (
-                    <View style={styles.selectedPip} />
-                  )}
-                </View>
-              </Marker>
-            )
-          })}
-      </MapView>
+                      styles.memberPickDot,
+                      { backgroundColor: online ? Colors.online : Colors.offline },
+                    ]}
+                  />
+                  <Text
+                    style={[styles.memberPickText, isSelected && styles.memberPickTextActive]}
+                    numberOfLines={1}
+                  >
+                    {member.name}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+        </ScrollView>
+      )}
 
-      {/* ── Header overlay ── */}
+      {/* ── Header overlay ──────────────────────────────────────────────── */}
       <Animated.View
         style={[
           styles.header,
@@ -363,21 +507,23 @@ export default function MapScreen() {
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.headerRow}>
-          <View>
+          {/* Circle name + label */}
+          <View style={styles.headerLeft}>
             <Text style={styles.headerLabel}>FAMILY MAP</Text>
             {activeCircle && (
               <Text style={styles.headerCircle}>{activeCircle.name}</Text>
             )}
           </View>
+
           <View style={styles.headerRight}>
-            {/* Member count chip */}
+            {/* Online count chip */}
             <View style={styles.countChip}>
               <View style={styles.countDot} />
               <Text style={styles.countText}>
                 {onlineCount}/{members.length} online
               </Text>
             </View>
-            {/* Refresh button */}
+            {/* Refresh */}
             <TouchableOpacity
               style={styles.refreshBtn}
               onPress={refresh}
@@ -390,34 +536,71 @@ export default function MapScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Circle switcher (shown only when >1 circle) */}
+        {circles.length > 1 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.circleSwitcherContent}
+            style={styles.circleSwitcher}>
+            {circles.map((c) => {
+              const active = c.id === activeCircle?.id
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  onPress={() => setActiveCircle(c)}
+                  activeOpacity={0.75}>
+                  <LinearGradient
+                    colors={active ? ['#0D7A45', '#0A5C35'] : ['rgba(10,92,53,0.25)', 'rgba(10,92,53,0.1)']}
+                    style={[styles.circleChip, active && styles.circleChipActive]}>
+                    <Text style={[styles.circleChipText, active && styles.circleChipTextActive]}>
+                      {c.name}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
+        )}
       </Animated.View>
 
-      {/* ── Locate-me FAB (left of SOS) ── */}
+      {/* ── Toast notification ──────────────────────────────────────────── */}
+      {toast && (
+        <Animated.View
+          style={[
+            styles.toast,
+            { top: insets.top + 80, opacity: toastAnim, borderColor: toast.color + '50' },
+          ]}>
+          <View style={[styles.toastBar, { backgroundColor: toast.color }]} />
+          <Text style={styles.toastText}>{toast.message}</Text>
+        </Animated.View>
+      )}
+
+      {/* ── Locate-me FAB ───────────────────────────────────────────────── */}
       <Pressable
-        style={[styles.locateFab, { bottom: insets.bottom + 108, right: 20 }]}
+        style={[styles.locateFab, { bottom: insets.bottom + 108, right: 92 }]}
         onPress={centerOnMe}>
-        <LinearGradient
-          colors={['#0D7A45', '#0A5C35']}
-          style={styles.locateFabGrad}>
+        <LinearGradient colors={['#0D7A45', '#0A5C35']} style={styles.locateFabGrad}>
           <Ionicons name="locate" size={22} color="#fff" />
         </LinearGradient>
       </Pressable>
 
-      {/* ── SOS FAB ── */}
+      {/* ── SOS FAB ─────────────────────────────────────────────────────── */}
       <Animated.View
         style={[
           styles.sosFabWrap,
-          { bottom: insets.bottom + 36, right: 20 },
+          { bottom: insets.bottom + 100, right: 20 },
           { transform: [{ scale: sosPulse }] },
         ]}>
-        <Pressable style={styles.sosFab} onPress={handleSOS}>
+        <Pressable style={styles.sosFab} onPress={() => setSosModalVisible(true)}>
           <LinearGradient colors={['#FF1744', '#B71C1C']} style={styles.sosFabGrad}>
             <Text style={styles.sosLabel}>SOS</Text>
           </LinearGradient>
         </Pressable>
       </Animated.View>
 
-      {/* ── Member info card (slides up on tap) ── */}
+      {/* ── Member info card (slides up on tap) ─────────────────────────── */}
       {selectedMember && (
         <Animated.View
           style={[
@@ -428,16 +611,13 @@ export default function MapScreen() {
               transform: [{ translateY: cardAnim }],
             },
           ]}>
-          <LinearGradient
-            colors={['#0F2518', '#081510']}
-            style={styles.memberCardGrad}>
-
-            {/* Close button */}
+          <LinearGradient colors={['#0F2518', '#081510']} style={styles.memberCardGrad}>
+            {/* Close */}
             <TouchableOpacity style={styles.cardClose} onPress={hideCard}>
               <Ionicons name="close" size={18} color={Colors.textMuted} />
             </TouchableOpacity>
 
-            {/* Avatar + info */}
+            {/* Avatar + name */}
             <View style={styles.cardTop}>
               <MemberAvatar
                 member={selectedMember}
@@ -456,11 +636,7 @@ export default function MapScreen() {
                   <View
                     style={[
                       styles.statusDot,
-                      {
-                        backgroundColor: isOnlineMember(selectedLoc)
-                          ? Colors.online
-                          : Colors.offline,
-                      },
+                      { backgroundColor: isOnlineMember(selectedLoc) ? Colors.online : Colors.offline },
                     ]}
                   />
                   <Text style={styles.statusText}>
@@ -472,23 +648,18 @@ export default function MapScreen() {
 
             {/* Stats row */}
             <View style={styles.cardStats}>
-              {/* Battery */}
               <View style={styles.cardStat}>
                 <Ionicons name="battery-half" size={16} color={Colors.textMuted} />
                 <Text style={styles.cardStatLabel}>Battery</Text>
-                <BatteryIndicator
-                  level={selectedLoc?.battery ?? null}
-                  showText
-                  size="sm"
-                />
-                {selectedLoc?.battery == null && (
+                {selectedLoc?.battery != null ? (
+                  <BatteryIndicator level={selectedLoc.battery} showText size="sm" />
+                ) : (
                   <Text style={styles.cardStatValue}>—</Text>
                 )}
               </View>
 
               <View style={styles.cardDivider} />
 
-              {/* Last seen */}
               <View style={styles.cardStat}>
                 <Ionicons name="time-outline" size={16} color={Colors.textMuted} />
                 <Text style={styles.cardStatLabel}>Last seen</Text>
@@ -499,7 +670,6 @@ export default function MapScreen() {
 
               <View style={styles.cardDivider} />
 
-              {/* Location available */}
               <View style={styles.cardStat}>
                 <Ionicons name="location-outline" size={16} color={Colors.textMuted} />
                 <Text style={styles.cardStatLabel}>Location</Text>
@@ -509,7 +679,30 @@ export default function MapScreen() {
               </View>
             </View>
 
-            {/* Navigate hint */}
+            {/* Distance readouts */}
+            {selectedLoc && (
+              <View style={styles.distanceRow}>
+                <View style={styles.distanceItem}>
+                  <Ionicons name="shield-checkmark" size={14} color={Colors.accent} />
+                  <Text style={styles.distanceLabel} numberOfLines={1}>
+                    {nearestZone ? nearestZone.name : 'No safe zone'}
+                  </Text>
+                  <Text style={styles.distanceValue}>
+                    {nearestZone ? formatDistance(nearestZoneDist) : '—'}
+                  </Text>
+                </View>
+                <View style={styles.cardDivider} />
+                <View style={styles.distanceItem}>
+                  <Ionicons name="navigate-circle" size={14} color={Colors.info} />
+                  <Text style={styles.distanceLabel} numberOfLines={1}>From you</Text>
+                  <Text style={styles.distanceValue}>
+                    {parentDist != null ? formatDistance(parentDist) : '—'}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Center on map */}
             {selectedLoc && (
               <TouchableOpacity
                 style={styles.viewOnMapBtn}
@@ -522,12 +715,117 @@ export default function MapScreen() {
                   }
                 }}>
                 <Ionicons name="navigate" size={15} color={Colors.accent} />
-                <Text style={styles.viewOnMapText}>Zoom to location</Text>
+                <Text style={styles.viewOnMapText}>Center on map</Text>
               </TouchableOpacity>
             )}
           </LinearGradient>
         </Animated.View>
       )}
+
+      {/* ── SOS Confirm Modal ───────────────────────────────────────────── */}
+      <Modal
+        visible={sosModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSosModalVisible(false)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => !sosSending && setSosModalVisible(false)}>
+          <Pressable style={styles.sosCard} onPress={(e) => e.stopPropagation()}>
+            {/* Warning icon */}
+            <View style={styles.sosIconWrap}>
+              <LinearGradient colors={['#FF1744', '#B71C1C']} style={styles.sosIconGrad}>
+                <Ionicons name="warning" size={32} color="#fff" />
+              </LinearGradient>
+            </View>
+
+            <Text style={styles.sosModalTitle}>SEND SOS ALERT?</Text>
+            <Text style={styles.sosModalSubtitle}>
+              Your family will be notified immediately with your current location.
+            </Text>
+
+            <View style={styles.sosModalBtns}>
+              {/* Cancel */}
+              <TouchableOpacity
+                style={styles.sosCancelBtn}
+                onPress={() => setSosModalVisible(false)}
+                disabled={sosSending}
+                activeOpacity={0.75}>
+                <Text style={styles.sosCancelText}>CANCEL</Text>
+              </TouchableOpacity>
+
+              {/* Send SOS */}
+              <TouchableOpacity
+                style={styles.sosSendBtn}
+                onPress={sendSOS}
+                disabled={sosSending}
+                activeOpacity={0.8}>
+                <LinearGradient colors={['#FF1744', '#B71C1C']} style={styles.sosSendGrad}>
+                  <Ionicons name="warning" size={16} color="#fff" />
+                  <Text style={styles.sosSendText}>
+                    {sosSending ? 'SENDING…' : 'SEND SOS'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Incoming SOS Alert overlay ───────────────────────────────────── */}
+      <Modal
+        visible={!!sosAlert}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSosAlert(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setSosAlert(null)}>
+          <View style={[styles.sosCard, styles.sosAlertCard]}>
+            <LinearGradient
+              colors={['rgba(183,28,28,0.95)', 'rgba(80,0,0,0.98)']}
+              style={StyleSheet.absoluteFill}
+              borderRadius={24}
+            />
+            <View style={styles.sosIconWrap}>
+              <View style={[styles.sosIconGrad, { backgroundColor: '#FF1744' }]}>
+                <Ionicons name="alert-circle" size={32} color="#fff" />
+              </View>
+            </View>
+            <Text style={[styles.sosModalTitle, { color: '#FF8A80' }]}>SOS ALERT</Text>
+            <Text style={styles.sosAlertName}>{sosAlert?.name || 'A family member'}</Text>
+            <Text style={styles.sosAlertMessage}>
+              {sosAlert?.message || 'Needs help!'}
+            </Text>
+            <TouchableOpacity
+              style={[styles.sosSendBtn, { marginTop: 20 }]}
+              onPress={() => {
+                if (sosAlert?.latitude && sosAlert?.longitude && mapRef.current) {
+                  mapRef.current.animateToRegion(
+                    {
+                      latitude: sosAlert.latitude,
+                      longitude: sosAlert.longitude,
+                      latitudeDelta: 0.01,
+                      longitudeDelta: 0.01,
+                    },
+                    800
+                  )
+                }
+                setSosAlert(null)
+              }}
+              activeOpacity={0.8}>
+              <LinearGradient colors={['#FF1744', '#B71C1C']} style={styles.sosSendGrad}>
+                <Ionicons name="navigate" size={16} color="#fff" />
+                <Text style={styles.sosSendText}>VIEW ON MAP</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sosCancelBtn, { marginTop: 10 }]}
+              onPress={() => setSosAlert(null)}
+              activeOpacity={0.75}>
+              <Text style={styles.sosCancelText}>DISMISS</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
@@ -536,6 +834,9 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgDeep },
+  noMapPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.bgDeep },
+  noMapTitle: { color: Colors.text, fontSize: 18, fontWeight: '700', marginTop: 8 },
+  noMapSub: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
 
   // ── header ──
   header: {
@@ -551,6 +852,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerLeft: { flex: 1 },
   headerLabel: {
     fontSize: 11,
     fontWeight: '700',
@@ -593,7 +895,58 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
 
-  // ── my marker ──
+  // ── circle switcher ──
+  circleSwitcher: { marginTop: 12 },
+  circleSwitcherContent: { gap: 8, paddingRight: 4 },
+  circleChip: {
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  circleChipActive: { borderColor: Colors.accentSoft },
+  circleChipText: { fontSize: 12, fontWeight: '700', color: Colors.textMuted },
+  circleChipTextActive: { color: Colors.textWhite },
+
+  // ── toast ──
+  toast: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bgCard,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    shadowColor: Colors.shadowDeep,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  toastBar: {
+    width: 4,
+    height: '100%',
+    borderRadius: 2,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+  },
+  toastText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+    paddingLeft: 10,
+    flex: 1,
+  },
+
+  // ── own marker ──
   myMarkerWrap: { alignItems: 'center', justifyContent: 'center', width: 60, height: 60 },
   myMarkerGrad: {
     width: 36,
@@ -611,12 +964,7 @@ const styles = StyleSheet.create({
   },
 
   // ── member markers ──
-  memberMarkerWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 56,
-    height: 56,
-  },
+  memberMarkerWrap: { alignItems: 'center', justifyContent: 'center', width: 56, height: 56 },
   memberRing: {
     width: 38,
     height: 38,
@@ -628,10 +976,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.bgCard,
   },
-  memberRingSelected: {
-    borderColor: Colors.accent,
-    borderWidth: 3,
-  },
+  memberRingSelected: { borderColor: Colors.accent, borderWidth: 3 },
   memberImage: { width: 36, height: 36, borderRadius: 18 },
   memberInitialWrap: {
     width: 36,
@@ -652,6 +997,44 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.bgDeep,
   },
+
+  // ── safe zone label ──
+  zoneLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(5,15,8,0.82)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  zoneLabelText: { fontSize: 11, fontWeight: '700', color: Colors.accent },
+
+  // ── member selector row ──
+  memberPickRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    maxHeight: 44,
+  },
+  memberPickContent: { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
+  memberPickChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: Colors.bgGlassStrong,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  memberPickChipActive: { borderColor: Colors.accent, backgroundColor: 'rgba(13,122,69,0.35)' },
+  memberPickDot: { width: 7, height: 7, borderRadius: 4 },
+  memberPickText: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, maxWidth: 120 },
+  memberPickTextActive: { color: Colors.textWhite },
 
   // ── locate FAB ──
   locateFab: {
@@ -695,7 +1078,7 @@ const styles = StyleSheet.create({
   memberCard: {
     position: 'absolute',
     left: 16,
-    right: 84, // avoid SOS button
+    right: 92,  // clear SOS button
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
@@ -721,12 +1104,7 @@ const styles = StyleSheet.create({
   },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   cardInfo: { flex: 1 },
-  cardName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Colors.textWhite,
-    marginBottom: 6,
-  },
+  cardName: { fontSize: 18, fontWeight: '800', color: Colors.textWhite, marginBottom: 6 },
   cardBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   roleBadge: {
     backgroundColor: Colors.bgGlassStrong,
@@ -740,32 +1118,44 @@ const styles = StyleSheet.create({
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   statusText: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
 
-  // stats row
+  // card stats
   cardStats: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.bgGlass,
     borderRadius: 12,
     padding: 12,
-    gap: 0,
     borderWidth: 1,
     borderColor: Colors.border,
     marginBottom: 14,
   },
-  cardStat: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
+  cardStat: { flex: 1, alignItems: 'center', gap: 4 },
   cardStatLabel: { fontSize: 10, color: Colors.textMuted, fontWeight: '600', letterSpacing: 0.5 },
   cardStatValue: { fontSize: 13, color: Colors.textSecondary, fontWeight: '700' },
-  cardDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: Colors.divider,
-  },
+  cardDivider: { width: 1, height: 32, backgroundColor: Colors.divider },
 
-  // zoom button
+  // distance readouts
+  distanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bgGlass,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 14,
+  },
+  distanceItem: { flex: 1, alignItems: 'center', gap: 4 },
+  distanceLabel: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    maxWidth: '100%',
+  },
+  distanceValue: { fontSize: 13, color: Colors.textSecondary, fontWeight: '700' },
+
+  // center on map button
   viewOnMapBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -778,4 +1168,109 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderStrong,
   },
   viewOnMapText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
+
+  // ── modal overlay ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(2,12,5,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+
+  // ── SOS confirm card ──
+  sosCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,23,68,0.35)',
+    shadowColor: '#FF1744',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    elevation: 24,
+  },
+  sosAlertCard: {
+    overflow: 'hidden',
+    borderColor: 'rgba(255,23,68,0.6)',
+  },
+  sosIconWrap: { marginBottom: 18 },
+  sosIconGrad: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sosModalTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FF1744',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  sosModalSubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 28,
+  },
+  sosAlertName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  sosAlertMessage: {
+    fontSize: 14,
+    color: '#FF8A80',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  sosModalBtns: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  sosCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,23,68,0.35)',
+    backgroundColor: 'rgba(255,23,68,0.08)',
+  },
+  sosCancelText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FF8A80',
+    letterSpacing: 1,
+  },
+  sosSendBtn: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  sosSendGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+  },
+  sosSendText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 1,
+  },
 })

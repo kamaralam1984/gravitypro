@@ -65,7 +65,7 @@ router.get('/:circleId/members', authenticate, async (req, res) => {
   const membership = await query('SELECT id FROM circle_members WHERE circle_id = $1 AND user_id = $2', [req.params.circleId, req.user.id])
   if (!membership.rows.length) return res.status(403).json({ error: 'Not a circle member' })
   const result = await query(
-    `SELECT u.id, u.name, u.phone, u.avatar_url, cm.role, cm.joined_at,
+    `SELECT u.id, u.name, u.phone, u.avatar_url, u.account_type, cm.role, cm.joined_at,
       ull.updated_at as location_updated_at,
       ST_X(ull.geom) as longitude, ST_Y(ull.geom) as latitude,
       ull.battery_level
@@ -101,6 +101,20 @@ router.delete('/:circleId/leave', authenticate, async (req, res) => {
   }
   await query('DELETE FROM circle_members WHERE circle_id=$1 AND user_id=$2', [req.params.circleId, req.user.id])
   res.json({ success: true, message: 'You have left the circle' })
+})
+
+// DELETE /api/v1/circles/:circleId/members/:userId — remove a member (admin only)
+router.delete('/:circleId/members/:userId', authenticate, async (req, res) => {
+  const { circleId, userId } = req.params
+  const mem = await query('SELECT role FROM circle_members WHERE circle_id=$1 AND user_id=$2', [circleId, req.user.id])
+  if (!mem.rows.length) return res.status(403).json({ error: 'Not a member of this circle' })
+  if (mem.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only admins can remove members' })
+  if (userId === req.user.id) return res.status(400).json({ error: 'Use "Leave circle" to remove yourself' })
+  const target = await query('SELECT role FROM circle_members WHERE circle_id=$1 AND user_id=$2', [circleId, userId])
+  if (!target.rows.length) return res.status(404).json({ error: 'Member not found in this circle' })
+  if (target.rows[0].role === 'admin') return res.status(400).json({ error: 'Cannot remove another admin' })
+  await query('DELETE FROM circle_members WHERE circle_id=$1 AND user_id=$2', [circleId, userId])
+  res.json({ success: true, message: 'Member removed' })
 })
 
 // DELETE /api/v1/circles/:circleId — delete circle (admin only)

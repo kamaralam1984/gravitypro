@@ -359,7 +359,6 @@ export default function Home() {
 
         <ul className={styles.navLinks}>
           <li><a href="#features">Features</a></li>
-          <li><a href="#pricing">Pricing</a></li>
           <li><Link to="/parent">For Parents</Link></li>
           <li><Link to="/child">For Children</Link></li>
           <li><Link to="/login?redirect=/parent/panel">Parent Panel</Link></li>
@@ -377,7 +376,6 @@ export default function Home() {
 
       <div className={`${styles.navMobileMenu}${mobileMenuOpen ? ' ' + styles.navMobileMenuOpen : ''}`}>
         <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
-        <a href="#pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
         <Link to="/parent" onClick={() => setMobileMenuOpen(false)}>For Parents</Link>
         <Link to="/child" onClick={() => setMobileMenuOpen(false)}>For Children</Link>
         <Link to="/login?redirect=/parent/panel" onClick={() => setMobileMenuOpen(false)}>Parent Panel</Link>
@@ -615,7 +613,7 @@ export default function Home() {
               </div>
               <h3 className={styles.fc2Title}>Live Location Sharing</h3>
               <p className={styles.fc2Desc}>See your family on a live map. Updates every few seconds using battery-smart background GPS.</p>
-              <a className={styles.fc2Arrow} href="#pricing">→</a>
+              <a className={styles.fc2Arrow} href="#features">→</a>
             </div>
 
             {/* 2. Safe Zones */}
@@ -662,7 +660,7 @@ export default function Home() {
               </div>
               <h3 className={styles.fc2Title}>Safe Zones &amp; Geofencing</h3>
               <p className={styles.fc2Desc}>Draw custom zones around home, school, or work. Get push notifications the moment anyone enters or leaves.</p>
-              <a className={styles.fc2Arrow} href="#pricing">→</a>
+              <a className={styles.fc2Arrow} href="#features">→</a>
             </div>
 
             {/* 3. SOS */}
@@ -700,79 +698,11 @@ export default function Home() {
               </div>
               <h3 className={styles.fc2Title}>SOS Panic Button</h3>
               <p className={styles.fc2Desc}>One tap sends your exact coordinates to every circle member instantly. 24/7 emergency alert.</p>
-              <a className={styles.fc2Arrow} href="#pricing">→</a>
+              <a className={styles.fc2Arrow} href="#features">→</a>
             </div>
 
           </div>
         </div>
-      </section>
-
-
-      {/* PRICING */}
-      <section id="pricing" className={styles.pricingSection}>
-        <span className={styles.sectionLabel}>Simple Pricing</span>
-        <h2 className={styles.sectionTitle}>Choose the right plan<br />for your family</h2>
-        <p className={styles.sectionSubtitle}>Start for free — upgrade anytime. No hidden charges.</p>
-        <div className={styles.pricingGrid}>
-          <div className={`${styles.pricingCard} ${styles.revealUp}`}>
-            <div className={styles.pricingPlanName}>Free Forever</div>
-            <div className={styles.pricingPrice}><sup>₹</sup>0<sub>/month</sub></div>
-            <p className={styles.pricingDesc}>The perfect starting point for small families</p>
-            <ul className={styles.pricingFeatures}>
-              <li>Live location sharing</li>
-              <li>Family Circle (up to 4 members)</li>
-              <li>1 Safe Zone / Geofence</li>
-              <li>SOS Panic Button</li>
-              <li>Basic push alerts</li>
-              <li>24-hour location history</li>
-              <li className="no">Battery level reports</li>
-              <li className="no">Unlimited safe zones</li>
-              <li className="no">Priority support</li>
-            </ul>
-            <Link to="/login" className={`${styles.pricingCta} ${styles.freeCta}`}>Start Free — No Card Needed</Link>
-          </div>
-          <div className={`${styles.pricingCard} ${styles.popular} ${styles.revealUp}`} style={{ transitionDelay: '0.12s' }}>
-            <div className={styles.popularBadge}>⭐ Most Popular</div>
-            <div className={styles.pricingPlanName}>Family</div>
-            <div className={styles.pricingPrice}><sup>₹</sup>299<sub>/month</sub></div>
-            <p className={styles.pricingDesc}>For larger families and complete peace of mind</p>
-            <ul className={styles.pricingFeatures}>
-              <li>Everything in Free</li>
-              <li>Family Circle (up to 15 members)</li>
-              <li>Unlimited Safe Zones</li>
-              <li>SOS + Auto emergency alert</li>
-              <li>Instant priority alerts</li>
-              <li>30-day location history</li>
-              <li>Battery level reports</li>
-              <li>Journey tracking</li>
-              <li>Priority support 24/7</li>
-            </ul>
-            <Link to="/pricing" className={`${styles.pricingCta} ${styles.proCta}`}>Get Family Plan →</Link>
-          </div>
-
-          {/* Premium */}
-          <div className={`${styles.pricingCard} ${styles.revealUp}`} style={{ transitionDelay: '0.24s' }}>
-            <div className={styles.pricingPlanName}>Premium</div>
-            <div className={styles.pricingPrice}><sup>₹</sup>599<sub>/month</sub></div>
-            <p className={styles.pricingDesc}>For power users who want everything</p>
-            <ul className={styles.pricingFeatures}>
-              <li>Everything in Family</li>
-              <li>Unlimited circle members</li>
-              <li>90-day location history</li>
-              <li>Multi-circle management</li>
-              <li>Speed &amp; drive alerts</li>
-              <li>Emergency contact sharing</li>
-              <li>Advanced geofence rules</li>
-              <li>Dedicated account manager</li>
-              <li>API access</li>
-            </ul>
-            <Link to="/pricing" className={`${styles.pricingCta} ${styles.freeCta}`}>See Premium →</Link>
-          </div>
-        </div>
-        <p className={styles.pricingNote}>
-          Pay with Razorpay · M-Pesa · Pesapal · Stripe · PayPal &nbsp;·&nbsp; Available in 145+ countries &nbsp;·&nbsp; Cancel anytime
-        </p>
-        <Link to="/pricing" className={styles.viewAllPlansLink}>View all plans with international pricing →</Link>
       </section>
 
 
@@ -803,7 +733,6 @@ export default function Home() {
               <li><a href="#features">Features</a></li>
               <li><a href="#how">How it works</a></li>
               <li><a href="#download">Download</a></li>
-              <li><Link to="/pricing">Pricing</Link></li>
             </ul>
           </div>
           <div className={styles.footerCol}>

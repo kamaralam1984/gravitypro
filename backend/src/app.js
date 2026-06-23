@@ -47,13 +47,20 @@ app.use('/api/v1/sos', sosRoutes)
 app.use('/api/v1/admin', adminRoutes)
 app.use('/api/v1/payments', paymentRoutes)
 app.use('/api/v1/subscriptions', subscriptionRoutes)
+const appRoutes = require('./routes/app')
+app.use('/api/v1/app', appRoutes)
+app.use('/api/v1/timeline', require('./routes/timeline'))
+app.use('/api/v1/parental', require('./routes/parental'))
 app.use('/webhooks/traccar', traccarWebhook)
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'gravity-backend', timestamp: new Date().toISOString() }))
 
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err)
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' })
+  const status = err.status || 500
+  // Never leak raw internal/DB error messages to clients on 5xx responses.
+  const message = status < 500 ? (err.message || 'Request failed') : 'Internal server error'
+  res.status(status).json({ error: message })
 })
 
 const PORT = process.env.PORT || 3000
