@@ -1,0 +1,35 @@
+name: OTA Live Update (EAS)
+
+# Publishes an Expo OTA update on every push to the deployed branch, so
+# already-installed mobile apps live-update without a store release.
+# Only fires when files under mobile/ change.
+on:
+  push:
+    branches: [shivam-repo]
+    paths:
+      - 'mobile/**'
+  workflow_dispatch: {}   # allow manual runs from the Actions tab
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Publish OTA update to channel "production"
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx --yes eas-cli update \
+            --channel production \
+            --message "${{ github.event.head_commit.message }}" \
+            --non-interactive
