@@ -18,9 +18,10 @@ import { useNavigation } from '@react-navigation/native'
 import { useAuthStore } from '../store/authStore'
 import { MemberAvatar } from '../components/MemberAvatar'
 import { BatteryIndicator } from '../components/BatteryIndicator'
-import { userAPI, circleAPI, sosAPI } from '../services/api'
+import { userAPI, circleAPI, sosAPI, geofenceAPI } from '../services/api'
 import { Colors, Gradients } from '../theme/colors'
 import { getCurrentLocation } from '../services/location'
+import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 
 // ── Greeting helper ───────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ export default function HomeScreen() {
   const [activeCircle, setActiveCircle]     = useState(null)
   const [members, setMembers]               = useState([])
   const [memberLocations, setMemberLocations] = useState({})
+  const [zones, setZones]                   = useState([])
   const [stats, setStats]                   = useState(null)
   const [myLocation, setMyLocation]         = useState(null)
   const [sosSending, setSosSending]         = useState(false)
@@ -147,9 +149,18 @@ export default function HomeScreen() {
       if (!circles.length) return
       const circle = circles[0]
       setActiveCircle(circle)
-      await loadMembers(circle.id)
+      await Promise.all([loadMembers(circle.id), loadZones(circle.id)])
     } catch (e) {
       console.error('Load circle error', e)
+    }
+  }
+
+  const loadZones = async (circleId) => {
+    try {
+      const res = await geofenceAPI.getByCircle(circleId)
+      setZones(res.safe_zones || [])
+    } catch (e) {
+      console.error('Load zones error', e)
     }
   }
 
@@ -247,14 +258,58 @@ export default function HomeScreen() {
     }
   }
 
-  // ── Map region ─────────────────────────────────────────────────────────────
+  // ── Members shown on map (with a known location) ─────────────────────────────
 
-  const mapRegion = (() => {
-    if (myLocation) return { ...myLocation, latitudeDelta: 0.04, longitudeDelta: 0.04 }
-    const locs = Object.values(memberLocations)
-    if (locs.length) return { latitude: locs[0].latitude, longitude: locs[0].longitude, latitudeDelta: 0.04, longitudeDelta: 0.04 }
-    return { latitude: 1.2921, longitude: 36.8219, latitudeDelta: 30, longitudeDelta: 30 }
-  })()
+  const locatedMembers = members.filter(m => memberLocations[m.id])
+
+  // ── Parent location (parent member, or fall back to my own location) ─────────
+
+  const parentMember = members.find(m => m.account_type === 'parent')
+  const parentLoc =
+    parentMember && parentMember.latitude != null && parentMember.longitude != null
+      ? { latitude: Number(parentMember.latitude), longitude: Number(parentMember.longitude) }
+      : myLocation
+        ? { latitude: Number(myLocation.latitude), longitude: Number(myLocation.longitude) }
+        : null
+  const parentName = parentMember?.name?.split(' ')[0] || (user?.id === parentMember?.id ? 'you' : 'you')
+
+  // ── Family distances (each member: nearest zone + distance to parent) ─────────
+
+  const memberDistances = members
+    .filter(m => m.id !== user?.id && memberLocations[m.id])
+    .map(m => {
+      const loc = memberLocations[m.id]
+      const cLat = Number(loc.latitude)
+      const cLng = Number(loc.longitude)
+
+      // nearest zone
+      let nearest = null, nd = Infinity
+      for (const z of zones) {
+        const d = haversineMeters(cLat, cLng, Number(z.center_lat), Number(z.center_lng))
+        if (d < nd) { nd = d; nearest = z }
+      }
+      const hasZone = !!nearest && Number.isFinite(nd)
+
+      // distance to parent
+      const parentDist = parentLoc
+        ? haversineMeters(cLat, cLng, parentLoc.latitude, parentLoc.longitude)
+        : null
+
+      return {
+        id: m.id,
+        name: m.name?.split(' ')[0] || '?',
+        hasZone,
+        dist: nd,
+        zone: nearest?.name,
+        inside: hasZone && nd <= Number(nearest.radius_meters),
+        parentDist,
+      }
+    })
+    .sort((a, b) => {
+      const ad = a.hasZone ? a.dist : Infinity
+      const bd = b.hasZone ? b.dist : Infinity
+      return ad - bd
+    })
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -316,33 +371,55 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── Mini Family Map ── */}
+        {/* ── Family Map (Leaflet/OSM — same map system as the Dashboard) ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Family Map</Text>
-          <Pressable
-            onPress={() => navigation.navigate('Map')}
-            style={styles.mapContainer}>
-            {loading ? (
-              <Shimmer style={styles.mapShimmer} />
-            ) : (
-              <LinearGradient
-                colors={['#042918', '#0A5C35', '#042918']}
-                style={styles.miniMap}>
-                <Ionicons name="map" size={36} color="rgba(0,230,118,0.3)" />
-                <Text style={styles.mapPreviewText}>
-                  {members.filter(m => m.id !== user?.id && memberLocations[m.id]).length} members tracked
-                </Text>
-              </LinearGradient>
-            )}
+          <View style={styles.mapHeaderRow}>
+            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Family Map</Text>
+            <Pressable onPress={() => navigation.navigate('Map')} hitSlop={8} style={styles.viewFullBtn}>
+              <Text style={styles.mapOverlayText}>View Full</Text>
+              <Ionicons name="arrow-forward" size={13} color={Colors.accent} />
+            </Pressable>
+          </View>
 
-            {/* "View Full Map" overlay */}
-            <View style={styles.mapOverlayBtn} pointerEvents="none">
-              <LinearGradient colors={['rgba(10,92,53,0.85)', 'rgba(4,41,24,0.85)']} style={styles.mapOverlayGrad}>
-                <Text style={styles.mapOverlayText}>View Full Map</Text>
-                <Ionicons name="arrow-forward" size={13} color={Colors.accent} />
-              </LinearGradient>
+          {loading ? (
+            <Shimmer style={styles.mapShimmer} />
+          ) : (
+            <FamilyMap
+              members={locatedMembers}
+              zones={zones}
+              me={myLocation}
+              height={240}
+            />
+          )}
+
+          {/* Family distances: nearest zone + distance from parent */}
+          {!loading && memberDistances.length > 0 && (
+            <View style={styles.distCard}>
+              <Text style={styles.distTitle}>Family Distances</Text>
+              {memberDistances.map(d => (
+                <View key={d.id} style={styles.distRow}>
+                  <View style={[styles.distDot, { backgroundColor: d.inside ? Colors.accent : '#FFB300' }]} />
+                  <View style={styles.distInfo}>
+                    <Text style={styles.distName} numberOfLines={1}>{d.name}</Text>
+
+                    {/* Zone distance line */}
+                    <Text style={[styles.distZoneVal, { color: d.inside ? Colors.accent : '#FFB300' }]}>
+                      {d.hasZone
+                        ? (d.inside ? `Inside ${d.zone}` : `${formatDistance(d.dist)} · ${d.zone}`)
+                        : 'No safe zone'}
+                    </Text>
+
+                    {/* Parent distance line */}
+                    <Text style={styles.distParentVal}>
+                      {d.parentDist != null
+                        ? `${formatDistance(d.parentDist)} from ${parentName}`
+                        : 'Parent location unknown'}
+                    </Text>
+                  </View>
+                </View>
+              ))}
             </View>
-          </Pressable>
+          )}
         </View>
 
         {/* ── Family Status ── */}
@@ -357,7 +434,7 @@ export default function HomeScreen() {
               <FlatList
                 horizontal
                 data={members}
-                keyExtractor={m => m.id}
+                keyExtractor={m => String(m.id)}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.memberList}
                 renderItem={({ item }) => (
@@ -498,6 +575,28 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   mapOverlayText: { color: Colors.accent, fontSize: 12, fontWeight: '700' },
+
+  // Map header + distances
+  mapHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  viewFullBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  distCard: {
+    marginTop: 12,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  distTitle: { color: Colors.textMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  distRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  distDot:   { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
+  distInfo:  { flex: 1, gap: 2 },
+  distName:  { color: Colors.textWhite, fontSize: 14, fontWeight: '600' },
+  distVal:   { fontSize: 13, fontWeight: '700' },
+  distZoneVal:   { fontSize: 13, fontWeight: '700' },
+  distParentVal: { fontSize: 12, fontWeight: '600', color: Colors.textMuted },
 
   // Map markers
   myDot:        { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },

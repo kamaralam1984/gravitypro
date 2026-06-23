@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, Animated, Pressable,
-  TextInput, Modal, ActivityIndicator, Alert, Platform, FlatList,
+  TextInput, Modal, ActivityIndicator, Alert, Platform, FlatList, RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useNavigation } from '@react-navigation/native'
 import * as Haptics from 'expo-haptics'
 import * as Clipboard from 'expo-clipboard'
 import { circleAPI } from '../services/api'
@@ -43,30 +44,52 @@ function Toast({ message, visible }) {
 
 // ─── Member Row ──────────────────────────────────────────────────────────────
 
+function relativeTime(ts) {
+  if (!ts) return null
+  const diff = Date.now() - new Date(ts).getTime()
+  if (diff < 60_000) return 'just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return `${Math.floor(diff / 86_400_000)}d ago`
+}
+
 function MemberRow({ member, isAdmin, onRemove }) {
-  const roleLabel = member.role === 'admin' ? 'Admin' : 'Member'
-  const roleColor = member.role === 'admin' ? Colors.accent : Colors.accentSoft
+  const navigation = useNavigation()
+  // Badge reflects the USER's account type (Parent/Child), not the circle role.
+  const isParent = (member.account_type || (member.role === 'admin' ? 'parent' : 'child')) === 'parent'
+  const roleLabel = isParent ? 'Parent' : 'Child'
+  const roleColor = isParent ? Colors.accent : Colors.accentSoft
+  const lastSeen = member.location_updated_at
+  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000) : false
+  const battery = member.battery_level
+  // Tapping a child opens the parental-controls hub (timeline / screen-time / blocking).
+  const openHub = isParent ? undefined : () => navigation.navigate('ChildHub', { member })
 
   return (
-    <View style={styles.memberRow}>
-      <MemberAvatar member={member} size={40} showStatus={false} />
+    <Pressable onPress={openHub} style={({ pressed }) => [styles.memberRow, pressed && openHub && { opacity: 0.7 }]}>
+      <MemberAvatar member={member} size={40} showStatus isOnline={isOnline} />
       <View style={styles.memberInfo}>
         <Text style={styles.memberName}>{member.name}</Text>
-        <Text style={styles.memberJoined}>
-          Joined {new Date(member.joined_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-        </Text>
+        <View style={styles.memberMetaRow}>
+          <View style={[styles.statusDot, { backgroundColor: isOnline ? Colors.accent : Colors.textMuted }]} />
+          <Text style={styles.memberMeta} numberOfLines={1}>
+            {isOnline ? 'Online' : (lastSeen ? `Last seen ${relativeTime(lastSeen)}` : 'No location yet')}
+            {battery != null ? `  ·  🔋 ${battery}%` : ''}
+          </Text>
+        </View>
       </View>
       <View style={styles.memberRight}>
         <View style={[styles.roleBadge, { borderColor: roleColor }]}>
           <Text style={[styles.roleText, { color: roleColor }]}>{roleLabel}</Text>
         </View>
-        {isAdmin && member.role !== 'admin' && (
+        {isAdmin && !isParent && (
           <Pressable onPress={() => onRemove(member)} style={styles.removeBtn} hitSlop={8}>
             <Ionicons name="person-remove-outline" size={16} color={Colors.danger} />
           </Pressable>
         )}
+        {!isParent && <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />}
       </View>
-    </View>
+    </Pressable>
   )
 }
 
@@ -82,7 +105,8 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState(circle.name)
   const [savingName, setSavingName] = useState(false)
-  const isAdminOfCircle = circle.created_by != null // simplified; backend would clarify
+  // The current user's role in THIS circle is returned by GET /circles (cm.role).
+  const isAdminOfCircle = circle.role === 'admin'
 
   const handleRename = async () => {
     const trimmed = nameDraft.trim()
@@ -305,6 +329,7 @@ export default function CirclesScreen() {
   const setStoreCircles = useCircleStore(s => s.setCircles)
   const [circles, setCircles] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [showFABSheet, setShowFABSheet] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showJoinModal, setShowJoinModal] = useState(false)
@@ -336,6 +361,19 @@ export default function CirclesScreen() {
         Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
         Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
       ]).start()
+    }
+  }
+
+  const onRefresh = async () => {
+    setRefreshing(true)
+    try {
+      const res = await circleAPI.getMy()
+      setCircles(res.circles || [])
+      setStoreCircles(res.circles || [])
+    } catch (e) {
+      console.error('Refresh circles failed', e)
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -441,8 +479,13 @@ export default function CirclesScreen() {
 
       {/* Content */}
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 110 }]}
-        showsVerticalScrollIndicator={false}>
+        style={styles.scrollArea}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 140 }]}
+        showsVerticalScrollIndicator
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} colors={[Colors.accent]} />
+        }>
 
         {loading ? (
           <View style={styles.loadingBox}>
@@ -703,6 +746,7 @@ const styles = StyleSheet.create({
   headerBadgeText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
 
   // Scroll
+  scrollArea: { flex: 1 },
   scroll: { padding: 20 },
   loadingBox: { paddingVertical: 80, alignItems: 'center', gap: 14 },
   loadingText: { color: Colors.textMuted, fontSize: 14 },
@@ -789,6 +833,9 @@ const styles = StyleSheet.create({
   memberInfo: { flex: 1 },
   memberName: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
   memberJoined: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
+  memberMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  memberMeta: { fontSize: 11, color: Colors.textMuted, flexShrink: 1 },
   memberRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   roleBadge: {
     borderRadius: 6,

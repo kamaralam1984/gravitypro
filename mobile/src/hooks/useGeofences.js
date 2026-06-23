@@ -18,7 +18,7 @@ export const useGeofences = (circleId) => {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: geofenceAPI.delete,
+    mutationFn: geofenceAPI.remove,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['geofences', circleId] }),
   })
 

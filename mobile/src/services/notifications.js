@@ -70,7 +70,7 @@ export const registerForPushNotifications = async () => {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + apiToken,
         },
-        body: JSON.stringify({ push_token: token }),
+        body: JSON.stringify({ token }),
       })
     }
   } catch (e) {

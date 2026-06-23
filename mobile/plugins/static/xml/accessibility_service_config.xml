@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuration for BlockerAccessibilityService.
+
+  - typeWindowStateChanged: fire when the foreground window/app changes so we
+    can detect which app came to the front.
+  - retrieveWindowContent: allows reading the active window package.
+  - description string lives in res/values/strings.xml as
+    @string/accessibility_service_description.
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:notificationTimeout="100"
+    android:description="@string/accessibility_service_description" />

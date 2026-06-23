@@ -50,7 +50,8 @@ export const userAPI = {
   updateBattery: (data) => api.patch('/users/location', data),     // backend: PATCH /users/location
   getLocationHistory: () => api.get('/users/me/location-history'),
   clearPushToken: () => api.delete('/users/me/push-token'),
-  registerPushToken: (push_token) => api.post('/users/me/push-token', { push_token }),
+  // Backend reads `req.body.token` (POST /users/me/push-token) — send as { token }.
+  registerPushToken: (push_token) => api.post('/users/me/push-token', { token: push_token }),
   search: (phone) => api.get(`/users/search?phone=${encodeURIComponent(phone)}`),
   getPublicLocation: (uid) => api.get(`/users/public-location?uid=${encodeURIComponent(uid)}`),
   batchPostLocations: (locations) => api.post('/locations/batch', { locations }),
@@ -67,7 +68,7 @@ export const circleAPI = {
   update: (circleId, data) => api.patch(`/circles/${circleId}`, data),
   leave: (circleId) => api.delete(`/circles/${circleId}/leave`),
   remove: (circleId) => api.delete(`/circles/${circleId}`),
-  // NOTE: backend has no per-member removal route; kept for back-compat (may 404).
+  // Admin-only: remove a member from the circle (backend: DELETE /circles/:id/members/:userId).
   removeMember: (circleId, userId) => api.delete(`/circles/${circleId}/members/${userId}`),
 }
 
@@ -75,7 +76,7 @@ export const circleAPI = {
 export const sosAPI = {
   trigger: (data) => api.post('/sos', data),
   safe: (data) => api.post('/sos/safe', data),
-  markSafe: (data = {}) => api.post('/sos/safe', data),
+  markSafe: (data = {}) => api.post('/sos/safe', data),            // backend: POST /sos/safe
   getHistory: (circleId) => api.get(`/sos/history?circle_id=${circleId}`),
   resolve: (sosId) => api.patch(`/sos/${sosId}/resolve`),
 }
@@ -116,6 +117,31 @@ export const subscriptionAPI = {
   getMe: () => api.get('/subscriptions/me'),
   cancel: () => api.post('/subscriptions/cancel'),
   getHistory: () => api.get('/subscriptions/history'),
+}
+
+// ── Timeline ──────────────────────────────────────────────────────────────────
+// Google-Maps-Timeline-style day view for one user.
+//   getDays(userId, 'YYYY-MM') -> { days: ['YYYY-MM-DD', ...] }   (which days have data)
+//   getDay(userId, 'YYYY-MM-DD') -> { date, segments:[...], summary:{...} }
+export const timelineAPI = {
+  getDays: (userId, month) => api.get(`/timeline/${userId}/days?month=${encodeURIComponent(month)}`),
+  getDay: (userId, date) => api.get(`/timeline/${userId}?date=${encodeURIComponent(date)}`),
+}
+
+// ── Parental controls ─────────────────────────────────────────────────────────
+// Screen-time (app usage) + app blocking for a child member.
+//   getAppUsage(childId, 'YYYY-MM-DD') -> [{ package_name, app_label, foreground_seconds, opens }]
+//   getBlockedApps(childId) -> { apps: [{ package_name, app_label, blocked }] }
+//   setBlockedApps(childId, apps) -> updates the child's blocked-app list
+//   getMyBlockedApps() -> current (child) device's own blocked apps
+//   reportAppUsage(date, apps) -> child device reports its usage for a day
+export const parentalAPI = {
+  getAppUsage: (childId, date) =>
+    api.get(`/parental/app-usage/${childId}?date=${encodeURIComponent(date)}`),
+  getBlockedApps: (childId) => api.get(`/parental/blocked-apps/${childId}`),
+  setBlockedApps: (childId, apps) => api.put(`/parental/blocked-apps/${childId}`, { apps }),
+  getMyBlockedApps: () => api.get('/parental/blocked-apps'),
+  reportAppUsage: (date, apps) => api.post('/parental/app-usage', { date, apps }),
 }
 
 export default api

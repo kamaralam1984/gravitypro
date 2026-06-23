@@ -88,7 +88,12 @@
       ]
     ],
     "scheme": "gravity",
-    "platforms": ["ios", "android"],
+    "platforms": ["ios", "android", "web"],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    },
     "extra": {
       "eas": {
         "projectId": "aacddc46-fdbb-45a7-9f01-2dd951ffcaa5"

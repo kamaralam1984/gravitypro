@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from '../src/store/authStore'
 import SplashScreen from '../src/screens/auth/SplashScreen'
 import AuthNavigator from '../src/navigation/AuthNavigator'
-import TabNavigator from '../src/navigation/TabNavigator'
+import MainNavigator from '../src/navigation/MainNavigator'
 import UpdateBanner from '../src/components/ui/UpdateBanner'
 import { registerForPushNotifications } from '../src/services/notifications'
 import { syncOfflineLocations, reportBatteryLevel } from '../src/services/location'
@@ -86,7 +86,7 @@ export default function RootLayout() {
           <NavigationContainer>
             <View style={{ flex: 1, backgroundColor: Colors.bgDeep }}>
               <StatusBar style="light" />
-              {isAuthenticated ? <TabNavigator /> : <AuthNavigator />}
+              {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
               <UpdateBanner />
             </View>
           </NavigationContainer>

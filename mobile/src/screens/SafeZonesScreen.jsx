@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, Pressable, Animated, ScrollView,
   TextInput, Modal, Dimensions, ActivityIndicator, Alert, Platform,
 } from 'react-native'
-import MapView, { Circle as MapCircle, Marker } from 'react-native-maps'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import { Ionicons } from '@expo/vector-icons'
@@ -12,11 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import Slider from '@react-native-community/slider'
 import { circleAPI, geofenceAPI } from '../services/api'
-import { getCurrentLocation } from '../services/location'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
 import { Colors, Gradients } from '../theme/colors'
-import { DARK_MAP_STYLE } from '../theme/mapStyles'
+import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
+import * as Location from 'expo-location'
 
 const { width, height } = Dimensions.get('window')
 const MAP_HEIGHT = height * 0.45
@@ -29,7 +28,7 @@ const formatCoord = (n) => (Math.round(n * 10000) / 10000).toFixed(4)
 
 // ─── Zone Card ────────────────────────────────────────────────────────────────
 
-function ZoneCard({ zone, index, onDelete, onFocus, onEdit }) {
+function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
   const slideAnim = useRef(new Animated.Value(40)).current
   const fadeAnim = useRef(new Animated.Value(0)).current
 
@@ -42,33 +41,63 @@ function ZoneCard({ zone, index, onDelete, onFocus, onEdit }) {
     }, index * 70)
   }, [])
 
+  const located = memberStats || []
+  const insideCount = located.filter(s => s.inside).length
+
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 12 }}>
       <GradientCard style={styles.zoneCard}>
-        <Pressable onPress={() => onFocus(zone)} style={styles.zoneCardMain}>
-          <LinearGradient
-            colors={['rgba(0,200,83,0.22)', 'rgba(0,200,83,0.07)']}
-            style={styles.zoneIconWrap}>
-            <Ionicons name="shield-checkmark" size={22} color={Colors.accentSoft} />
-          </LinearGradient>
+        <View style={styles.zoneCardRow}>
+          <Pressable onPress={() => onFocus(zone)} style={styles.zoneCardMain}>
+            <LinearGradient
+              colors={['rgba(0,200,83,0.22)', 'rgba(0,200,83,0.07)']}
+              style={styles.zoneIconWrap}>
+              <Ionicons name="shield-checkmark" size={22} color={Colors.accentSoft} />
+            </LinearGradient>
 
-          <View style={styles.zoneTextBlock}>
-            <Text style={styles.zoneName}>{zone.name}</Text>
-            <Text style={styles.zoneRadius}>{formatRadius(zone.radius_meters)} radius</Text>
-            <Text style={styles.zoneCoords}>
-              {formatCoord(zone.center_lat)}, {formatCoord(zone.center_lng)}
-            </Text>
+            <View style={styles.zoneTextBlock}>
+              <Text style={styles.zoneName}>{zone.name}</Text>
+              <Text style={styles.zoneRadius}>{formatRadius(Number(zone.radius_meters))} radius</Text>
+              <Text style={styles.zoneCoords}>
+                {formatCoord(Number(zone.center_lat))}, {formatCoord(Number(zone.center_lng))}
+              </Text>
+            </View>
+          </Pressable>
+
+          <View style={styles.zoneActions}>
+            <Pressable onPress={() => onEdit(zone)} style={styles.editBtn} hitSlop={6}>
+              <Ionicons name="create-outline" size={18} color={Colors.accent} />
+            </Pressable>
+            <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
+              <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+            </Pressable>
           </View>
-        </Pressable>
-
-        <View style={styles.zoneActions}>
-          <Pressable onPress={() => onEdit(zone)} style={styles.editBtn} hitSlop={6}>
-            <Ionicons name="create-outline" size={18} color={Colors.accent} />
-          </Pressable>
-          <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
-            <Ionicons name="trash-outline" size={18} color={Colors.danger} />
-          </Pressable>
         </View>
+
+        {located.length > 0 && (
+          <View style={styles.zoneMembers}>
+            <View style={styles.zoneMembersHeader}>
+              <Ionicons name="people" size={13} color={Colors.accentSoft} />
+              <Text style={styles.zoneMembersSummary}>
+                {insideCount} of {located.length} inside
+              </Text>
+            </View>
+            {located.map(s => (
+              <View key={s.id} style={styles.zoneMemberRow}>
+                <View
+                  style={[
+                    styles.zoneMemberDot,
+                    { backgroundColor: s.inside ? Colors.accent : Colors.textMuted },
+                  ]}
+                />
+                <Text style={styles.zoneMemberName} numberOfLines={1}>{s.name}</Text>
+                <Text style={[styles.zoneMemberDist, s.inside && styles.zoneMemberDistInside]}>
+                  {s.inside ? 'inside' : formatDistance(s.distance)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </GradientCard>
     </Animated.View>
   )
@@ -99,6 +128,7 @@ export default function SafeZonesScreen() {
   const [circles, setCircles] = useState([])
   const [activeCircle, setActiveCircle] = useState(null)
   const [safeZones, setSafeZones] = useState([])
+  const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedLocation, setSelectedLocation] = useState(null)
@@ -108,9 +138,7 @@ export default function SafeZonesScreen() {
   const [error, setError] = useState('')
   const [pickingOnMap, setPickingOnMap] = useState(false)
   const [editingZone, setEditingZone] = useState(null)
-  const [userLocation, setUserLocation] = useState(null)
-  const mapRef = useRef(null)
-  const modalMapRef = useRef(null)
+  const [myLocation, setMyLocation] = useState(null)
   const fadeAnim = useRef(new Animated.Value(0)).current
   const headerAnim = useRef(new Animated.Value(0)).current
   const modalAnim = useRef(new Animated.Value(350)).current
@@ -118,26 +146,25 @@ export default function SafeZonesScreen() {
   useEffect(() => {
     loadData()
     Animated.timing(headerAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start()
+    ;(async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync()
+        if (status !== 'granted') return
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        setMyLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude })
+      } catch (_) {}
+    })()
   }, [])
 
   const loadData = async () => {
     setLoading(true)
-    // Get user location in background for map default region
-    getCurrentLocation().then(loc => {
-      setUserLocation({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      })
-    }).catch(() => {})
     try {
       const res = await circleAPI.getMy()
       const circs = res.circles || []
       setCircles(circs)
       if (circs.length) {
         setActiveCircle(circs[0])
-        await loadZones(circs[0].id)
+        await Promise.all([loadZones(circs[0].id), loadMembers(circs[0].id)])
       }
     } catch (e) {
       console.error('Load data error', e)
@@ -156,29 +183,59 @@ export default function SafeZonesScreen() {
     }
   }
 
+  const loadMembers = async (circleId) => {
+    try {
+      const res = await circleAPI.getMembers(circleId)
+      setMembers(res.members || res || [])
+    } catch (e) {
+      console.error('Load members error', e)
+      setMembers([])
+    }
+  }
+
   const switchCircle = async (circle) => {
     if (circle.id === activeCircle?.id) return
     if (Platform.OS !== 'web') Haptics.selectionAsync()
     setActiveCircle(circle)
     setSafeZones([])
-    await loadZones(circle.id)
+    setMembers([])
+    await Promise.all([loadZones(circle.id), loadMembers(circle.id)])
   }
 
+  // Per-zone member stats: distance from each located member to the zone center.
+  const statsForZone = useCallback((zone) => {
+    const cLat = Number(zone.center_lat)
+    const cLng = Number(zone.center_lng)
+    const radius = Number(zone.radius_meters)
+    return (members || [])
+      .filter(m => m.latitude != null && m.longitude != null)
+      .map(m => {
+        const distance = haversineMeters(cLat, cLng, Number(m.latitude), Number(m.longitude))
+        return {
+          id: m.id,
+          name: m.name || m.email || 'Member',
+          distance,
+          inside: distance <= radius,
+        }
+      })
+      .sort((a, b) => a.distance - b.distance)
+  }, [members])
+
+  // The display map (FamilyMap) auto-fits to all zones, so focusing just nudges
+  // the focused zone to the front of the list so it renders first / centers.
   const focusZoneOnMap = useCallback((zone) => {
-    if (!mapRef.current) return
-    mapRef.current.animateToRegion({
-      latitude: zone.center_lat,
-      longitude: zone.center_lng,
-      latitudeDelta: (zone.radius_meters / 111000) * 4,
-      longitudeDelta: (zone.radius_meters / 111000) * 4,
-    }, 600)
+    setSafeZones((prev) => {
+      const rest = prev.filter((z) => z.id !== zone.id)
+      return [zone, ...rest]
+    })
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
   }, [])
 
   const openCreateModal = () => {
     setEditingZone(null)
     setShowCreateModal(true)
-    setSelectedLocation(null)
+    // Default the new zone center to the user's current location (if known).
+    setSelectedLocation(myLocation ? { ...myLocation } : null)
     setZoneName('')
     setRadius(200)
     setError('')
@@ -190,22 +247,13 @@ export default function SafeZonesScreen() {
   const openEditModal = (zone) => {
     setEditingZone(zone)
     setShowCreateModal(true)
-    setSelectedLocation({ latitude: zone.center_lat, longitude: zone.center_lng })
+    setSelectedLocation({ latitude: Number(zone.center_lat), longitude: Number(zone.center_lng) })
     setZoneName(zone.name)
-    setRadius(zone.radius_meters)
+    setRadius(Number(zone.radius_meters))
     setError('')
     setPickingOnMap(false)
     Animated.spring(modalAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }).start()
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    // Recenter the modal mini-map on the zone being edited
-    setTimeout(() => {
-      modalMapRef.current?.animateToRegion({
-        latitude: zone.center_lat,
-        longitude: zone.center_lng,
-        latitudeDelta: (zone.radius_meters / 111000) * 4,
-        longitudeDelta: (zone.radius_meters / 111000) * 4,
-      }, 500)
-    }, 400)
   }
 
   const closeCreateModal = () => {
@@ -214,12 +262,12 @@ export default function SafeZonesScreen() {
     })
   }
 
-  const handleMainMapPress = (e) => {
-    // Main map just browses; tapping individual cards focuses them
-  }
-
-  const handleModalMapPress = (e) => {
-    setSelectedLocation(e.nativeEvent.coordinate)
+  // Called by FamilyMap (pickMode) when the user taps the Leaflet map.
+  const handlePickLocation = (coord) => {
+    setSelectedLocation({
+      latitude: Number(coord.latitude),
+      longitude: Number(coord.longitude),
+    })
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setPickingOnMap(false)
   }
@@ -233,9 +281,9 @@ export default function SafeZonesScreen() {
     try {
       const payload = {
         name: zoneName.trim(),
-        center_lat: selectedLocation.latitude,
-        center_lng: selectedLocation.longitude,
-        radius_meters: radius,
+        center_lat: Number(selectedLocation.latitude),
+        center_lng: Number(selectedLocation.longitude),
+        radius_meters: Number(radius),
       }
       if (editingZone) {
         await geofenceAPI.update(editingZone.id, payload)
@@ -276,20 +324,17 @@ export default function SafeZonesScreen() {
     )
   }
 
-  // Compute initial map region: zones > user location > India center
-  const mapRegion = safeZones.length > 0
-    ? {
-        latitude: safeZones[0].center_lat,
-        longitude: safeZones[0].center_lng,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }
-    : userLocation || {
-        latitude: 20.5937,
-        longitude: 78.9629,
-        latitudeDelta: 8,
-        longitudeDelta: 8,
-      }
+  // Members that have a known location, mapped to FamilyMap's shape.
+  const mappedMembers = (members || [])
+    .filter((m) => m.latitude != null && m.longitude != null)
+    .map((m) => ({
+      id: m.id,
+      name: m.name || m.email || 'Member',
+      latitude: Number(m.latitude),
+      longitude: Number(m.longitude),
+      battery_level: m.battery_level ?? null,
+      account_type: m.account_type,
+    }))
 
   return (
     <View style={styles.container}>
@@ -334,38 +379,14 @@ export default function SafeZonesScreen() {
         )}
       </Animated.View>
 
-      {/* Map — top 45% */}
+      {/* Map — top 45% (free Leaflet/OSM via FamilyMap) */}
       <View style={[styles.mapContainer, { height: MAP_HEIGHT }]}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          customMapStyle={DARK_MAP_STYLE}
-          showsUserLocation
-          showsCompass={false}
-          initialRegion={mapRegion}
-          onPress={handleMainMapPress}>
-          {safeZones.map(zone => (
-            <React.Fragment key={zone.id}>
-              <MapCircle
-                center={{ latitude: zone.center_lat, longitude: zone.center_lng }}
-                radius={zone.radius_meters}
-                fillColor="rgba(0,200,83,0.13)"
-                strokeColor="#00C853"
-                strokeWidth={2}
-              />
-              <Marker
-                coordinate={{ latitude: zone.center_lat, longitude: zone.center_lng }}
-                title={zone.name}
-                description={`${formatRadius(zone.radius_meters)} radius`}>
-                <View style={styles.zoneMarker}>
-                  <LinearGradient colors={['#0D7A45', '#0A5C35']} style={styles.zoneMarkerGrad}>
-                    <Ionicons name="shield-checkmark" size={14} color={Colors.accent} />
-                  </LinearGradient>
-                </View>
-              </Marker>
-            </React.Fragment>
-          ))}
-        </MapView>
+        <FamilyMap
+          style={[styles.map, { borderRadius: 0, borderWidth: 0 }]}
+          zones={safeZones}
+          members={mappedMembers}
+          me={myLocation}
+        />
 
         {/* Gradient fade at bottom of map */}
         <LinearGradient
@@ -415,6 +436,7 @@ export default function SafeZonesScreen() {
                 onDelete={handleDeleteZone}
                 onFocus={focusZoneOnMap}
                 onEdit={openEditModal}
+                memberStats={statsForZone(zone)}
               />
             ))
           )}
@@ -448,35 +470,25 @@ export default function SafeZonesScreen() {
                 </Pressable>
               </View>
 
-              {/* Mini map for location picking */}
+              {/* Mini map for location picking (tap the Leaflet map) */}
               <View style={styles.miniMapWrap}>
-                <MapView
-                  ref={modalMapRef}
-                  style={styles.miniMap}
-                  customMapStyle={DARK_MAP_STYLE}
-                  showsUserLocation
-                  showsCompass={false}
-                  onPress={handleModalMapPress}
-                  initialRegion={mapRegion}>
-                  {selectedLocation && (
-                    <>
-                      <MapCircle
-                        center={selectedLocation}
-                        radius={radius}
-                        fillColor="rgba(0,230,118,0.18)"
-                        strokeColor="#00E676"
-                        strokeWidth={2}
-                      />
-                      <Marker coordinate={selectedLocation}>
-                        <View style={styles.previewMarker}>
-                          <LinearGradient colors={['#00E676', '#00C853']} style={styles.previewMarkerGrad}>
-                            <Ionicons name="location" size={13} color="#fff" />
-                          </LinearGradient>
-                        </View>
-                      </Marker>
-                    </>
-                  )}
-                </MapView>
+                <FamilyMap
+                  style={[styles.miniMap, { borderRadius: 0, borderWidth: 0 }]}
+                  zones={[]}
+                  members={[]}
+                  me={myLocation}
+                  pickMode
+                  pick={
+                    selectedLocation
+                      ? {
+                          latitude: Number(selectedLocation.latitude),
+                          longitude: Number(selectedLocation.longitude),
+                          radius: Number(radius),
+                        }
+                      : null
+                  }
+                  onPickLocation={handlePickLocation}
+                />
 
                 {/* Crosshair hint when no location picked */}
                 {!selectedLocation && (
@@ -711,10 +723,9 @@ const styles = StyleSheet.create({
 
   // Zone card
   zoneCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 16,
   },
+  zoneCardRow: { flexDirection: 'row', alignItems: 'center' },
   zoneCardMain: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
   zoneIconWrap: {
     width: 48, height: 48, borderRadius: 14,
@@ -739,6 +750,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(229,57,53,0.2)',
   },
+
+  // Per-zone member stats
+  zoneMembers: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 7,
+  },
+  zoneMembersHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  zoneMembersSummary: { fontSize: 12, color: Colors.accentSoft, fontWeight: '700' },
+  zoneMemberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  zoneMemberDot: { width: 7, height: 7, borderRadius: 4 },
+  zoneMemberName: { flex: 1, fontSize: 13, color: Colors.textSecondary },
+  zoneMemberDist: { fontSize: 12, color: Colors.textMuted, fontWeight: '600' },
+  zoneMemberDistInside: { color: Colors.accent, fontWeight: '700' },
 
   // Empty state
   emptyBox: {

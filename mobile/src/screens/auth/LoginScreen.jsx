@@ -18,8 +18,9 @@ const OTP_LENGTH = 6
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
 export default function LoginScreen({ navigation }) {
-  // method: 'phone' | 'email'
-  const [method, setMethod] = useState('phone')
+  // method: 'email' | 'phone' — Email is the PRIMARY method (free, no SMS cost).
+  // Phone (SMS) is an optional fallback.
+  const [method, setMethod] = useState('email')
   // step: 'phone' | 'otp'  (phone here means "identifier entry", reused for both methods)
   const [step, setStep] = useState('phone')
   const [phone, setPhone] = useState('')
@@ -215,19 +216,19 @@ export default function LoginScreen({ navigation }) {
 
             {step === 'phone' ? (
               <>
-                {/* Method toggle: Phone / Email */}
+                {/* Method toggle: Email (primary) / Phone (optional) */}
                 <View style={styles.methodRow}>
-                  <Pressable
-                    onPress={() => switchMethod('phone')}
-                    style={[styles.methodBtn, method === 'phone' && styles.methodBtnSelected]}>
-                    <Ionicons name="call-outline" size={16} color={method === 'phone' ? Colors.accent : Colors.textMuted} />
-                    <Text style={[styles.methodLabel, method === 'phone' && styles.methodLabelSelected]}>Phone</Text>
-                  </Pressable>
                   <Pressable
                     onPress={() => switchMethod('email')}
                     style={[styles.methodBtn, method === 'email' && styles.methodBtnSelected]}>
                     <Ionicons name="mail-outline" size={16} color={method === 'email' ? Colors.accent : Colors.textMuted} />
                     <Text style={[styles.methodLabel, method === 'email' && styles.methodLabelSelected]}>Email</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => switchMethod('phone')}
+                    style={[styles.methodBtn, method === 'phone' && styles.methodBtnSelected]}>
+                    <Ionicons name="call-outline" size={16} color={method === 'phone' ? Colors.accent : Colors.textMuted} />
+                    <Text style={[styles.methodLabel, method === 'phone' && styles.methodLabelSelected]}>Phone</Text>
                   </Pressable>
                 </View>
 

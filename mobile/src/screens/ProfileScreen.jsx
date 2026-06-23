@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Animated,
-  Switch, Image, Alert, Platform, TextInput, ActivityIndicator, Linking,
+  Switch, Image, Alert, Platform, TextInput, ActivityIndicator,
   Modal, FlatList,
 } from 'react-native'
 import { WebView } from 'react-native-webview'
@@ -72,6 +72,14 @@ export default function ProfileScreen() {
       setHistoryLoading(false)
     }
   }
+
+  // Refresh profile (name, avatar, etc.) from the server on mount so changes
+  // made elsewhere (e.g. a new avatar) show without re-login.
+  useEffect(() => {
+    userAPI.getMe()
+      .then(res => { if (res?.user) updateUser(res.user) })
+      .catch(() => {})
+  }, [])
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -474,7 +482,6 @@ export default function ProfileScreen() {
               </View>
             )}
           </GradientCard>
-
 
           {/* ── Settings toggles ── */}
           <GradientCard style={styles.section}>

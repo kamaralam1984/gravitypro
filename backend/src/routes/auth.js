@@ -284,7 +284,12 @@ router.post('/register', validate(registerSchema), async (req, res) => {
   const existing = await query('SELECT id FROM users WHERE phone = $1', [phone])
   if (existing.rows.length) return res.status(409).json({ error: 'Phone already registered' })
 
-  const passwordHash = password ? await bcrypt.hash(password, 12) : null
+  // password_hash is NOT NULL in the schema. When no password is provided
+  // (OTP-only signup), store a random unguessable hash so the row is valid and
+  // password login is effectively disabled until the user sets a password.
+  const passwordHash = password
+    ? await bcrypt.hash(password, 12)
+    : await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12)
   const result = await query(
     `INSERT INTO users (phone, name, email, password_hash, country_code, account_type)
      VALUES ($1, $2, $3, $4, $5, $6)
@@ -358,17 +363,20 @@ router.post('/google', async (req, res) => {
       await query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, user.id]).catch(() => {})
     }
   } else {
+    // Google users have no password — store a random hash (password_hash is
+    // NOT NULL in older schemas; see migration 009).
+    const googleHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10)
     const inserted = await query(
-      `INSERT INTO users (name, email, google_id, country_code, account_type)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO users (name, email, google_id, country_code, account_type, password_hash)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, phone, email, avatar_url, push_token, country_code, account_type`,
-      [name || email.split('@')[0], email, googleId, 'IN', type]
+      [name || email.split('@')[0], email, googleId, 'IN', type, googleHash]
     ).catch(async () => {
       return query(
-        `INSERT INTO users (name, email, country_code, account_type)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO users (name, email, country_code, account_type, password_hash)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id, name, phone, email, avatar_url, push_token, country_code, account_type`,
-        [name || email.split('@')[0], email, 'IN', type]
+        [name || email.split('@')[0], email, 'IN', type, googleHash]
       )
     })
     user = inserted.rows[0]
@@ -424,21 +432,11 @@ router.post('/register-free', async (req, res) => {
   try {
     const { phone_token, email_token, name, account_type, country_code } = req.body
 
-    if (!phone_token) return res.status(400).json({ error: 'phone_token required' })
+    // Email is the PRIMARY required verification. Phone is OPTIONAL — pass a
+    // phone_token only if the user chose to verify a phone number (SMS).
     if (!email_token) return res.status(400).json({ error: 'email_token required' })
 
-    // Verify phone_token
-    let phonePayload
-    try {
-      phonePayload = jwt.verify(phone_token, process.env.JWT_SECRET)
-    } catch (e) {
-      return res.status(401).json({ error: 'Invalid or expired phone_token' })
-    }
-    if (phonePayload.type !== 'phone_verified') {
-      return res.status(401).json({ error: 'Invalid phone token type' })
-    }
-
-    // Verify email_token
+    // Verify email_token (required)
     let emailPayload
     try {
       emailPayload = jwt.verify(email_token, process.env.JWT_SECRET)
@@ -449,7 +447,21 @@ router.post('/register-free', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email token type' })
     }
 
-    const phone = phonePayload.phone
+    // Verify phone_token (optional — only if provided)
+    let phone = null
+    if (phone_token) {
+      let phonePayload
+      try {
+        phonePayload = jwt.verify(phone_token, process.env.JWT_SECRET)
+      } catch (e) {
+        return res.status(401).json({ error: 'Invalid or expired phone_token' })
+      }
+      if (phonePayload.type !== 'phone_verified') {
+        return res.status(401).json({ error: 'Invalid phone token type' })
+      }
+      phone = phonePayload.phone
+    }
+
     const email = emailPayload.email
 
     // Validate name
@@ -469,20 +481,20 @@ router.post('/register-free', async (req, res) => {
       return res.status(400).json({ error: 'Invalid country_code' })
     }
 
-    // Check phone / email not already registered
+    // Check email (and phone, if provided) not already registered
     const existing = await query(
-      'SELECT phone, email FROM users WHERE phone = $1 OR LOWER(email) = $2',
-      [phone, email]
+      'SELECT phone, email FROM users WHERE LOWER(email) = $1 OR ($2::text IS NOT NULL AND phone = $2)',
+      [email, phone]
     )
     if (existing.rows.length) {
-      const clash = existing.rows.find(r => r.phone === phone)
+      const clash = phone && existing.rows.find(r => r.phone === phone)
       return res.status(409).json({ error: clash ? 'Phone already registered' : 'Email already registered' })
     }
 
     // Generate a random password hash (user has no password — OTP-only auth)
     const randomHash = await bcrypt.hash(require('crypto').randomBytes(32).toString('hex'), 10)
 
-    // Create user with free plan (phone + email both OTP-verified)
+    // Create user with free plan (email OTP-verified; phone optional/nullable)
     const insertResult = await query(
       `INSERT INTO users (phone, name, email, country_code, account_type, current_plan, password_hash)
        VALUES ($1, $2, $3, $4, $5, 'free', $6)
