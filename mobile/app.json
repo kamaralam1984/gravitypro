@@ -7,9 +7,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#050F08",
-    "runtimeVersion": { "policy": "appVersion" },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
-      "url": "https://u.expo.dev/aacddc46-fdbb-45a7-9f01-2dd951ffcaa5",
+      "url": "https://u.expo.dev/7b9ad9d0-b6d8-43f1-b80c-288ad4597c3e",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -53,7 +55,11 @@
         "NSCameraUsageDescription": "Gravity needs camera access to update your profile photo.",
         "NSPhotoLibraryUsageDescription": "Gravity needs photo library access to select your profile photo.",
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "remote-notification"
+        ]
       }
     },
     "plugins": [
@@ -67,7 +73,9 @@
       [
         "expo-notifications",
         {
-          "sounds": ["./assets/notification.wav"]
+          "sounds": [
+            "./assets/notification.wav"
+          ]
         }
       ],
       [
@@ -88,7 +96,11 @@
       ]
     ],
     "scheme": "gravity",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "web": {
       "bundler": "metro",
       "output": "single",
@@ -96,9 +108,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "aacddc46-fdbb-45a7-9f01-2dd951ffcaa5"
+        "projectId": "7b9ad9d0-b6d8-43f1-b80c-288ad4597c3e"
       }
     },
-    "owner": "gravitynew"
+    "owner": "gravitypro"
   }
 }
