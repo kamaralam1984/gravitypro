@@ -13,7 +13,6 @@ import Slider from '@react-native-community/slider'
 import { circleAPI, geofenceAPI } from '../services/api'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
-import { Gradients } from '../theme/colors'
 import { useTheme } from '../theme/ThemeContext'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 import * as Location from 'expo-location'
@@ -114,7 +113,7 @@ function CircleChip({ circle, active, onPress }) {
   return (
     <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
       {active && (
-        <LinearGradient colors={Gradients.button} style={StyleSheet.absoluteFill} borderRadius={20} />
+        <LinearGradient colors={c.gradients.button} style={StyleSheet.absoluteFill} borderRadius={20} />
       )}
       <Ionicons
         name="people"
@@ -412,7 +411,7 @@ export default function SafeZonesScreen() {
 
         {/* FAB on map */}
         <Pressable style={styles.fab} onPress={openCreateModal}>
-          <LinearGradient colors={Gradients.buttonHero} style={styles.fabGrad}>
+          <LinearGradient colors={c.gradients.buttonHero} style={styles.fabGrad}>
             <Ionicons name="add" size={26} color="#fff" />
           </LinearGradient>
         </Pressable>
@@ -465,7 +464,7 @@ export default function SafeZonesScreen() {
 
               {/* Title row */}
               <View style={styles.modalHeaderRow}>
-                <LinearGradient colors={Gradients.button} style={styles.modalIconBg}>
+                <LinearGradient colors={c.gradients.button} style={styles.modalIconBg}>
                   <Ionicons name="shield-checkmark-outline" size={20} color={c.accent} />
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
@@ -607,7 +606,7 @@ function EmptyZones({ onAddPress }) {
         <LinearGradient
           colors={['rgba(0,200,83,0.18)', 'rgba(10,92,53,0.08)']}
           style={styles.emptyIconRing}>
-          <LinearGradient colors={Gradients.button} style={styles.emptyIconBg}>
+          <LinearGradient colors={c.gradients.button} style={styles.emptyIconBg}>
             <Ionicons name="shield-outline" size={40} color={c.accent} />
           </LinearGradient>
         </LinearGradient>
@@ -617,7 +616,7 @@ function EmptyZones({ onAddPress }) {
         Add your first zone to get alerts{'\n'}when family members arrive or leave.
       </Text>
       <Pressable onPress={onAddPress} style={styles.emptyAddBtn}>
-        <LinearGradient colors={Gradients.buttonHero} style={styles.emptyAddBtnGrad}>
+        <LinearGradient colors={c.gradients.buttonHero} style={styles.emptyAddBtnGrad}>
           <Ionicons name="add" size={18} color="#fff" />
           <Text style={styles.emptyAddBtnText}>Add First Zone</Text>
         </LinearGradient>

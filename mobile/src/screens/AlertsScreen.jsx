@@ -20,7 +20,6 @@ import { formatDistanceToNow } from 'date-fns'
 import { GradientCard } from '../components/ui/GradientCard'
 import { circleAPI, geofenceAPI, sosAPI } from '../services/api'
 import { storage } from '../utils/storage'
-import { Gradients } from '../theme/colors'
 import { useTheme } from '../theme/ThemeContext'
 import { useAuthStore } from '../store/authStore'
 
@@ -513,7 +512,7 @@ export default function AlertsScreen() {
                 pressed && { opacity: 0.75 },
               ]}>
               {activeTab === tab ? (
-                <LinearGradient colors={Gradients.button} style={styles.tabGrad}>
+                <LinearGradient colors={c.gradients.button} style={styles.tabGrad}>
                   <Text style={styles.tabTextActive}>{tab}</Text>
                 </LinearGradient>
               ) : (

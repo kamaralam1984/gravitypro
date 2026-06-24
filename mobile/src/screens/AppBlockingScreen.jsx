@@ -19,7 +19,6 @@ import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { parentalAPI } from '../services/api'
-import { Gradients } from '../theme/colors'
 import { useTheme } from '../theme/ThemeContext'
 
 // ── App row with toggle ───────────────────────────────────────────────────────
@@ -191,7 +190,7 @@ export default function AppBlockingScreen() {
       <StatusBar style={c.statusBarStyle} />
 
       {/* Header */}
-      <LinearGradient colors={Gradients.hero} style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <LinearGradient colors={c.gradients.hero} style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={c.textPrimary} />

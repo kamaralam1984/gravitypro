@@ -2362,3 +2362,133 @@
   justify-content: center;
   backdrop-filter: blur(14px);
 }
+
+/* =====================================================================
+   LIGHT MODE OVERRIDES — premium light surfaces for the Home page.
+   Attribute selectors ([data-theme="light"]) stay global; the module
+   class names are still locally hashed, so these target the same nodes.
+   ===================================================================== */
+
+/* ---- NAV ---- */
+[data-theme="light"] .nav {
+  background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(255,255,255,0.74) 100%);
+  border-bottom: 1px solid var(--border);
+}
+[data-theme="light"] .navScrolled {
+  background: linear-gradient(180deg, var(--glass-strong) 0%, rgba(247,250,248,0.95) 100%);
+  box-shadow: 0 6px 28px rgba(10,28,18,0.08), 0 1px 0 var(--border);
+}
+[data-theme="light"] .navLogoText {
+  background: linear-gradient(90deg, var(--text) 0%, var(--accent) 50%, var(--text) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+[data-theme="light"] .navLinks a:hover { color: var(--accent); }
+[data-theme="light"] .navMobileMenu {
+  background: var(--glass-strong);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- HERO right rail / map header ---- */
+[data-theme="light"] .heroRight { border-left: 1px solid var(--border); }
+[data-theme="light"] .mapDemoTitle { color: var(--text); }
+[data-theme="light"] .mapDemoSub { color: var(--text2); }
+[data-theme="light"] .mapLiveTag,
+[data-theme="light"] .mapSidebar,
+[data-theme="light"] .memberStrip {
+  background: var(--glass-strong);
+  border-color: var(--border);
+}
+[data-theme="light"] .memberChip {
+  background: var(--bg3);
+  border-color: var(--border);
+}
+[data-theme="light"] .memberChip.active,
+[data-theme="light"] .memberChip:hover {
+  background: rgba(11,143,77,0.08);
+  border-color: rgba(11,143,77,0.3);
+}
+[data-theme="light"] .memberName { color: var(--text); }
+[data-theme="light"] .batBar { background: rgba(10,28,18,0.08); }
+[data-theme="light"] .sidebarValue { color: var(--text); }
+
+/* ---- FEATURE CARDS ---- */
+[data-theme="light"] .fc2Card {
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+  animation: none;            /* drop the dark glow pulse */
+}
+[data-theme="light"] .fc2Card:hover {
+  border-color: rgba(11,143,77,0.25);
+  box-shadow: var(--card-shadow-hover) !important;
+}
+[data-theme="light"] .fc2CardLocation { background: linear-gradient(145deg, #FFFFFF 0%, #F1FAF4 100%); }
+[data-theme="light"] .fc2CardGeo      { background: linear-gradient(145deg, #FFFFFF 0%, #EFF5FF 100%); }
+[data-theme="light"] .fc2CardFamily   { background: linear-gradient(145deg, #FFFFFF 0%, #F4F0FF 100%); }
+[data-theme="light"] .fc2CardSos2     { background: linear-gradient(145deg, #FFFFFF 0%, #FFF0F0 100%); }
+[data-theme="light"] .fc2CardBattery  { background: linear-gradient(145deg, #FFFFFF 0%, #F1FAF4 100%); }
+[data-theme="light"] .fc2CardPrivacy  { background: linear-gradient(145deg, #FFFFFF 0%, #EFF1FF 100%); }
+[data-theme="light"] .fc2Desc { color: var(--text2); }
+[data-theme="light"] .fc2Arrow {
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+/* ---- SOS SPOTLIGHT ---- */
+[data-theme="light"] .sosSpotlightSection {
+  background: linear-gradient(180deg, var(--bg3) 0%, #FFF1F1 50%, var(--bg3) 100%);
+}
+[data-theme="light"] .sosStepCard,
+[data-theme="light"] .sosTestimonial {
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+
+/* ---- FOR PARENTS / CHILDREN ---- */
+[data-theme="light"] .parentCard {
+  background: linear-gradient(145deg, #FFFFFF 0%, #F1FAF4 100%);
+  border-color: rgba(11,143,77,0.22);
+  box-shadow: var(--card-shadow);
+}
+[data-theme="light"] .childCard {
+  background: linear-gradient(145deg, #FFFFFF 0%, #EFF7FE 100%);
+  border-color: rgba(41,182,246,0.28);
+  box-shadow: var(--card-shadow);
+}
+
+/* ---- CARDS THAT ALREADY USE var(--card): add premium light shadow ---- */
+[data-theme="light"] .countryCard,
+[data-theme="light"] .painCard,
+[data-theme="light"] .testimonialCard,
+[data-theme="light"] .pricingCard,
+[data-theme="light"] .storeBadge {
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+[data-theme="light"] .countryCard:hover,
+[data-theme="light"] .testimonialCard:hover,
+[data-theme="light"] .storeBadge:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+[data-theme="light"] .pricingCard:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+[data-theme="light"] .pricingCard.popular {
+  box-shadow: 0 0 0 1px rgba(11,143,77,0.35), var(--card-shadow-hover);
+}
+[data-theme="light"] .storeBadgeName { color: var(--text); }
+[data-theme="light"] .storeBadge { color: var(--text); }
+[data-theme="light"] .pricingFeatures li.no,
+[data-theme="light"] .pricingFeatures li.no::before { color: var(--muted); }
+
+/* ---- DOWNLOAD CTA glow softened for light ---- */
+[data-theme="light"] .downloadSection {
+  background: radial-gradient(ellipse 100% 100% at 50% 100%, rgba(11,143,77,0.10) 0%, transparent 70%), var(--bg);
+}
+[data-theme="light"] .downloadBtn { color: #FFFFFF; }
+
+/* ---- FOOTER / STATS borders use brand-green tint that reads fine ---- */
+[data-theme="light"] .statsBar {
+  border-color: var(--border);
+}

@@ -1,7 +1,10 @@
 import React, { useMemo } from 'react'
-import { View, StyleSheet } from 'react-native'
+import { View, StyleSheet, useColorScheme } from 'react-native'
 import { WebView } from 'react-native-webview'
-import { useTheme } from '../theme/ThemeContext'
+import { useTheme, useThemeMode } from '../theme/ThemeContext'
+
+const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
 /**
  * FamilyMap — a self-contained Leaflet/OSM map rendered inside a WebView.
@@ -37,7 +40,9 @@ export function formatDistance(m) {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10000 ? 2 : 1)} km`
 }
 
-function buildHtml(members, zones, me, pickMode, pick) {
+function buildHtml(members, zones, me, pickMode, pick, isLight) {
+  const tileUrl = isLight ? TILE_LIGHT : TILE_DARK
+  const bg = isLight ? '#eef2f0' : '#0b0f0d'
   const data = {
     members: (members || [])
       .filter(m => m.latitude != null && m.longitude != null)
@@ -66,14 +71,14 @@ function buildHtml(members, zones, me, pickMode, pick) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
-  html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#0b0f0d}
+  html,body,#map{margin:0;padding:0;height:100%;width:100%;background:${bg}}
   .lbl{background:rgba(8,20,14,.9);color:#7CFFB2;border:1px solid #1f6e44;border-radius:6px;
        padding:1px 6px;font:600 11px system-ui;white-space:nowrap}
   .dlbl{background:rgba(8,20,14,.92);color:#FFD27C;border:1px solid #7a5a1e;border-radius:8px;
         padding:1px 7px;font:700 11px system-ui;white-space:nowrap}
   .plbl{background:rgba(6,16,28,.92);color:#67E8F9;border:1px solid #1e6a7a;border-radius:8px;
         padding:1px 7px;font:700 11px system-ui;white-space:nowrap}
-  .leaflet-tile{filter:brightness(.85)}
+  .leaflet-tile{filter:brightness(${isLight ? '1' : '.85'})}
 </style></head><body><div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -85,7 +90,7 @@ function buildHtml(members, zones, me, pickMode, pick) {
   function fmt(m){return m<1000?Math.round(m)+' m':(m/1000).toFixed(m<10000?2:1)+' km';}
 
   var map = L.map('map',{zoomControl:true,attributionControl:false}).setView([20.59,78.96],4);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+  L.tileLayer('${tileUrl}',{maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'}).addTo(map);
 
   var bounds=[];
 
@@ -187,10 +192,14 @@ export default function FamilyMap({
   style,
 }) {
   const c = useTheme()
-  const styles = useMemo(() => makeStyles(c), [c])
+  const { mode } = useThemeMode()
+  const systemScheme = useColorScheme()
+  // Mirror ThemeContext.resolveColors so 'system' picks the OS scheme.
+  const isLight = (mode === 'system' ? (systemScheme || 'dark') : mode) === 'light'
+  const styles = useMemo(() => makeStyles(c, isLight), [c, isLight])
   const html = useMemo(
-    () => buildHtml(members, zones, me, pickMode, pick),
-    [members, zones, me, pickMode, pick]
+    () => buildHtml(members, zones, me, pickMode, pick, isLight),
+    [members, zones, me, pickMode, pick, isLight]
   )
   const handleMessage = (e) => {
     if (!onPickLocation) return
@@ -220,7 +229,10 @@ export default function FamilyMap({
   )
 }
 
-const makeStyles = (c) => StyleSheet.create({
-  wrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: c.border, backgroundColor: '#0b0f0d' },
-  web: { flex: 1, backgroundColor: '#0b0f0d' },
-})
+const makeStyles = (c, isLight) => {
+  const bg = isLight ? '#eef2f0' : '#0b0f0d'
+  return StyleSheet.create({
+    wrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: c.border, backgroundColor: bg },
+    web: { flex: 1, backgroundColor: bg },
+  })
+}

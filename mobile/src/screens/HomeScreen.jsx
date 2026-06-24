@@ -19,7 +19,6 @@ import { useAuthStore } from '../store/authStore'
 import { MemberAvatar } from '../components/MemberAvatar'
 import { BatteryIndicator } from '../components/BatteryIndicator'
 import { userAPI, circleAPI, sosAPI, geofenceAPI } from '../services/api'
-import { Gradients } from '../theme/colors'
 import { useTheme } from '../theme/ThemeContext'
 import { getCurrentLocation } from '../services/location'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
@@ -68,7 +67,7 @@ function StatCard({ icon, label, value, loading, onPress }) {
   const Wrap = onPress ? Pressable : View
   return (
     <Wrap style={styles.statCard} onPress={onPress}>
-      <LinearGradient colors={Gradients.card} style={styles.statGrad}>
+      <LinearGradient colors={c.gradients.card} style={styles.statGrad}>
         <Text style={styles.statIcon}>{icon}</Text>
         {loading ? (
           <Shimmer style={{ width: 44, height: 22, marginVertical: 4 }} />

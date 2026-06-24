@@ -14,7 +14,6 @@ import * as Clipboard from 'expo-clipboard'
 import { circleAPI } from '../services/api'
 import { useCircleStore } from '../store/circleStore'
 import { useAuthStore } from '../store/authStore'
-import { Gradients } from '../theme/colors'
 import { useTheme } from '../theme/ThemeContext'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
@@ -224,7 +223,7 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
       <GradientCard style={styles.circleCard}>
         {/* Card header — tap to expand */}
         <Pressable onPress={toggleExpand} style={styles.circleCardHeader}>
-          <LinearGradient colors={Gradients.button} style={styles.circleIconBg}>
+          <LinearGradient colors={c.gradients.button} style={styles.circleIconBg}>
             <Ionicons name="shield-checkmark" size={22} color={c.accent} />
           </LinearGradient>
 
@@ -527,7 +526,7 @@ export default function CirclesScreen() {
       <Pressable
         onPress={isChild ? openJoin : openFABSheet}
         style={[styles.fab, { bottom: insets.bottom + 88 }]}>
-        <LinearGradient colors={Gradients.buttonHero} style={styles.fabGrad}>
+        <LinearGradient colors={c.gradients.buttonHero} style={styles.fabGrad}>
           <Ionicons name="add" size={28} color="#fff" />
         </LinearGradient>
       </Pressable>
@@ -550,7 +549,7 @@ export default function CirclesScreen() {
               {!isChild && (
                 <>
                   <Pressable onPress={openCreate} style={styles.sheetOption}>
-                    <LinearGradient colors={Gradients.button} style={styles.sheetOptionIcon}>
+                    <LinearGradient colors={c.gradients.button} style={styles.sheetOptionIcon}>
                       <Ionicons name="add-circle" size={22} color={c.accent} />
                     </LinearGradient>
                     <View style={styles.sheetOptionText}>
@@ -586,7 +585,7 @@ export default function CirclesScreen() {
           <GradientCard style={styles.modal}>
             <View style={styles.modalHandle} />
             <View style={styles.modalTitleRow}>
-              <LinearGradient colors={Gradients.button} style={styles.modalIconBg}>
+              <LinearGradient colors={c.gradients.button} style={styles.modalIconBg}>
                 <Ionicons name="people" size={20} color={c.accent} />
               </LinearGradient>
               <View>
@@ -708,7 +707,7 @@ function EmptyState({ onCreatePress, onJoinPress, isChild }) {
     <View style={styles.emptyBox}>
       <Animated.View style={[styles.emptyIllustration, { transform: [{ translateY: floatAnim }] }]}>
         <LinearGradient colors={['rgba(0,200,83,0.2)', 'rgba(10,92,53,0.1)']} style={styles.emptyIconRing}>
-          <LinearGradient colors={Gradients.button} style={styles.emptyIconBg}>
+          <LinearGradient colors={c.gradients.button} style={styles.emptyIconBg}>
             <Ionicons name="people" size={44} color={c.accent} />
           </LinearGradient>
         </LinearGradient>

@@ -2,7 +2,6 @@ import React, { useRef, useMemo } from 'react'
 import { Pressable, Text, StyleSheet, Animated, View, Platform } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
-import { Gradients } from '../../theme/colors'
 import { useTheme } from '../../theme/ThemeContext'
 
 export const PremiumButton = ({ title, onPress, variant = 'primary', loading, disabled, style, icon }) => {
@@ -27,7 +26,7 @@ export const PremiumButton = ({ title, onPress, variant = 'primary', loading, di
   }
 
   const gradients = {
-    primary: Gradients.buttonHero,
+    primary: c.gradients.buttonHero,
     secondary: [c.bgCard, c.bgCardLight],
     ghost: ['transparent', 'transparent'],
   }

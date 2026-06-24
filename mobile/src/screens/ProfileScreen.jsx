@@ -18,7 +18,6 @@ import { stopBackgroundTracking } from '../services/location'
 import { registerForPushNotifications } from '../services/notifications'
 import { promptAndUpdate } from '../services/appUpdates'
 import { GradientCard } from '../components/ui/GradientCard'
-import { Gradients } from '../theme/colors'
 import { useTheme, useThemeMode } from '../theme/ThemeContext'
 
 export default function ProfileScreen() {
@@ -296,11 +295,11 @@ export default function ProfileScreen() {
               {user?.avatar_url ? (
                 <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
               ) : (
-                <LinearGradient colors={Gradients.button} style={styles.avatarPlaceholder}>
+                <LinearGradient colors={c.gradients.button} style={styles.avatarPlaceholder}>
                   <Text style={styles.avatarInitials}>{initials}</Text>
                 </LinearGradient>
               )}
-              <LinearGradient colors={Gradients.buttonHero} style={styles.avatarEditBadge}>
+              <LinearGradient colors={c.gradients.buttonHero} style={styles.avatarEditBadge}>
                 {uploadingAvatar
                   ? <ActivityIndicator size="small" color="#fff" />
                   : <Ionicons name="camera" size={14} color="#fff" />

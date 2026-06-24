@@ -13,7 +13,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { timelineAPI } from '../services/api'
-import { Gradients } from '../theme/colors'
 import { useTheme } from '../theme/ThemeContext'
 import { formatDistance } from '../components/FamilyMap'
 
@@ -161,7 +160,7 @@ function DaySummary({ summary }) {
   const styles = useMemo(() => makeStyles(c), [c])
   if (!summary) return null
   return (
-    <LinearGradient colors={Gradients.card} style={styles.summaryCard}>
+    <LinearGradient colors={c.gradients.card} style={styles.summaryCard}>
       <SummaryStat
         icon="navigate"
         value={formatDistance(summary.totalDistanceMeters || 0)}
@@ -211,7 +210,7 @@ function StayCard({ seg, isFirst, isLast }) {
         </View>
         <View style={[styles.railLine, isLast && styles.railLineHidden]} />
       </View>
-      <LinearGradient colors={Gradients.card} style={styles.stayCard}>
+      <LinearGradient colors={c.gradients.card} style={styles.stayCard}>
         <Text style={styles.stayTitle} numberOfLines={1}>📍 {title}</Text>
         <Text style={styles.staySub}>
           {formatDuration(seg.durationSec)}
@@ -331,7 +330,7 @@ export default function ChildTimelineScreen({ route, navigation }) {
       <StatusBar style={c.statusBarStyle} />
 
       <LinearGradient
-        colors={Gradients.hero}
+        colors={c.gradients.hero}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: insets.top + 12 }]}>

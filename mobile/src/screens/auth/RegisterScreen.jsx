@@ -10,7 +10,6 @@ import * as Haptics from 'expo-haptics'
 import { authAPI } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { PremiumButton } from '../../components/ui/PremiumButton'
-import { Gradients } from '../../theme/colors'
 import { useTheme } from '../../theme/ThemeContext'
 
 const OTP_LENGTH = 6
@@ -270,14 +269,14 @@ export default function RegisterScreen({ navigation }) {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <LinearGradient colors={Gradients.hero} style={{ flex: 1 }}>
+    <LinearGradient colors={c.gradients.hero} style={{ flex: 1 }}>
       <StatusBar style={c.statusBarStyle} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           {/* Header */}
           <View style={styles.header}>
-            <LinearGradient colors={Gradients.buttonHero} style={styles.logoCircle}>
+            <LinearGradient colors={c.gradients.buttonHero} style={styles.logoCircle}>
               <Ionicons name="people" size={36} color="#fff" />
             </LinearGradient>
             <Text style={styles.brand}>Join Gravity</Text>

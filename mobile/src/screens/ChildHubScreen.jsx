@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
-import { Gradients } from '../theme/colors'
 import { useTheme } from '../theme/ThemeContext'
 
 const ACTIONS = [
@@ -40,7 +39,7 @@ export default function ChildHubScreen() {
             key={a.key}
             onPress={() => navigation.navigate(a.key, { member })}
             style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}>
-            <LinearGradient colors={Gradients.card} style={styles.cardGrad}>
+            <LinearGradient colors={c.gradients.card} style={styles.cardGrad}>
               <View style={styles.iconWrap}>
                 <Ionicons name={a.icon} size={24} color={c.accent} />
               </View>

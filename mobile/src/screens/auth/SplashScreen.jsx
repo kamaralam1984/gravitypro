@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { StatusBar } from 'expo-status-bar'
 import { Ionicons } from '@expo/vector-icons'
-import { Gradients } from '../../theme/colors'
 import { useTheme } from '../../theme/ThemeContext'
 
 const { width, height } = Dimensions.get('window')
@@ -43,14 +42,14 @@ export default function SplashScreen({ onComplete }) {
   }, [])
 
   return (
-    <LinearGradient colors={Gradients.hero} style={styles.container}>
+    <LinearGradient colors={c.gradients.hero} style={styles.container}>
       <StatusBar style={c.statusBarStyle} />
       <View style={styles.center}>
         <View style={styles.logoWrapper}>
           <Animated.View style={[styles.ring, { transform: [{ scale: ring1Scale }], opacity: ring1Opacity }]} />
           <Animated.View style={[styles.ring2, { transform: [{ scale: ring2Scale }], opacity: ring2Opacity }]} />
           <Animated.View style={[styles.logoCircle, { transform: [{ scale: logoScale }], opacity: logoOpacity }]}>
-            <LinearGradient colors={Gradients.buttonHero} style={styles.logoGradient}>
+            <LinearGradient colors={c.gradients.buttonHero} style={styles.logoGradient}>
               <Ionicons name="location" size={52} color="#fff" />
             </LinearGradient>
           </Animated.View>
