@@ -16,8 +16,6 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/pricing" element={<Navigate to="/" replace />} />
-        <Route path="/checkout" element={<Navigate to="/" replace />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/share" element={<Share />} />

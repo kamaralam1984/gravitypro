@@ -501,7 +501,7 @@ export default function Login() {
     )
   }
 
-  // ── PLAN STEP LABELS ─────────────────────────────────────────
+  // ── REGISTRATION STEP LABELS ─────────────────────────────────
   const regStepLabel: Record<RegStep, string> = {
     1: 'Phone Number',
     2: 'Verify Phone',

@@ -8,9 +8,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import { useTheme } from '../theme/ThemeContext'
 
 const ACTIONS = [
-  { key: 'ChildTimeline',   icon: 'map',            title: 'Location Timeline', desc: 'Where they went, stays & trips by day' },
-  { key: 'ChildScreenTime', icon: 'phone-portrait', title: 'Screen Time',       desc: 'Apps used today and for how long' },
-  { key: 'AppBlocking',     icon: 'lock-closed',    title: 'App Blocking',      desc: 'Block apps until you allow them' },
+  { key: 'ChildTimeline', icon: 'map', title: 'Location Timeline', desc: 'Where they went, stays & trips by day' },
 ]
 
 export default function ChildHubScreen() {

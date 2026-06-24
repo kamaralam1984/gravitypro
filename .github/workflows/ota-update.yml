@@ -24,11 +24,19 @@ jobs:
         working-directory: mobile
         run: npm ci
 
-      - name: Publish OTA update to channel "production"
+      # Publish to BOTH channels so the update reaches every installed app:
+      # the public APK is built with the "preview" profile (channel "preview"),
+      # while "production" covers any store/production-channel installs. Either
+      # channel having no matching builds is harmless.
+      - name: Publish OTA update to channels "preview" and "production"
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
+          npx --yes eas-cli update \
+            --channel preview \
+            --message "${{ github.event.head_commit.message }}" \
+            --non-interactive
           npx --yes eas-cli update \
             --channel production \
             --message "${{ github.event.head_commit.message }}" \

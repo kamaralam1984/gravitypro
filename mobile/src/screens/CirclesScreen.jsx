@@ -67,7 +67,7 @@ function MemberRow({ member, isAdmin, onRemove }) {
   const lastSeen = member.location_updated_at
   const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000) : false
   const battery = member.battery_level
-  // Tapping a child opens the parental-controls hub (timeline / screen-time / blocking).
+  // Tapping a child opens the child hub (location timeline).
   const openHub = isParent ? undefined : () => navigation.navigate('ChildHub', { member })
 
   return (

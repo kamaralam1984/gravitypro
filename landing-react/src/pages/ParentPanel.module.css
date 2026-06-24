@@ -978,19 +978,6 @@
 }
 .settingsUserName { font-size: 17px; font-weight: 800; color: #fff; margin-bottom: 2px; }
 .settingsUserEmail { font-size: 12px; color: #5E8B6E; margin-bottom: 8px; line-height: 1.4; }
-.settingsPlanBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  font-weight: 800;
-  color: #00E676;
-  background: rgba(0,230,118,0.1);
-  border: 1px solid rgba(0,230,118,0.25);
-  padding: 3px 10px;
-  border-radius: 20px;
-  letter-spacing: 0.5px;
-}
 
 .settingsGroups {
   padding: 0 16px;

@@ -128,20 +128,4 @@ export const timelineAPI = {
   getDay: (userId, date) => api.get(`/timeline/${userId}?date=${encodeURIComponent(date)}`),
 }
 
-// ── Parental controls ─────────────────────────────────────────────────────────
-// Screen-time (app usage) + app blocking for a child member.
-//   getAppUsage(childId, 'YYYY-MM-DD') -> [{ package_name, app_label, foreground_seconds, opens }]
-//   getBlockedApps(childId) -> { apps: [{ package_name, app_label, blocked }] }
-//   setBlockedApps(childId, apps) -> updates the child's blocked-app list
-//   getMyBlockedApps() -> current (child) device's own blocked apps
-//   reportAppUsage(date, apps) -> child device reports its usage for a day
-export const parentalAPI = {
-  getAppUsage: (childId, date) =>
-    api.get(`/parental/app-usage/${childId}?date=${encodeURIComponent(date)}`),
-  getBlockedApps: (childId) => api.get(`/parental/blocked-apps/${childId}`),
-  setBlockedApps: (childId, apps) => api.put(`/parental/blocked-apps/${childId}`, { apps }),
-  getMyBlockedApps: () => api.get('/parental/blocked-apps'),
-  reportAppUsage: (date, apps) => api.post('/parental/app-usage', { date, apps }),
-}
-
 export default api

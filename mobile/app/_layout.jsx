@@ -13,7 +13,6 @@ import MainNavigator from '../src/navigation/MainNavigator'
 import UpdateBanner from '../src/components/ui/UpdateBanner'
 import { registerForPushNotifications } from '../src/services/notifications'
 import { syncOfflineLocations, reportBatteryLevel, startBackgroundTracking } from '../src/services/location'
-import { runChildParentalSync } from '../src/services/parentalControl'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext'
 
 const queryClient = new QueryClient()
@@ -36,7 +35,6 @@ export default function RootLayout() {
   const initialize = useAuthStore(s => s.initialize)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const isLoading = useAuthStore(s => s.isLoading)
-  const accountType = useAuthStore(s => s.user?.account_type)
   const appState = useRef(AppState.currentState)
 
   useEffect(() => {
@@ -75,21 +73,6 @@ export default function RootLayout() {
     if (!isAuthenticated) return
     startBackgroundTracking().catch(e => console.warn('Background tracking not started', e?.message))
   }, [isAuthenticated])
-
-  // Child devices: report app-usage (screen time) and apply the blocked-app list.
-  // Runs on login, on every foreground, and every 15 min while the app is open.
-  // No-ops on parent devices / builds without the native parental modules.
-  useEffect(() => {
-    if (!isAuthenticated || accountType !== 'child') return
-    runChildParentalSync()
-    const sub = AppState.addEventListener('change', next => {
-      if (appState.current.match(/inactive|background/) && next === 'active') {
-        runChildParentalSync()
-      }
-    })
-    const interval = setInterval(runChildParentalSync, 15 * 60 * 1000)
-    return () => { sub.remove(); clearInterval(interval) }
-  }, [isAuthenticated, accountType])
 
   // Sync offline location queue whenever app comes to foreground
   useEffect(() => {

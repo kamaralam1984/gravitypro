@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { useAuthStore } from '../store/authStore'
 import { MemberAvatar } from '../components/MemberAvatar'
-import ChildParentalSetup from '../components/ChildParentalSetup'
 import { BatteryIndicator } from '../components/BatteryIndicator'
 import { userAPI, circleAPI, sosAPI, geofenceAPI } from '../services/api'
 import { useTheme } from '../theme/ThemeContext'
@@ -354,9 +353,6 @@ export default function HomeScreen() {
             )}
           </View>
         </LinearGradient>
-
-        {/* ── Child-device parental controls setup (renders only when needed) ── */}
-        <ChildParentalSetup />
 
         {/* ── Today's Activity ── */}
         <View style={styles.section}>
