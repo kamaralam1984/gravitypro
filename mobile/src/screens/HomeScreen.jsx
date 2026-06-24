@@ -60,9 +60,10 @@ function Shimmer({ style }) {
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 
-function StatCard({ icon, label, value, loading }) {
+function StatCard({ icon, label, value, loading, onPress }) {
+  const Wrap = onPress ? Pressable : View
   return (
-    <View style={styles.statCard}>
+    <Wrap style={styles.statCard} onPress={onPress}>
       <LinearGradient colors={Gradients.card} style={styles.statGrad}>
         <Text style={styles.statIcon}>{icon}</Text>
         {loading ? (
@@ -72,7 +73,7 @@ function StatCard({ icon, label, value, loading }) {
         )}
         <Text style={styles.statLabel}>{label}</Text>
       </LinearGradient>
-    </View>
+    </Wrap>
   )
 }
 
@@ -361,6 +362,7 @@ export default function HomeScreen() {
               label="Safe Zones"
               value={stats?.safeZones != null ? String(stats.safeZones) : '—'}
               loading={statsLoading}
+              onPress={() => navigation.navigate('SafeZones')}
             />
             <StatCard
               icon="👥"

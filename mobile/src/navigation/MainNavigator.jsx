@@ -5,6 +5,7 @@ import ChildHubScreen from '../screens/ChildHubScreen'
 import ChildTimelineScreen from '../screens/ChildTimelineScreen'
 import ChildScreenTimeScreen from '../screens/ChildScreenTimeScreen'
 import AppBlockingScreen from '../screens/AppBlockingScreen'
+import SafeZonesScreen from '../screens/SafeZonesScreen'
 
 const Stack = createStackNavigator()
 
@@ -18,6 +19,7 @@ export default function MainNavigator() {
       <Stack.Screen name="ChildTimeline" component={ChildTimelineScreen} />
       <Stack.Screen name="ChildScreenTime" component={ChildScreenTimeScreen} />
       <Stack.Screen name="AppBlocking" component={AppBlockingScreen} />
+      <Stack.Screen name="SafeZones" component={SafeZonesScreen} />
     </Stack.Navigator>
   )
 }
