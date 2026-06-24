@@ -28,7 +28,11 @@ app.use(cors({
 app.use(morgan('combined'))
 app.use(express.json({ limit: '10mb' }))
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000, standardHeaders: true, legacyHeaders: false })
+// Generous per-IP limit: a whole family (parent + several children) usually
+// shares ONE public IP (home WiFi / carrier NAT), and every device reports its
+// location every few seconds — so a low limit would 429 legitimate families.
+// 12000 / 15 min (~800/min per IP) leaves big headroom while still blocking abuse.
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 12000, standardHeaders: true, legacyHeaders: false })
 app.use('/api/', limiter)
 
 // Routes
