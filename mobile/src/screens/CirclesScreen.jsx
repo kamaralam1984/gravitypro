@@ -517,7 +517,7 @@ export default function CirclesScreen() {
       {/* FAB — child can only Join, so open the Join modal directly */}
       <Pressable
         onPress={isChild ? openJoin : openFABSheet}
-        style={[styles.fab, { bottom: insets.bottom + 24 }]}>
+        style={[styles.fab, { bottom: insets.bottom + 88 }]}>
         <LinearGradient colors={Gradients.buttonHero} style={styles.fabGrad}>
           <Ionicons name="add" size={28} color="#fff" />
         </LinearGradient>
