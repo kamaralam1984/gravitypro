@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics'
 import * as Clipboard from 'expo-clipboard'
 import { circleAPI } from '../services/api'
 import { useCircleStore } from '../store/circleStore'
+import { useAuthStore } from '../store/authStore'
 import { Colors, Gradients } from '../theme/colors'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
@@ -327,6 +328,8 @@ export default function CirclesScreen() {
   const insets = useSafeAreaInsets()
   const removeCircleFromStore = useCircleStore(s => s.removeCircle)
   const setStoreCircles = useCircleStore(s => s.setCircles)
+  // Only a parent can CREATE/manage a circle; a child can only JOIN one.
+  const isChild = useAuthStore(s => s.user?.account_type) === 'child'
   const [circles, setCircles] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -422,6 +425,7 @@ export default function CirclesScreen() {
   }
 
   const handleCreateCircle = async () => {
+    if (isChild) { setError('Only a parent can create a circle. Ask your parent for the invite code to join.'); return }
     if (!circleName.trim()) { setError('Circle name is required'); return }
     setActionLoading(true)
     setError('')
@@ -493,7 +497,7 @@ export default function CirclesScreen() {
             <Text style={styles.loadingText}>Loading circles…</Text>
           </View>
         ) : circles.length === 0 ? (
-          <EmptyState onCreatePress={openCreate} onJoinPress={openJoin} />
+          <EmptyState onCreatePress={openCreate} onJoinPress={openJoin} isChild={isChild} />
         ) : (
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
             {circles.map((circle, index) => (
@@ -510,9 +514,9 @@ export default function CirclesScreen() {
         )}
       </ScrollView>
 
-      {/* FAB */}
+      {/* FAB — child can only Join, so open the Join modal directly */}
       <Pressable
-        onPress={openFABSheet}
+        onPress={isChild ? openJoin : openFABSheet}
         style={[styles.fab, { bottom: insets.bottom + 24 }]}>
         <LinearGradient colors={Gradients.buttonHero} style={styles.fabGrad}>
           <Ionicons name="add" size={28} color="#fff" />
@@ -534,18 +538,22 @@ export default function CirclesScreen() {
               <Text style={styles.sheetTitle}>Add a Circle</Text>
               <Text style={styles.sheetSubtitle}>Create a new group or join an existing one</Text>
 
-              <Pressable onPress={openCreate} style={styles.sheetOption}>
-                <LinearGradient colors={Gradients.button} style={styles.sheetOptionIcon}>
-                  <Ionicons name="add-circle" size={22} color={Colors.accent} />
-                </LinearGradient>
-                <View style={styles.sheetOptionText}>
-                  <Text style={styles.sheetOptionTitle}>Create Circle</Text>
-                  <Text style={styles.sheetOptionDesc}>Start a new family group</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-              </Pressable>
+              {!isChild && (
+                <>
+                  <Pressable onPress={openCreate} style={styles.sheetOption}>
+                    <LinearGradient colors={Gradients.button} style={styles.sheetOptionIcon}>
+                      <Ionicons name="add-circle" size={22} color={Colors.accent} />
+                    </LinearGradient>
+                    <View style={styles.sheetOptionText}>
+                      <Text style={styles.sheetOptionTitle}>Create Circle</Text>
+                      <Text style={styles.sheetOptionDesc}>Start a new family group</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+                  </Pressable>
 
-              <View style={styles.sheetDivider} />
+                  <View style={styles.sheetDivider} />
+                </>
+              )}
 
               <Pressable onPress={openJoin} style={styles.sheetOption}>
                 <LinearGradient colors={['#0A5C35', '#063D22']} style={styles.sheetOptionIcon}>
@@ -673,7 +681,7 @@ export default function CirclesScreen() {
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
-function EmptyState({ onCreatePress, onJoinPress }) {
+function EmptyState({ onCreatePress, onJoinPress, isChild }) {
   const floatAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -695,18 +703,20 @@ function EmptyState({ onCreatePress, onJoinPress }) {
         </LinearGradient>
       </Animated.View>
 
-      <Text style={styles.emptyTitle}>Create your family circle</Text>
+      <Text style={styles.emptyTitle}>{isChild ? 'Join your family circle' : 'Create your family circle'}</Text>
       <Text style={styles.emptyText}>
         Connect with your family and friends.{'\n'}Share locations, stay safe together.
       </Text>
 
       <View style={styles.emptyActions}>
-        <PremiumButton
-          title="Create Circle"
-          onPress={onCreatePress}
-          icon={<Ionicons name="add-circle" size={18} color="#fff" />}
-          style={{ flex: 1 }}
-        />
+        {!isChild && (
+          <PremiumButton
+            title="Create Circle"
+            onPress={onCreatePress}
+            icon={<Ionicons name="add-circle" size={18} color="#fff" />}
+            style={{ flex: 1 }}
+          />
+        )}
         <Pressable onPress={onJoinPress} style={styles.emptyJoinBtn}>
           <Ionicons name="enter-outline" size={18} color={Colors.accent} />
           <Text style={styles.emptyJoinText}>Join with Code</Text>
