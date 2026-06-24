@@ -50,11 +50,11 @@ jobs:
       VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install mobile dependencies
         working-directory: mobile
@@ -94,7 +94,7 @@ jobs:
       # even without VPS secrets you can grab it and copy it to the VPS manually:
       #   scp GravityPro.apk VPS_USER@VPS_HOST:$REMOTE_PATH
       - name: Upload APK as a workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: GravityPro-apk
           path: GravityPro.apk
