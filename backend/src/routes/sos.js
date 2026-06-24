@@ -2,6 +2,7 @@ const router = require('express').Router()
 const { query } = require('../config/db')
 const { authenticate } = require('../middleware/auth')
 const { sendToCircleMembers } = require('../services/sse')
+const { sendSms } = require('../services/sms')
 
 // POST /api/v1/sos — trigger SOS alert
 router.post('/', authenticate, async (req, res) => {
@@ -51,9 +52,9 @@ router.post('/', authenticate, async (req, res) => {
   } catch {}
   // ── Also notify the raiser's emergency contacts ──────────────────────────────
   // Emergency contacts are free-form (name/phone/relation) and have no push
-  // tokens of their own. We (a) log each one, and (b) if a contact's phone
-  // matches a registered user who has a push token, send them a push too.
-  // (No SMS gateway util exists in this codebase yet — see integration notes.)
+  // tokens of their own. We (a) log each one, (b) send each an SMS via the
+  // pluggable SMS gateway (no-ops if no provider is configured), and (c) if a
+  // contact's phone matches a registered user who has a push token, push them too.
   try {
     const contacts = await query(
       'SELECT name, phone, relation FROM emergency_contacts WHERE owner_user_id = $1',
@@ -63,6 +64,17 @@ router.post('/', authenticate, async (req, res) => {
       console.log(
         `[SOS] Notifying ${contacts.rows.length} emergency contact(s) for user ${userId}:`,
         contacts.rows.map(c => `${c.name}${c.phone ? ' <' + c.phone + '>' : ''}`).join(', ')
+      )
+      // Best-effort SMS to each emergency contact with a phone number.
+      const raiserName = sosData.userName || 'Someone'
+      const mapsLink = (latitude && longitude)
+        ? ` Location: https://maps.google.com/?q=${latitude},${longitude}`
+        : ''
+      const smsMsg = `🆘 SOS from ${raiserName}: ${sosData.message}${mapsLink}`
+      await Promise.allSettled(
+        contacts.rows
+          .filter(c => c.phone)
+          .map(c => sendSms(c.phone, smsMsg))
       )
       const phones = contacts.rows.map(c => c.phone).filter(Boolean)
       if (phones.length) {

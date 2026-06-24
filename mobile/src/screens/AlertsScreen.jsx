@@ -29,7 +29,36 @@ const SSE_URL =
   (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') +
   '/api/v1/sse/stream'
 
-const TABS = ['All', 'SOS', 'Geofence']
+const TABS = ['All', 'SOS', 'Geofence', 'Device']
+
+// Device-health alert presentation map (event_type -> icon/label/color)
+const DEVICE_ALERTS = {
+  battery_low: {
+    icon: 'battery-dead-outline',
+    emoji: '🔋',
+    badge: 'BATTERY LOW',
+    color: '#FF8F00', // amber
+    iconBg: 'rgba(255,143,0,0.14)',
+    label: (name, item) =>
+      `${name} battery low${item.battery != null ? ` (${item.battery}%)` : ''}`,
+  },
+  gps_off: {
+    icon: 'warning-outline',
+    emoji: '⚠️',
+    badge: 'GPS OFF',
+    color: '#FFB300', // warning yellow
+    iconBg: 'rgba(255,179,0,0.14)',
+    label: (name) => `${name} turned off location`,
+  },
+  device_offline: {
+    icon: 'cloud-offline-outline',
+    emoji: '📵',
+    badge: 'OFFLINE',
+    color: '#9E9E9E', // muted grey
+    iconBg: 'rgba(158,158,158,0.16)',
+    label: (name) => `${name} went offline`,
+  },
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -207,6 +236,54 @@ function GeofenceCard({ item, index }) {
   )
 }
 
+// ── Device Health Card ────────────────────────────────────────────────────────
+
+function DeviceCard({ item, index }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
+  const slideAnim = useRef(new Animated.Value(24)).current
+  const fadeAnim  = useRef(new Animated.Value(0)).current
+
+  const cfg = DEVICE_ALERTS[item.event_type] || DEVICE_ALERTS.device_offline
+  const name = item.user_name || 'A member'
+
+  useEffect(() => {
+    const delay = Math.min(index * 60, 300)
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, tension: 80, friction: 10, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start()
+    }, delay)
+  }, [])
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 12 }}>
+      <View style={[styles.geoCard]}>
+        <View style={[styles.leftBorder, { backgroundColor: cfg.color }]} />
+        <View style={styles.cardInner}>
+          <View style={styles.geoRow}>
+            <View style={[styles.geoIconWrap, { backgroundColor: cfg.iconBg }]}>
+              <Ionicons name={cfg.icon} size={18} color={cfg.color} />
+            </View>
+            <View style={styles.geoBody}>
+              <Text style={styles.senderName}>{name}</Text>
+              <Text style={styles.geoDesc}>{cfg.emoji} {cfg.label(name, item)}</Text>
+            </View>
+            <View style={styles.geoRight}>
+              <View style={[styles.geoTypeBadge, { backgroundColor: cfg.iconBg }]}>
+                <Ionicons name={cfg.icon} size={12} color={cfg.color} />
+                <Text style={[styles.geoTypeBadgeText, { color: cfg.color }]}>{cfg.badge}</Text>
+              </View>
+              <Text style={styles.alertTime}>{safeTimeAgo(item.created_at)}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Animated.View>
+  )
+}
+
 // ── Flash Banner ──────────────────────────────────────────────────────────────
 
 function FlashBanner({ banner, insetTop }) {
@@ -227,7 +304,16 @@ function FlashBanner({ banner, insetTop }) {
   if (!banner) return null
 
   const isSos = banner.type === 'sos'
-  const bg = isSos ? c.danger : banner.eventType === 'exit' ? c.warning : c.success
+  const isDevice = banner.type === 'device'
+  const deviceCfg = isDevice ? (DEVICE_ALERTS[banner.eventType] || DEVICE_ALERTS.device_offline) : null
+  const bg = isSos
+    ? c.danger
+    : isDevice
+      ? deviceCfg.color
+      : banner.eventType === 'exit'
+        ? c.warning
+        : c.success
+  const bannerIcon = isSos ? 'warning' : isDevice ? deviceCfg.icon : 'notifications'
 
   return (
     <Animated.View
@@ -236,7 +322,7 @@ function FlashBanner({ banner, insetTop }) {
         { top: insetTop, backgroundColor: bg, transform: [{ translateY: slideAnim }] },
       ]}
       pointerEvents="none">
-      <Ionicons name={isSos ? 'warning' : 'notifications'} size={20} color="#fff" />
+      <Ionicons name={bannerIcon} size={20} color="#fff" />
       <View style={styles.flashTextWrap}>
         <Text style={styles.flashTitle}>{banner.title}</Text>
         <Text style={styles.flashBody} numberOfLines={1}>{banner.body}</Text>
@@ -254,6 +340,7 @@ function EmptyState({ tab }) {
     All:      { icon: 'notifications-off-outline', title: 'No alerts yet',          body: 'SOS alerts and geofence events will appear here.' },
     SOS:      { icon: 'warning-outline',           title: 'No SOS alerts',           body: 'Emergency SOS alerts from your family will show up here.' },
     Geofence: { icon: 'map-outline',               title: 'No geofence events',      body: 'Entry and exit events for your safe zones appear here.' },
+    Device:   { icon: 'phone-portrait-outline',    title: 'No device alerts',        body: 'Low battery, location-off, and offline alerts appear here.' },
   }[tab] || {}
   return (
     <View style={styles.emptyBox}>
@@ -276,6 +363,7 @@ export default function AlertsScreen() {
   const [sendingSafe, setSendingSafe] = useState(false)
   const [sosItems, setSosItems]         = useState([])
   const [geoItems, setGeoItems]         = useState([])
+  const [deviceItems, setDeviceItems]   = useState([])
   const [activeTab, setActiveTab]       = useState('All')
   const [loading, setLoading]           = useState(true)
   const [refreshing, setRefreshing]     = useState(false)
@@ -411,6 +499,34 @@ export default function AlertsScreen() {
       }
     })
 
+    es.addEventListener('device_alert', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        const eventType = data.event_type || data.alertType
+        const name = data.name || data.user_name || 'A member'
+        const cfg = DEVICE_ALERTS[eventType] || DEVICE_ALERTS.device_offline
+        const newItem = {
+          id: String(data.userId || data.user_id || '') + '-' + (data.created_at || Date.now()),
+          user_id: data.userId || data.user_id,
+          user_name: name,
+          event_type: eventType,
+          battery: data.battery,
+          created_at: data.created_at || data.timestamp || new Date().toISOString(),
+        }
+        setDeviceItems(prev => [newItem, ...prev])
+        bannerKey.current += 1
+        setBanner({
+          key: bannerKey.current,
+          type: 'device',
+          eventType,
+          title: data.title || cfg.label(name, newItem),
+          body: data.body || cfg.badge,
+        })
+      } catch (err) {
+        console.error('SSE device_alert parse error', err)
+      }
+    })
+
     sseRef.current = es
   }
 
@@ -456,10 +572,12 @@ export default function AlertsScreen() {
   const feedData = (() => {
     const sosFeed = sosItems.map(s => ({ ...s, _type: 'sos' }))
     const geoFeed = geoItems.map(g => ({ ...g, _type: 'geo' }))
+    const deviceFeed = deviceItems.map(d => ({ ...d, _type: 'device' }))
     if (activeTab === 'SOS') return sosFeed
     if (activeTab === 'Geofence') return geoFeed
+    if (activeTab === 'Device') return deviceFeed
     // All: merge by created_at descending
-    return [...sosFeed, ...geoFeed].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    return [...sosFeed, ...geoFeed, ...deviceFeed].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   })()
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -555,6 +673,8 @@ export default function AlertsScreen() {
           renderItem={({ item, index }) =>
             item._type === 'sos' ? (
               <SosCard item={item} index={index} onResolve={handleResolve} />
+            ) : item._type === 'device' ? (
+              <DeviceCard item={item} index={index} />
             ) : (
               <GeofenceCard item={item} index={index} />
             )

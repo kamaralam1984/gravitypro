@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
 import { useTheme } from '../theme/ThemeContext'
-import { circleAPI } from '../services/api'
+import { circleAPI, mediaAPI } from '../services/api'
 import { familyAPI } from '../services/familyApi'
 
 // Lightweight DOB entry (no native datetimepicker dependency in this project).
@@ -42,6 +42,7 @@ export default function AddChildScreen() {
   const [phone, setPhone] = useState('')
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -72,6 +73,37 @@ export default function AddChildScreen() {
     }
   }
 
+  // Upload a local photo (file:// URI) using the same presign → PUT → confirm
+  // sequence as ProfileScreen. Returns the public URL, or null on failure so
+  // the caller can still create the child without a photo.
+  const uploadAvatar = async (localUri) => {
+    setUploading(true)
+    try {
+      const ext = (localUri.split('.').pop() || 'jpg').toLowerCase()
+      const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
+      // Step 1: presign (backend returns { uploadUrl, key, publicUrl })
+      const { uploadUrl, publicUrl } = await mediaAPI.presignAvatar({ contentType })
+      // Step 2: Upload the binary to R2
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: await (await fetch(localUri)).blob(),
+      })
+      // Step 3: Confirm the upload
+      await mediaAPI.confirmAvatar({ publicUrl })
+      return publicUrl
+    } catch (e) {
+      console.error('Child avatar upload error:', e)
+      Alert.alert(
+        'Photo upload failed',
+        "Couldn't upload the photo. The child profile will be created without it.",
+      )
+      return null
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const save = async () => {
     if (!circleId) return Alert.alert('Pick a circle', 'Choose which family circle this child belongs to.')
     if (!name.trim()) return Alert.alert('Name required', "Enter the child's name.")
@@ -83,10 +115,19 @@ export default function AddChildScreen() {
       const body = { circle_id: circleId, name: name.trim() }
       if (dob) body.dob = dob
       if (phone.trim()) body.phone = phone.trim()
-      // NOTE: avatarUrl here is a local file URI. To persist a real photo, upload
-      // via mediaAPI.presignAvatar first (see integration notes), then pass the
-      // returned public URL as avatar_url. Local URIs are skipped server-side.
-      if (avatarUrl && /^https?:\/\//.test(avatarUrl)) body.avatar_url = avatarUrl
+
+      // Resolve the child's avatar_url. If the parent picked a local photo
+      // (a file:// URI), upload it via the same presign → PUT → confirm flow
+      // ProfileScreen uses, and send the resulting public URL. Already-remote
+      // http(s) URLs are passed through as-is. On upload failure we fall back
+      // to creating the child without a photo (toast below) rather than blocking.
+      if (avatarUrl && /^https?:\/\//.test(avatarUrl)) {
+        body.avatar_url = avatarUrl
+      } else if (avatarUrl) {
+        const publicUrl = await uploadAvatar(avatarUrl)
+        if (publicUrl) body.avatar_url = publicUrl
+      }
+
       await familyAPI.createChild(body)
       Alert.alert('Added', `${name.trim()} was added to the circle.`)
       navigation.goBack()
@@ -109,11 +150,15 @@ export default function AddChildScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
-        <Pressable style={s.avatarWrap} onPress={pickPhoto}>
-          {avatarUrl
-            ? <Image source={{ uri: avatarUrl }} style={s.avatar} />
-            : <Ionicons name="camera" size={30} color={colors.textSecondary} />}
-          <Text style={s.avatarHint}>{avatarUrl ? 'Change photo' : 'Add photo'}</Text>
+        <Pressable style={s.avatarWrap} onPress={pickPhoto} disabled={saving || uploading}>
+          {uploading
+            ? <ActivityIndicator color={colors.textSecondary} />
+            : avatarUrl
+              ? <Image source={{ uri: avatarUrl }} style={s.avatar} />
+              : <Ionicons name="camera" size={30} color={colors.textSecondary} />}
+          <Text style={s.avatarHint}>
+            {uploading ? 'Uploading…' : avatarUrl ? 'Change photo' : 'Add photo'}
+          </Text>
         </Pressable>
 
         <Text style={s.label}>Name</Text>
@@ -152,8 +197,10 @@ export default function AddChildScreen() {
           </View>
         )}
 
-        <Pressable style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveText}>Create Child Profile</Text>}
+        <Pressable style={[s.saveBtn, (saving || uploading) && { opacity: 0.6 }]} onPress={save} disabled={saving || uploading}>
+          {saving || uploading
+            ? <ActivityIndicator color="#fff" />
+            : <Text style={s.saveText}>Create Child Profile</Text>}
         </Pressable>
       </ScrollView>
     </View>
