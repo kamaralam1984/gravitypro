@@ -14,7 +14,8 @@
       "url": "https://u.expo.dev/7b9ad9d0-b6d8-43f1-b80c-288ad4597c3e",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "requestHeaders": { "expo-channel-name": "preview" }
     },
     "splash": {
       "image": "./assets/splash.png",
