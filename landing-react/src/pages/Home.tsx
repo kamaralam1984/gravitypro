@@ -362,8 +362,6 @@ export default function Home() {
         <ul className={styles.navLinks}>
           <li><a href="#features">Features</a></li>
           <li><a href="#download">Download</a></li>
-          <li><Link to="/parent">For Parents</Link></li>
-          <li><Link to="/child">For Children</Link></li>
           <li><Link to="/login?redirect=/parent/panel">Parent Panel</Link></li>
           <li><Link to="/login?redirect=/child/panel">Child Panel</Link></li>
         </ul>
@@ -380,8 +378,6 @@ export default function Home() {
       <div className={`${styles.navMobileMenu}${mobileMenuOpen ? ' ' + styles.navMobileMenuOpen : ''}`}>
         <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
         <a href="#download" onClick={() => setMobileMenuOpen(false)}>Download</a>
-        <Link to="/parent" onClick={() => setMobileMenuOpen(false)}>For Parents</Link>
-        <Link to="/child" onClick={() => setMobileMenuOpen(false)}>For Children</Link>
         <Link to="/login?redirect=/parent/panel" onClick={() => setMobileMenuOpen(false)}>Parent Panel</Link>
         <Link to="/login?redirect=/child/panel" onClick={() => setMobileMenuOpen(false)}>Child Panel</Link>
         <Link to="/login" className={styles.navCta} onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
