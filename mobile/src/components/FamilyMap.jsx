@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { WebView } from 'react-native-webview'
-import { Colors } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 
 /**
  * FamilyMap — a self-contained Leaflet/OSM map rendered inside a WebView.
@@ -186,6 +186,8 @@ export default function FamilyMap({
   onPickLocation,
   style,
 }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const html = useMemo(
     () => buildHtml(members, zones, me, pickMode, pick),
     [members, zones, me, pickMode, pick]
@@ -218,7 +220,7 @@ export default function FamilyMap({
   )
 }
 
-const styles = StyleSheet.create({
-  wrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, backgroundColor: '#0b0f0d' },
+const makeStyles = (c) => StyleSheet.create({
+  wrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: c.border, backgroundColor: '#0b0f0d' },
   web: { flex: 1, backgroundColor: '#0b0f0d' },
 })

@@ -28,7 +28,7 @@ import { BatteryIndicator } from '../components/BatteryIndicator'
 import { circleAPI, sosAPI, geofenceAPI, userAPI } from '../services/api'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 import { storage } from '../utils/storage'
-import { Colors } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 
 const getBatteryLevel = async () => {
   try {
@@ -71,6 +71,8 @@ const isOnlineMember = (loc) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MapScreen() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const user = useAuthStore((s) => s.user)
   const insets = useSafeAreaInsets()
 
@@ -127,7 +129,7 @@ export default function MapScreen() {
   }, [])
 
   // ── toast helper ──────────────────────────────────────────────────────────
-  const showToast = useCallback((message, color = Colors.accent) => {
+  const showToast = useCallback((message, color = c.accent) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast({ message, color })
     toastAnim.setValue(0)
@@ -200,7 +202,7 @@ export default function MapScreen() {
       es.addEventListener('sos_safe', (e) => {
         try {
           const data = JSON.parse(e.data)
-          showToast(`${data.name || 'Someone'} is safe`, Colors.success)
+          showToast(`${data.name || 'Someone'} is safe`, c.success)
           // Dismiss active SOS overlay if it's from the same user
           setSosAlert(prev => (prev && prev.userId === data.userId) ? null : prev)
         } catch (_) {}
@@ -211,7 +213,7 @@ export default function MapScreen() {
           const data = JSON.parse(e.data)
           const { name, eventType, zoneName } = data
           const verb = eventType === 'enter' ? 'entered' : 'left'
-          showToast(`${name || 'Someone'} ${verb} ${zoneName || 'a zone'}`, Colors.info)
+          showToast(`${name || 'Someone'} ${verb} ${zoneName || 'a zone'}`, c.info)
         } catch (_) {}
       })
 
@@ -347,10 +349,10 @@ export default function MapScreen() {
         longitude: myLocation?.longitude ?? null,
       })
       setSosModalVisible(false)
-      showToast('SOS sent to your family', Colors.danger)
+      showToast('SOS sent to your family', c.danger)
     } catch (e) {
       console.error('[MapScreen] SOS error:', e)
-      showToast('Failed to send SOS. Try again.', Colors.warning)
+      showToast('Failed to send SOS. Try again.', c.warning)
     } finally {
       setSosSending(false)
     }
@@ -471,7 +473,7 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       {/* ── Full-screen map (free Leaflet/OSM via FamilyMap) ──────────────── */}
       <FamilyMap
@@ -513,7 +515,7 @@ export default function MapScreen() {
                   <View
                     style={[
                       styles.memberPickDot,
-                      { backgroundColor: online ? Colors.online : Colors.offline },
+                      { backgroundColor: online ? c.online : c.offline },
                     ]}
                   />
                   <Text
@@ -563,7 +565,7 @@ export default function MapScreen() {
               <Ionicons
                 name={refreshing ? 'sync' : 'refresh'}
                 size={18}
-                color={Colors.accent}
+                color={c.accent}
               />
             </TouchableOpacity>
           </View>
@@ -646,7 +648,7 @@ export default function MapScreen() {
           <LinearGradient colors={['#0F2518', '#081510']} style={styles.memberCardGrad}>
             {/* Close */}
             <TouchableOpacity style={styles.cardClose} onPress={hideCard}>
-              <Ionicons name="close" size={18} color={Colors.textMuted} />
+              <Ionicons name="close" size={18} color={c.textMuted} />
             </TouchableOpacity>
 
             {/* Avatar + name */}
@@ -668,7 +670,7 @@ export default function MapScreen() {
                   <View
                     style={[
                       styles.statusDot,
-                      { backgroundColor: isOnlineMember(selectedLoc) ? Colors.online : Colors.offline },
+                      { backgroundColor: isOnlineMember(selectedLoc) ? c.online : c.offline },
                     ]}
                   />
                   <Text style={styles.statusText}>
@@ -681,7 +683,7 @@ export default function MapScreen() {
             {/* Stats row */}
             <View style={styles.cardStats}>
               <View style={styles.cardStat}>
-                <Ionicons name="battery-half" size={16} color={Colors.textMuted} />
+                <Ionicons name="battery-half" size={16} color={c.textMuted} />
                 <Text style={styles.cardStatLabel}>Battery</Text>
                 {selectedLoc?.battery != null ? (
                   <BatteryIndicator level={selectedLoc.battery} showText size="sm" />
@@ -693,7 +695,7 @@ export default function MapScreen() {
               <View style={styles.cardDivider} />
 
               <View style={styles.cardStat}>
-                <Ionicons name="time-outline" size={16} color={Colors.textMuted} />
+                <Ionicons name="time-outline" size={16} color={c.textMuted} />
                 <Text style={styles.cardStatLabel}>Last seen</Text>
                 <Text style={styles.cardStatValue}>
                   {formatLastSeen(selectedLoc?.timestamp)}
@@ -703,7 +705,7 @@ export default function MapScreen() {
               <View style={styles.cardDivider} />
 
               <View style={styles.cardStat}>
-                <Ionicons name="location-outline" size={16} color={Colors.textMuted} />
+                <Ionicons name="location-outline" size={16} color={c.textMuted} />
                 <Text style={styles.cardStatLabel}>Location</Text>
                 <Text style={styles.cardStatValue}>
                   {selectedLoc ? 'Shared' : 'Hidden'}
@@ -715,7 +717,7 @@ export default function MapScreen() {
             {selectedLoc && (
               <View style={styles.distanceRow}>
                 <View style={styles.distanceItem}>
-                  <Ionicons name="shield-checkmark" size={14} color={Colors.accent} />
+                  <Ionicons name="shield-checkmark" size={14} color={c.accent} />
                   <Text style={styles.distanceLabel} numberOfLines={1}>
                     {nearestZone ? nearestZone.name : 'No safe zone'}
                   </Text>
@@ -725,7 +727,7 @@ export default function MapScreen() {
                 </View>
                 <View style={styles.cardDivider} />
                 <View style={styles.distanceItem}>
-                  <Ionicons name="navigate-circle" size={14} color={Colors.info} />
+                  <Ionicons name="navigate-circle" size={14} color={c.info} />
                   <Text style={styles.distanceLabel} numberOfLines={1}>From you</Text>
                   <Text style={styles.distanceValue}>
                     {parentDist != null ? formatDistance(parentDist) : '—'}
@@ -739,7 +741,7 @@ export default function MapScreen() {
               <TouchableOpacity
                 style={styles.viewOnMapBtn}
                 onPress={() => panMapTo(selectedLoc.latitude, selectedLoc.longitude, 17)}>
-                <Ionicons name="navigate" size={15} color={Colors.accent} />
+                <Ionicons name="navigate" size={15} color={c.accent} />
                 <Text style={styles.viewOnMapText}>Center on map</Text>
               </TouchableOpacity>
             )}
@@ -861,11 +863,11 @@ export default function MapScreen() {
 
 // ── styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDeep },
-  noMapPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.bgDeep },
-  noMapTitle: { color: Colors.text, fontSize: 18, fontWeight: '700', marginTop: 8 },
-  noMapSub: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDeep },
+  noMapPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: c.bgDeep },
+  noMapTitle: { color: c.text, fontSize: 18, fontWeight: '700', marginTop: 8 },
+  noMapSub: { color: c.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
 
   // ── header ──
   header: {
@@ -886,12 +888,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 2,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   headerCircle: {
     fontSize: 20,
     fontWeight: '800',
-    color: Colors.textWhite,
+    color: c.textWhite,
     marginTop: 2,
   },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -899,29 +901,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   countDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: Colors.online,
+    backgroundColor: c.online,
   },
-  countText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
+  countText: { fontSize: 12, fontWeight: '700', color: c.textSecondary },
   refreshBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
 
   // ── circle switcher ──
@@ -932,11 +934,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  circleChipActive: { borderColor: Colors.accentSoft },
-  circleChipText: { fontSize: 12, fontWeight: '700', color: Colors.textMuted },
-  circleChipTextActive: { color: Colors.textWhite },
+  circleChipActive: { borderColor: c.accentSoft },
+  circleChipText: { fontSize: 12, fontWeight: '700', color: c.textMuted },
+  circleChipTextActive: { color: c.textWhite },
 
   // ── toast ──
   toast: {
@@ -945,11 +947,11 @@ const styles = StyleSheet.create({
     right: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: Colors.shadowDeep,
+    shadowColor: c.shadowDeep,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
@@ -970,7 +972,7 @@ const styles = StyleSheet.create({
   toastText: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     paddingLeft: 10,
     flex: 1,
   },
@@ -985,7 +987,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: '#fff',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.8,
     shadowRadius: 8,
@@ -999,32 +1001,32 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     borderWidth: 2.5,
-    borderColor: Colors.info,
+    borderColor: c.info,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
   },
-  memberRingSelected: { borderColor: Colors.accent, borderWidth: 3 },
+  memberRingSelected: { borderColor: c.accent, borderWidth: 3 },
   memberImage: { width: 36, height: 36, borderRadius: 18 },
   memberInitialWrap: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.primaryDark,
+    backgroundColor: c.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  memberInitial: { color: Colors.accent, fontSize: 16, fontWeight: '800' },
+  memberInitial: { color: c.accent, fontSize: 16, fontWeight: '800' },
   selectedPip: {
     position: 'absolute',
     bottom: 2,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     borderWidth: 1.5,
-    borderColor: Colors.bgDeep,
+    borderColor: c.bgDeep,
   },
 
   // ── safe zone label ──
@@ -1037,9 +1039,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  zoneLabelText: { fontSize: 11, fontWeight: '700', color: Colors.accent },
+  zoneLabelText: { fontSize: 11, fontWeight: '700', color: c.accent },
 
   // ── member selector row ──
   memberPickRow: {
@@ -1053,22 +1055,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  memberPickChipActive: { borderColor: Colors.accent, backgroundColor: 'rgba(13,122,69,0.35)' },
+  memberPickChipActive: { borderColor: c.accent, backgroundColor: 'rgba(13,122,69,0.35)' },
   memberPickDot: { width: 7, height: 7, borderRadius: 4 },
-  memberPickText: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, maxWidth: 120 },
-  memberPickTextActive: { color: Colors.textWhite },
+  memberPickText: { fontSize: 13, fontWeight: '700', color: c.textSecondary, maxWidth: 120 },
+  memberPickTextActive: { color: c.textWhite },
 
   // ── locate FAB ──
   locateFab: {
     position: 'absolute',
-    shadowColor: Colors.accentSoft,
+    shadowColor: c.accentSoft,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.45,
     shadowRadius: 10,
@@ -1111,8 +1113,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
-    shadowColor: Colors.shadowDeep,
+    borderColor: c.borderStrong,
+    shadowColor: c.shadowDeep,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.7,
     shadowRadius: 20,
@@ -1126,63 +1128,63 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   cardInfo: { flex: 1 },
-  cardName: { fontSize: 18, fontWeight: '800', color: Colors.textWhite, marginBottom: 6 },
+  cardName: { fontSize: 18, fontWeight: '800', color: c.textWhite, marginBottom: 6 },
   cardBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   roleBadge: {
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  roleText: { fontSize: 10, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1 },
+  roleText: { fontSize: 10, fontWeight: '700', color: c.textMuted, letterSpacing: 1 },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
+  statusText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
 
   // card stats
   cardStats: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     marginBottom: 14,
   },
   cardStat: { flex: 1, alignItems: 'center', gap: 4 },
-  cardStatLabel: { fontSize: 10, color: Colors.textMuted, fontWeight: '600', letterSpacing: 0.5 },
-  cardStatValue: { fontSize: 13, color: Colors.textSecondary, fontWeight: '700' },
-  cardDivider: { width: 1, height: 32, backgroundColor: Colors.divider },
+  cardStatLabel: { fontSize: 10, color: c.textMuted, fontWeight: '600', letterSpacing: 0.5 },
+  cardStatValue: { fontSize: 13, color: c.textSecondary, fontWeight: '700' },
+  cardDivider: { width: 1, height: 32, backgroundColor: c.divider },
 
   // distance readouts
   distanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     marginBottom: 14,
   },
   distanceItem: { flex: 1, alignItems: 'center', gap: 4 },
   distanceLabel: {
     fontSize: 10,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontWeight: '600',
     letterSpacing: 0.5,
     maxWidth: '100%',
   },
-  distanceValue: { fontSize: 13, color: Colors.textSecondary, fontWeight: '700' },
+  distanceValue: { fontSize: 13, color: c.textSecondary, fontWeight: '700' },
 
   // center on map button
   viewOnMapBtn: {
@@ -1192,11 +1194,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  viewOnMapText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
+  viewOnMapText: { fontSize: 13, fontWeight: '700', color: c.accent },
 
   // ── modal overlay ──
   modalOverlay: {
@@ -1211,7 +1213,7 @@ const styles = StyleSheet.create({
   sosCard: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 24,
     padding: 28,
     alignItems: 'center',
@@ -1245,7 +1247,7 @@ const styles = StyleSheet.create({
   },
   sosModalSubtitle: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 28,

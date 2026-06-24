@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import { useAuthStore } from '../store/authStore'
 import { MemberAvatar } from '../components/MemberAvatar'
 import { BatteryIndicator } from '../components/BatteryIndicator'
 import { userAPI, circleAPI, sosAPI, geofenceAPI } from '../services/api'
-import { Colors, Gradients } from '../theme/colors'
+import { Gradients } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 import { getCurrentLocation } from '../services/location'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 
@@ -43,6 +44,7 @@ function formatTime(d = new Date()) {
 // ── Shimmer placeholder ───────────────────────────────────────────────────────
 
 function Shimmer({ style }) {
+  const c = useTheme()
   const anim = useRef(new Animated.Value(0)).current
   useEffect(() => {
     const loop = Animated.loop(
@@ -55,12 +57,14 @@ function Shimmer({ style }) {
     return () => loop.stop()
   }, [])
   const opacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.65] })
-  return <Animated.View style={[{ backgroundColor: Colors.bgCardLight, borderRadius: 12 }, style, { opacity }]} />
+  return <Animated.View style={[{ backgroundColor: c.bgCardLight, borderRadius: 12 }, style, { opacity }]} />
 }
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 
 function StatCard({ icon, label, value, loading, onPress }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const Wrap = onPress ? Pressable : View
   return (
     <Wrap style={styles.statCard} onPress={onPress}>
@@ -80,6 +84,8 @@ function StatCard({ icon, label, value, loading, onPress }) {
 // ── Member Chip ───────────────────────────────────────────────────────────────
 
 function MemberChip({ member, memberLocations }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const loc = memberLocations[member.id]
   const isOnline = loc
     ? (!loc.timestamp || Date.now() - new Date(loc.timestamp).getTime() < 5 * 60 * 1000)
@@ -101,6 +107,8 @@ function MemberChip({ member, memberLocations }) {
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
+  const c          = useTheme()
+  const styles     = useMemo(() => makeStyles(c), [c])
   const user       = useAuthStore(s => s.user)
   const insets     = useSafeAreaInsets()
   const navigation = useNavigation()
@@ -318,7 +326,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       <Animated.ScrollView
         style={{ opacity: fadeAnim }}
@@ -340,7 +348,7 @@ export default function HomeScreen() {
             </View>
             {activeCircle && (
               <View style={styles.circleChip}>
-                <Ionicons name="people" size={13} color={Colors.accent} />
+                <Ionicons name="people" size={13} color={c.accent} />
                 <Text style={styles.circleChipText} numberOfLines={1}>{activeCircle.name}</Text>
               </View>
             )}
@@ -379,7 +387,7 @@ export default function HomeScreen() {
             <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Family Map</Text>
             <Pressable onPress={() => navigation.navigate('Map')} hitSlop={8} style={styles.viewFullBtn}>
               <Text style={styles.mapOverlayText}>View Full</Text>
-              <Ionicons name="arrow-forward" size={13} color={Colors.accent} />
+              <Ionicons name="arrow-forward" size={13} color={c.accent} />
             </Pressable>
           </View>
 
@@ -400,12 +408,12 @@ export default function HomeScreen() {
               <Text style={styles.distTitle}>Family Distances</Text>
               {memberDistances.map(d => (
                 <View key={d.id} style={styles.distRow}>
-                  <View style={[styles.distDot, { backgroundColor: d.inside ? Colors.accent : '#FFB300' }]} />
+                  <View style={[styles.distDot, { backgroundColor: d.inside ? c.accent : '#FFB300' }]} />
                   <View style={styles.distInfo}>
                     <Text style={styles.distName} numberOfLines={1}>{d.name}</Text>
 
                     {/* Zone distance line */}
-                    <Text style={[styles.distZoneVal, { color: d.inside ? Colors.accent : '#FFB300' }]}>
+                    <Text style={[styles.distZoneVal, { color: d.inside ? c.accent : '#FFB300' }]}>
                       {d.hasZone
                         ? (d.inside ? `Inside ${d.zone}` : `${formatDistance(d.dist)} · ${d.zone}`)
                         : 'No safe zone'}
@@ -503,8 +511,8 @@ export default function HomeScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: Colors.bgDeep },
+const makeStyles = (c) => StyleSheet.create({
+  container:     { flex: 1, backgroundColor: c.bgDeep },
   scrollContent: { flexGrow: 1 },
 
   // Hero Header
@@ -521,34 +529,34 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   greetingLeft:  { flex: 1 },
-  greetingText:  { fontSize: 22, fontWeight: '800', color: Colors.textWhite, flexShrink: 1 },
-  dateText:      { fontSize: 13, color: Colors.textSecondary, marginTop: 4 },
+  greetingText:  { fontSize: 22, fontWeight: '800', color: c.textWhite, flexShrink: 1 },
+  dateText:      { fontSize: 13, color: c.textSecondary, marginTop: 4 },
   circleChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     flexShrink: 0,
     maxWidth: 130,
   },
-  circleChipText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', flexShrink: 1 },
+  circleChipText: { color: c.textSecondary, fontSize: 12, fontWeight: '600', flexShrink: 1 },
 
   // Sections
   section:      { paddingHorizontal: 16, marginTop: 24 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.textSecondary, marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: c.textSecondary, marginBottom: 12 },
 
   // Stat Cards
   statsRow: { flexDirection: 'row', gap: 10 },
-  statCard: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
+  statCard: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
   statGrad: { alignItems: 'center', paddingVertical: 18, paddingHorizontal: 8, gap: 4 },
   statIcon:  { fontSize: 22 },
-  statValue: { fontSize: 18, fontWeight: '800', color: Colors.textWhite },
-  statLabel: { fontSize: 11, fontWeight: '600', color: Colors.textMuted, textAlign: 'center' },
+  statValue: { fontSize: 18, fontWeight: '800', color: c.textWhite },
+  statLabel: { fontSize: 11, fontWeight: '600', color: c.textMuted, textAlign: 'center' },
 
   // Mini Map
   mapContainer: {
@@ -556,7 +564,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     position: 'relative',
   },
   miniMap:      { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 8 },
@@ -576,41 +584,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  mapOverlayText: { color: Colors.accent, fontSize: 12, fontWeight: '700' },
+  mapOverlayText: { color: c.accent, fontSize: 12, fontWeight: '700' },
 
   // Map header + distances
   mapHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   viewFullBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
   distCard: {
     marginTop: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 10,
   },
-  distTitle: { color: Colors.textMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  distTitle: { color: c.textMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   distRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   distDot:   { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
   distInfo:  { flex: 1, gap: 2 },
-  distName:  { color: Colors.textWhite, fontSize: 14, fontWeight: '600' },
+  distName:  { color: c.textWhite, fontSize: 14, fontWeight: '600' },
   distVal:   { fontSize: 13, fontWeight: '700' },
   distZoneVal:   { fontSize: 13, fontWeight: '700' },
-  distParentVal: { fontSize: 12, fontWeight: '600', color: Colors.textMuted },
+  distParentVal: { fontSize: 12, fontWeight: '600', color: c.textMuted },
 
   // Map markers
   myDot:        { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   myDotInner:   { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
   memberDot:    { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  memberDotInner: { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.info, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  memberDotInner: { width: 26, height: 26, borderRadius: 13, backgroundColor: c.info, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
   memberDotInitial: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
   // Family Status
   memberList:        { paddingRight: 4, gap: 12 },
   memberChip:        { alignItems: 'center', gap: 6, width: 72 },
-  memberChipName:    { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  memberChipName:    { color: c.textSecondary, fontSize: 12, fontWeight: '600', textAlign: 'center' },
   shimmerRow:        { flexDirection: 'row', gap: 12 },
   memberChipShimmer: { width: 72, height: 90, borderRadius: 16 },
 

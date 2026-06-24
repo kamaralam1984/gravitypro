@@ -13,9 +13,21 @@ import MainNavigator from '../src/navigation/MainNavigator'
 import UpdateBanner from '../src/components/ui/UpdateBanner'
 import { registerForPushNotifications } from '../src/services/notifications'
 import { syncOfflineLocations, reportBatteryLevel } from '../src/services/location'
-import { Colors } from '../src/theme/colors'
+import { ThemeProvider, useTheme } from '../src/theme/ThemeContext'
 
 const queryClient = new QueryClient()
+
+// Root surface — inside ThemeProvider so it can follow the active theme.
+function ThemedRoot({ isAuthenticated }) {
+  const c = useTheme()
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bgDeep }}>
+      <StatusBar style={c.statusBarStyle} />
+      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
+      <UpdateBanner />
+    </View>
+  )
+}
 
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true)
@@ -80,18 +92,16 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <NavigationContainer>
-            <View style={{ flex: 1, backgroundColor: Colors.bgDeep }}>
-              <StatusBar style="light" />
-              {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
-              <UpdateBanner />
-            </View>
-          </NavigationContainer>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <SafeAreaProvider>
+            <NavigationContainer>
+              <ThemedRoot isAuthenticated={isAuthenticated} />
+            </NavigationContainer>
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </ThemeProvider>
   )
 }

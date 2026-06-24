@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useMemo } from 'react'
 import {
   View,
   Text,
@@ -19,11 +19,14 @@ import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { parentalAPI } from '../services/api'
-import { Colors, Gradients } from '../theme/colors'
+import { Gradients } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 
 // ── App row with toggle ───────────────────────────────────────────────────────
 
 function AppToggleRow({ item, onToggle }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const label = item.app_label || item.package_name || 'Unknown app'
   return (
     <View style={styles.row}>
@@ -31,7 +34,7 @@ function AppToggleRow({ item, onToggle }) {
         <Ionicons
           name={item.blocked ? 'lock-closed' : 'apps'}
           size={18}
-          color={item.blocked ? Colors.danger : Colors.accent}
+          color={item.blocked ? c.danger : c.accent}
         />
       </View>
       <View style={styles.rowBody}>
@@ -45,8 +48,8 @@ function AppToggleRow({ item, onToggle }) {
       <Switch
         value={!!item.blocked}
         onValueChange={() => onToggle(item.package_name)}
-        trackColor={{ false: Colors.bgGlass, true: Colors.accentDim }}
-        thumbColor={item.blocked ? Colors.danger : Colors.textSecondary}
+        trackColor={{ false: c.bgGlass, true: c.accentDim }}
+        thumbColor={item.blocked ? c.danger : c.textSecondary}
       />
     </View>
   )
@@ -55,6 +58,8 @@ function AppToggleRow({ item, onToggle }) {
 // ── Screen ──────────────────────────────────────────────────────────────────
 
 export default function AppBlockingScreen() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
   const navigation = useNavigation()
   const route = useRoute()
@@ -159,7 +164,7 @@ export default function AppBlockingScreen() {
         value={newPkg}
         onChangeText={setNewPkg}
         placeholder="Package name (com.example.app)"
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={c.textMuted}
         autoCapitalize="none"
         autoCorrect={false}
         style={styles.input}
@@ -168,11 +173,11 @@ export default function AppBlockingScreen() {
         value={newLabel}
         onChangeText={setNewLabel}
         placeholder="App label (optional)"
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={c.textMuted}
         style={styles.input}
       />
       <Pressable onPress={addManual} style={styles.addBtn}>
-        <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
+        <Ionicons name="add-circle-outline" size={18} color={c.accent} />
         <Text style={styles.addBtnText}>Add app</Text>
       </Pressable>
     </View>
@@ -183,13 +188,13 @@ export default function AppBlockingScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       {/* Header */}
       <LinearGradient colors={Gradients.hero} style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+            <Ionicons name="chevron-back" size={24} color={c.textPrimary} />
           </Pressable>
           <View style={styles.headerTitleWrap}>
             <Text style={styles.headerTitle} numberOfLines={1}>
@@ -206,11 +211,11 @@ export default function AppBlockingScreen() {
       {/* Body */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ActivityIndicator size="large" color={c.accent} />
         </View>
       ) : error ? (
         <ScrollView contentContainerStyle={styles.center}>
-          <Ionicons name="alert-circle-outline" size={48} color={Colors.warning} />
+          <Ionicons name="alert-circle-outline" size={48} color={c.warning} />
           <Text style={styles.emptyTitle}>Couldn't load apps</Text>
           <Text style={styles.emptyText}>{error}</Text>
           <Pressable onPress={load} style={styles.retryBtn}>
@@ -237,10 +242,10 @@ export default function AppBlockingScreen() {
             style={[styles.saveBtn, (saving || !dirty) && styles.saveBtnDisabled]}
           >
             {saving ? (
-              <ActivityIndicator color={Colors.bgDeep} />
+              <ActivityIndicator color={c.bgDeep} />
             ) : (
               <>
-                <Ionicons name="save-outline" size={18} color={Colors.bgDeep} />
+                <Ionicons name="save-outline" size={18} color={c.bgDeep} />
                 <Text style={styles.saveText}>{dirty ? 'Save changes' : 'Saved'}</Text>
               </>
             )}
@@ -251,51 +256,51 @@ export default function AppBlockingScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDark },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDark },
 
   header: {
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: c.border,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitleWrap: { flex: 1, alignItems: 'center' },
-  headerTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '700' },
-  headerSub: { color: Colors.textSecondary, fontSize: 13, marginTop: 1 },
+  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '700' },
+  headerSub: { color: c.textSecondary, fontSize: 13, marginTop: 1 },
 
   center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '700', marginTop: 14 },
-  emptyText: { color: Colors.textMuted, fontSize: 14, textAlign: 'center', marginTop: 6, lineHeight: 20 },
+  emptyTitle: { color: c.textPrimary, fontSize: 16, fontWeight: '700', marginTop: 14 },
+  emptyText: { color: c.textMuted, fontSize: 14, textAlign: 'center', marginTop: 6, lineHeight: 20 },
 
   retryBtn: {
     marginTop: 18,
     paddingHorizontal: 22,
     paddingVertical: 10,
     borderRadius: 22,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  retryText: { color: Colors.accent, fontWeight: '700' },
+  retryText: { color: c.accent, fontWeight: '700' },
 
   manualCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     padding: 14,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  manualHint: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  manualHint: { color: c.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
   input: {
-    backgroundColor: Colors.bgSurface,
+    backgroundColor: c.bgSurface,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-    color: Colors.textPrimary,
+    borderColor: c.border,
+    color: c.textPrimary,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === 'ios' ? 12 : 8,
     fontSize: 14,
@@ -308,35 +313,35 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  addBtnText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
+  addBtnText: { color: c.accent, fontWeight: '700', fontSize: 14 },
 
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     padding: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   rowIcon: {
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   rowIconBlocked: { backgroundColor: 'rgba(229,57,53,0.15)' },
   rowBody: { flex: 1, marginRight: 10 },
-  rowLabel: { color: Colors.textPrimary, fontSize: 15, fontWeight: '600' },
-  rowMeta: { color: Colors.textMuted, fontSize: 12, marginTop: 3 },
+  rowLabel: { color: c.textPrimary, fontSize: 15, fontWeight: '600' },
+  rowMeta: { color: c.textMuted, fontSize: 12, marginTop: 3 },
 
   saveBar: {
     position: 'absolute',
@@ -345,9 +350,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 16,
     paddingTop: 12,
-    backgroundColor: Colors.bgDeep,
+    backgroundColor: c.bgDeep,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: c.border,
   },
   saveBtn: {
     flexDirection: 'row',
@@ -356,8 +361,8 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 50,
     borderRadius: 25,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
-  saveBtnDisabled: { backgroundColor: Colors.accentDim, opacity: 0.6 },
-  saveText: { color: Colors.bgDeep, fontSize: 16, fontWeight: '800' },
+  saveBtnDisabled: { backgroundColor: c.accentDim, opacity: 0.6 },
+  saveText: { color: c.bgDeep, fontSize: 16, fontWeight: '800' },
 })

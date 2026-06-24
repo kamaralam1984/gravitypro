@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import {
   View,
   Text,
@@ -20,7 +20,8 @@ import { formatDistanceToNow } from 'date-fns'
 import { GradientCard } from '../components/ui/GradientCard'
 import { circleAPI, geofenceAPI, sosAPI } from '../services/api'
 import { storage } from '../utils/storage'
-import { Colors, Gradients } from '../theme/colors'
+import { Gradients } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 import { useAuthStore } from '../store/authStore'
 
 const NativeEventSource = Platform.OS !== 'web' ? require('react-native-sse').default : null
@@ -46,6 +47,8 @@ function safeTimeAgo(dateStr) {
 // ── SOS Card ─────────────────────────────────────────────────────────────────
 
 function SosCard({ item, index, onResolve }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const slideAnim = useRef(new Animated.Value(24)).current
   const fadeAnim  = useRef(new Animated.Value(0)).current
   const pulseAnim = useRef(new Animated.Value(1)).current
@@ -90,7 +93,7 @@ function SosCard({ item, index, onResolve }) {
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 12 }}>
       <View style={[styles.sosCard, item.resolved ? styles.sosCardResolved : styles.sosCardActive]}>
         {/* Red left border accent */}
-        <View style={[styles.leftBorder, { backgroundColor: item.resolved ? Colors.textMuted : Colors.danger }]} />
+        <View style={[styles.leftBorder, { backgroundColor: item.resolved ? c.textMuted : c.danger }]} />
 
         {/* Pulse overlay for unresolved */}
         {!item.resolved && (
@@ -101,10 +104,10 @@ function SosCard({ item, index, onResolve }) {
           {/* Top row: icon + badge + time */}
           <View style={styles.sosTopRow}>
             <View style={[styles.sosIconWrap, { backgroundColor: item.resolved ? 'rgba(94,139,110,0.15)' : 'rgba(229,57,53,0.15)' }]}>
-              <Ionicons name="warning" size={20} color={item.resolved ? Colors.textMuted : Colors.danger} />
+              <Ionicons name="warning" size={20} color={item.resolved ? c.textMuted : c.danger} />
             </View>
             <View style={[styles.sosBadge, { backgroundColor: item.resolved ? 'rgba(94,139,110,0.2)' : 'rgba(229,57,53,0.2)' }]}>
-              <Text style={[styles.sosBadgeText, { color: item.resolved ? Colors.textMuted : Colors.danger }]}>
+              <Text style={[styles.sosBadgeText, { color: item.resolved ? c.textMuted : c.danger }]}>
                 SOS ALERT
               </Text>
             </View>
@@ -123,7 +126,7 @@ function SosCard({ item, index, onResolve }) {
           <View style={styles.sosActionRow}>
             {item.resolved ? (
               <View style={styles.resolvedBadge}>
-                <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
+                <Ionicons name="checkmark-circle" size={14} color={c.success} />
                 <Text style={styles.resolvedBadgeText}>Resolved</Text>
               </View>
             ) : (
@@ -153,15 +156,17 @@ function SosCard({ item, index, onResolve }) {
 // ── Geofence Card ─────────────────────────────────────────────────────────────
 
 function GeofenceCard({ item, index }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const slideAnim = useRef(new Animated.Value(24)).current
   const fadeAnim  = useRef(new Animated.Value(0)).current
 
   const isEntry = item.event_type === 'entry'
-  const borderColor = isEntry ? Colors.success : Colors.warning
+  const borderColor = isEntry ? c.success : c.warning
   const iconBg = isEntry ? 'rgba(0,200,83,0.12)' : 'rgba(255,179,0,0.12)'
   const icon   = isEntry ? 'enter-outline' : 'exit-outline'
   const label  = isEntry ? 'Arrived' : 'Left'
-  const labelColor = isEntry ? Colors.success : Colors.warning
+  const labelColor = isEntry ? c.success : c.warning
 
   useEffect(() => {
     const delay = Math.min(index * 60, 300)
@@ -206,6 +211,8 @@ function GeofenceCard({ item, index }) {
 // ── Flash Banner ──────────────────────────────────────────────────────────────
 
 function FlashBanner({ banner, insetTop }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const slideAnim = useRef(new Animated.Value(-120)).current
 
   useEffect(() => {
@@ -221,7 +228,7 @@ function FlashBanner({ banner, insetTop }) {
   if (!banner) return null
 
   const isSos = banner.type === 'sos'
-  const bg = isSos ? Colors.danger : banner.eventType === 'exit' ? Colors.warning : Colors.success
+  const bg = isSos ? c.danger : banner.eventType === 'exit' ? c.warning : c.success
 
   return (
     <Animated.View
@@ -242,6 +249,8 @@ function FlashBanner({ banner, insetTop }) {
 // ── Empty State ───────────────────────────────────────────────────────────────
 
 function EmptyState({ tab }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const config = {
     All:      { icon: 'notifications-off-outline', title: 'No alerts yet',          body: 'SOS alerts and geofence events will appear here.' },
     SOS:      { icon: 'warning-outline',           title: 'No SOS alerts',           body: 'Emergency SOS alerts from your family will show up here.' },
@@ -249,7 +258,7 @@ function EmptyState({ tab }) {
   }[tab] || {}
   return (
     <View style={styles.emptyBox}>
-      <Ionicons name={config.icon} size={64} color={Colors.accentDim} />
+      <Ionicons name={config.icon} size={64} color={c.accentDim} />
       <Text style={styles.emptyTitle}>{config.title}</Text>
       <Text style={styles.emptyText}>{config.body}</Text>
     </View>
@@ -259,6 +268,8 @@ function EmptyState({ tab }) {
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function AlertsScreen() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
   const user = useAuthStore(s => s.user)
 
@@ -456,7 +467,7 @@ export default function AlertsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       {/* Flash Banner (SSE live notification) */}
       <FlashBanner banner={banner} insetTop={insets.top} />
@@ -516,11 +527,11 @@ export default function AlertsScreen() {
       {/* Body */}
       {loading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ActivityIndicator size="large" color={c.accent} />
         </View>
       ) : error ? (
         <View style={styles.errorBox}>
-          <Ionicons name="alert-circle-outline" size={48} color={Colors.danger} />
+          <Ionicons name="alert-circle-outline" size={48} color={c.danger} />
           <Text style={styles.errorTitle}>Could not load alerts</Text>
           <Text style={styles.errorText}>{error}</Text>
           <Pressable onPress={loadData} style={styles.retryBtn}>
@@ -537,8 +548,8 @@ export default function AlertsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={Colors.accent}
-              colors={[Colors.accent]}
+              tintColor={c.accent}
+              colors={[c.accent]}
             />
           }
           ListEmptyComponent={<EmptyState tab={activeTab} />}
@@ -557,14 +568,14 @@ export default function AlertsScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDeep },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDeep },
 
   // Header
   header: { paddingHorizontal: 20, paddingBottom: 12 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: Colors.textWhite },
-  headerSubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: c.textWhite },
+  headerSubtitle: { fontSize: 13, color: c.textMuted, marginTop: 2 },
   safeBtn: { borderRadius: 20, overflow: 'hidden' },
   safeBtnGrad: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9 },
   safeBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
@@ -573,12 +584,12 @@ const styles = StyleSheet.create({
   tab: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     overflow: 'hidden',
   },
-  tabActive: { borderColor: Colors.accentSoft },
+  tabActive: { borderColor: c.accentSoft },
   tabGrad: { paddingHorizontal: 18, paddingVertical: 7 },
-  tabText: { color: Colors.textMuted, fontSize: 13, fontWeight: '600', paddingHorizontal: 18, paddingVertical: 7 },
+  tabText: { color: c.textMuted, fontSize: 13, fontWeight: '600', paddingHorizontal: 18, paddingVertical: 7 },
   tabTextActive: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   // Feed
@@ -587,15 +598,15 @@ const styles = StyleSheet.create({
   // Loading / Error
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorBox:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40 },
-  errorTitle: { fontSize: 18, fontWeight: '700', color: Colors.textSecondary },
-  errorText:  { fontSize: 14, color: Colors.textMuted, textAlign: 'center' },
-  retryBtn:   { backgroundColor: Colors.bgCard, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, borderWidth: 1, borderColor: Colors.border },
-  retryText:  { color: Colors.accent, fontWeight: '700' },
+  errorTitle: { fontSize: 18, fontWeight: '700', color: c.textSecondary },
+  errorText:  { fontSize: 14, color: c.textMuted, textAlign: 'center' },
+  retryBtn:   { backgroundColor: c.bgCard, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, borderWidth: 1, borderColor: c.border },
+  retryText:  { color: c.accent, fontWeight: '700' },
 
   // Empty state
   emptyBox:   { alignItems: 'center', paddingVertical: 80, gap: 12 },
-  emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.textSecondary },
-  emptyText:  { fontSize: 14, color: Colors.textMuted, textAlign: 'center', paddingHorizontal: 32 },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: c.textSecondary },
+  emptyText:  { fontSize: 14, color: c.textMuted, textAlign: 'center', paddingHorizontal: 32 },
 
   // Shared card structure
   leftBorder: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
@@ -607,39 +618,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
   },
   sosCardActive:   { borderColor: 'rgba(229,57,53,0.35)' },
-  sosCardResolved: { borderColor: Colors.border },
+  sosCardResolved: { borderColor: c.border },
   sosPulseOverlay: { backgroundColor: 'rgba(229,57,53,0.06)', borderRadius: 16 },
   sosTopRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   sosIconWrap:  { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   sosBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   sosBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  senderName:   { fontSize: 16, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
-  sosMessage:   { fontSize: 13, color: Colors.textSecondary, fontStyle: 'italic', marginBottom: 10 },
-  alertTime:    { fontSize: 12, color: Colors.textMuted, marginLeft: 'auto' },
+  senderName:   { fontSize: 16, fontWeight: '700', color: c.textPrimary, marginBottom: 4 },
+  sosMessage:   { fontSize: 13, color: c.textSecondary, fontStyle: 'italic', marginBottom: 10 },
+  alertTime:    { fontSize: 12, color: c.textMuted, marginLeft: 'auto' },
   sosActionRow: { flexDirection: 'row', alignItems: 'center' },
   resolveBtn:   { borderRadius: 10, overflow: 'hidden' },
   resolveBtnGrad: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8 },
   resolveBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   resolvedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,200,83,0.12)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  resolvedBadgeText: { color: Colors.success, fontSize: 13, fontWeight: '700' },
+  resolvedBadgeText: { color: c.success, fontSize: 13, fontWeight: '700' },
 
   // Geofence Card
   geoCard: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.bgCard,
+    borderColor: c.border,
+    backgroundColor: c.bgCard,
     overflow: 'hidden',
     position: 'relative',
   },
   geoRow:        { flexDirection: 'row', alignItems: 'center', gap: 12 },
   geoIconWrap:   { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   geoBody:       { flex: 1, gap: 3 },
-  geoDesc:       { fontSize: 13, color: Colors.textSecondary },
-  zoneName:      { fontWeight: '600', color: Colors.textPrimary },
+  geoDesc:       { fontSize: 13, color: c.textSecondary },
+  zoneName:      { fontWeight: '600', color: c.textPrimary },
   geoRight:      { alignItems: 'flex-end', gap: 6, flexShrink: 0 },
   geoTypeBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   geoTypeBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },

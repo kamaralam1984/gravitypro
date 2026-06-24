@@ -5,7 +5,7 @@
     "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#050F08",
     "runtimeVersion": {
       "policy": "appVersion"

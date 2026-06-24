@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import styles from './Home.module.css'
 import 'leaflet/dist/leaflet.css'
 import type L from 'leaflet'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function Home() {
   const navRef = useRef<HTMLElement>(null)
@@ -321,6 +322,7 @@ export default function Home() {
 
   return (
     <>
+      <ThemeToggle />
       {/* ===== NAV ===== */}
       <input
         type="checkbox"

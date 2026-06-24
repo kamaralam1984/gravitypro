@@ -3,7 +3,9 @@
 /* GLOBAL RESET + VARIABLES */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
+/* ===== DARK THEME (default) ===== */
+:root,
+[data-theme="dark"] {
   --bg: #020C05;
   --bg2: #050F08;
   --bg3: #081510;
@@ -26,6 +28,44 @@
   --rs: 12px;
 }
 
+/* ===== LIGHT THEME ===== */
+[data-theme="light"] {
+  --bg: #FFFFFF;
+  --bg2: #F4F8F5;
+  --bg3: #E9F2EC;
+  --card: #FFFFFF;
+  --green: #0A5C35;
+  --green2: #0D7A45;
+  --bright: #10A05C;
+  --accent: #0A8F4D;
+  --accent2: #0D7A45;
+  --teal: #00A86B;
+  --white: #FFFFFF;
+  --text: #0B1F14;
+  --text2: #3D5C47;
+  --muted: #6E8B78;
+  --border: rgba(10,143,77,0.16);
+  --glow: rgba(10,143,77,0.18);
+}
+
+/* Honor OS preference only when no explicit data-theme is chosen */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #FFFFFF;
+    --bg2: #F4F8F5;
+    --bg3: #E9F2EC;
+    --card: #FFFFFF;
+    --accent: #0A8F4D;
+    --accent2: #0D7A45;
+    --teal: #00A86B;
+    --text: #0B1F14;
+    --text2: #3D5C47;
+    --muted: #6E8B78;
+    --border: rgba(10,143,77,0.16);
+    --glow: rgba(10,143,77,0.18);
+  }
+}
+
 html { scroll-behavior: smooth; overflow-x: hidden; }
 
 body {
@@ -33,7 +73,31 @@ body {
   background: var(--bg);
   color: var(--text);
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+/* ===== THEME TOGGLE (floating button) ===== */
+.theme-toggle {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 4000;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25), 0 0 0 1px var(--border);
+  transition: transform 0.2s ease, background-color 0.3s ease, color 0.3s ease, box-shadow 0.2s ease;
+}
+.theme-toggle:hover { transform: scale(1.08); box-shadow: 0 8px 26px var(--glow); }
+.theme-toggle:active { transform: scale(0.96); }
+.theme-toggle svg { width: 22px; height: 22px; }
 
 a { text-decoration: none; color: inherit; }
 

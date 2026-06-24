@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Animated,
   Switch, Image, Alert, Platform, TextInput, ActivityIndicator,
@@ -18,9 +18,13 @@ import { stopBackgroundTracking } from '../services/location'
 import { registerForPushNotifications } from '../services/notifications'
 import { promptAndUpdate } from '../services/appUpdates'
 import { GradientCard } from '../components/ui/GradientCard'
-import { Colors, Gradients } from '../theme/colors'
+import { Gradients } from '../theme/colors'
+import { useTheme, useThemeMode } from '../theme/ThemeContext'
 
 export default function ProfileScreen() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
+  const { mode, setMode } = useThemeMode()
   const user = useAuthStore(s => s.user)
   const token = useAuthStore(s => s.token)
   const updateUser = useAuthStore(s => s.updateUser)
@@ -280,7 +284,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}>
@@ -315,7 +319,7 @@ export default function ProfileScreen() {
         {/* Upload overlay */}
         {uploadingAvatar && (
           <View style={styles.uploadOverlay}>
-            <ActivityIndicator size="large" color={Colors.accent} />
+            <ActivityIndicator size="large" color={c.accent} />
             <Text style={styles.uploadOverlayText}>Uploading photo...</Text>
           </View>
         )}
@@ -329,7 +333,7 @@ export default function ProfileScreen() {
             {/* Name row */}
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <Ionicons name="person-outline" size={18} color={Colors.accentSoft} />
+                <Ionicons name="person-outline" size={18} color={c.accentSoft} />
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Name</Text>
@@ -341,7 +345,7 @@ export default function ProfileScreen() {
                     autoFocus
                     returnKeyType="done"
                     onSubmitEditing={handleSaveName}
-                    placeholderTextColor={Colors.textMuted}
+                    placeholderTextColor={c.textMuted}
                   />
                 ) : (
                   <Text style={styles.infoValue}>{user?.name || '—'}</Text>
@@ -361,7 +365,7 @@ export default function ProfileScreen() {
                 </View>
               ) : (
                 <Pressable onPress={() => { setEditingName(true); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}>
-                  <Ionicons name="pencil-outline" size={18} color={Colors.accentSoft} />
+                  <Ionicons name="pencil-outline" size={18} color={c.accentSoft} />
                 </Pressable>
               )}
             </View>
@@ -369,7 +373,7 @@ export default function ProfileScreen() {
             {/* Email row */}
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <Ionicons name="mail-outline" size={18} color={Colors.accentSoft} />
+                <Ionicons name="mail-outline" size={18} color={c.accentSoft} />
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Email</Text>
@@ -383,7 +387,7 @@ export default function ProfileScreen() {
                     autoCapitalize="none"
                     returnKeyType="done"
                     onSubmitEditing={handleSaveEmail}
-                    placeholderTextColor={Colors.textMuted}
+                    placeholderTextColor={c.textMuted}
                   />
                 ) : (
                   <Text style={styles.infoValue}>{user?.email || '—'}</Text>
@@ -403,7 +407,7 @@ export default function ProfileScreen() {
                 </View>
               ) : (
                 <Pressable onPress={() => { setEditingEmail(true); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}>
-                  <Ionicons name="pencil-outline" size={18} color={Colors.accentSoft} />
+                  <Ionicons name="pencil-outline" size={18} color={c.accentSoft} />
                 </Pressable>
               )}
             </View>
@@ -411,7 +415,7 @@ export default function ProfileScreen() {
             {/* Phone row */}
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <Ionicons name="call-outline" size={18} color={Colors.accentSoft} />
+                <Ionicons name="call-outline" size={18} color={c.accentSoft} />
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Phone</Text>
@@ -422,7 +426,7 @@ export default function ProfileScreen() {
             {/* Account type badge */}
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <Ionicons name="shield-outline" size={18} color={Colors.accentSoft} />
+                <Ionicons name="shield-outline" size={18} color={c.accentSoft} />
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Account Type</Text>
@@ -437,14 +441,14 @@ export default function ProfileScreen() {
           <GradientCard style={styles.section}>
             <Text style={styles.sectionTitle}>Subscription</Text>
             {loadingSub ? (
-              <ActivityIndicator size="small" color={Colors.accent} style={{ marginVertical: 12 }} />
+              <ActivityIndicator size="small" color={c.accent} style={{ marginVertical: 12 }} />
             ) : subscription ? (
               <>
                 <View style={styles.subHeader}>
                   <View>
                     <Text style={styles.planName}>{subscription.display_name || 'Free Plan'}</Text>
                     <View style={[styles.subStatusBadge, { backgroundColor: subscription.status === 'active' ? 'rgba(0,230,118,0.15)' : 'rgba(229,57,53,0.15)' }]}>
-                      <Text style={[styles.subStatusText, { color: subscription.status === 'active' ? Colors.online : Colors.danger }]}>
+                      <Text style={[styles.subStatusText, { color: subscription.status === 'active' ? c.online : c.danger }]}>
                         {subscription.status === 'active' ? 'Active' : subscription.status || 'Inactive'}
                       </Text>
                     </View>
@@ -456,7 +460,7 @@ export default function ProfileScreen() {
                   ) : (
                     <Pressable style={styles.cancelSubBtn} onPress={handleCancelSubscription} disabled={cancellingSubscription}>
                       {cancellingSubscription
-                        ? <ActivityIndicator size="small" color={Colors.danger} />
+                        ? <ActivityIndicator size="small" color={c.danger} />
                         : <Text style={styles.cancelSubText}>Cancel</Text>
                       }
                     </Pressable>
@@ -466,7 +470,7 @@ export default function ProfileScreen() {
                   <View style={styles.featuresList}>
                     {subscription.features.map((f, i) => (
                       <View key={i} style={styles.featureRow}>
-                        <Ionicons name="checkmark-circle" size={15} color={Colors.online} />
+                        <Ionicons name="checkmark-circle" size={15} color={c.online} />
                         <Text style={styles.featureText}>{f}</Text>
                       </View>
                     ))}
@@ -512,6 +516,32 @@ export default function ProfileScreen() {
               }}
               toggle
             />
+
+            {/* Theme mode selector */}
+            <View style={styles.settingRow}>
+              <View style={styles.settingIcon}>
+                <Ionicons name="contrast-outline" size={20} color={c.accentSoft} />
+              </View>
+              <Text style={styles.settingLabel}>Theme</Text>
+              <View style={styles.themeToggle}>
+                {['system', 'light', 'dark'].map((m) => {
+                  const selected = mode === m
+                  return (
+                    <Pressable
+                      key={m}
+                      onPress={() => {
+                        setMode(m)
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      }}
+                      style={[styles.themeOption, selected && styles.themeOptionSelected]}>
+                      <Text style={[styles.themeOptionText, selected && styles.themeOptionTextSelected]}>
+                        {m === 'system' ? 'System' : m === 'light' ? 'Light' : 'Dark'}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            </View>
           </GradientCard>
 
           {/* ── Privacy ── */}
@@ -527,21 +557,21 @@ export default function ProfileScreen() {
 
           {/* ── Check for Update ── */}
           <Pressable style={styles.updateBtn} onPress={promptAndUpdate}>
-            <Ionicons name="cloud-download-outline" size={20} color={Colors.accent} />
+            <Ionicons name="cloud-download-outline" size={20} color={c.accent} />
             <Text style={styles.updateText}>Check for Update</Text>
           </Pressable>
 
           {/* ── Sign Out ── */}
           <Pressable style={styles.logoutBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
+            <Ionicons name="log-out-outline" size={20} color={c.danger} />
             <Text style={styles.logoutText}>Sign Out</Text>
           </Pressable>
 
           {/* ── Delete Account ── */}
           <Pressable style={styles.deleteBtn} onPress={handleDeleteAccount} disabled={deletingAccount}>
             {deletingAccount
-              ? <ActivityIndicator size="small" color={Colors.danger} />
-              : <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+              ? <ActivityIndicator size="small" color={c.danger} />
+              : <Ionicons name="trash-outline" size={18} color={c.danger} />
             }
             <Text style={styles.deleteText}>Delete Account</Text>
           </Pressable>
@@ -560,7 +590,7 @@ export default function ProfileScreen() {
           <View style={[styles.paymentHeader, { paddingTop: insets.top + 10 }]}>
             <Text style={styles.paymentHeaderTitle}>Upgrade Plan</Text>
             <Pressable onPress={() => setPaymentVisible(false)} style={styles.paymentCloseBtn} hitSlop={8}>
-              <Ionicons name="close" size={22} color={Colors.textMuted} />
+              <Ionicons name="close" size={22} color={c.textMuted} />
             </Pressable>
           </View>
           {/* WebView with SSO injection */}
@@ -588,7 +618,7 @@ export default function ProfileScreen() {
             startInLoadingState
             renderLoading={() => (
               <View style={styles.paymentLoading}>
-                <ActivityIndicator size="large" color={Colors.accent} />
+                <ActivityIndicator size="large" color={c.accent} />
                 <Text style={styles.paymentLoadingText}>Loading checkout…</Text>
               </View>
             )}
@@ -613,18 +643,18 @@ export default function ProfileScreen() {
                 <Text style={styles.historySubtitle}>Your recent recorded positions</Text>
               </View>
               <Pressable onPress={() => setHistoryVisible(false)} style={styles.historyCloseBtn} hitSlop={8}>
-                <Ionicons name="close" size={20} color={Colors.textMuted} />
+                <Ionicons name="close" size={20} color={c.textMuted} />
               </Pressable>
             </View>
 
             {historyLoading ? (
               <View style={styles.historyCenter}>
-                <ActivityIndicator size="large" color={Colors.accent} />
+                <ActivityIndicator size="large" color={c.accent} />
                 <Text style={styles.historyMutedText}>Loading history…</Text>
               </View>
             ) : historyError ? (
               <View style={styles.historyCenter}>
-                <Ionicons name="alert-circle-outline" size={32} color={Colors.danger} />
+                <Ionicons name="alert-circle-outline" size={32} color={c.danger} />
                 <Text style={styles.historyMutedText}>{historyError}</Text>
                 <Pressable onPress={openHistory} style={styles.historyRetryBtn}>
                   <Text style={styles.historyRetryText}>Retry</Text>
@@ -632,7 +662,7 @@ export default function ProfileScreen() {
               </View>
             ) : historyPoints.length === 0 ? (
               <View style={styles.historyCenter}>
-                <Ionicons name="location-outline" size={32} color={Colors.textMuted} />
+                <Ionicons name="location-outline" size={32} color={c.textMuted} />
                 <Text style={styles.historyMutedText}>No location history yet.</Text>
               </View>
             ) : (
@@ -649,7 +679,7 @@ export default function ProfileScreen() {
                   return (
                     <View style={styles.historyRow}>
                       <View style={styles.historyDot}>
-                        <Ionicons name="location" size={14} color={Colors.accent} />
+                        <Ionicons name="location" size={14} color={c.accent} />
                       </View>
                       <View style={styles.historyRowContent}>
                         <Text style={styles.historyCoords}>
@@ -673,118 +703,125 @@ export default function ProfileScreen() {
 }
 
 function SettingRow({ icon, label, value, onToggle, toggle, chevron, onPress }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   return (
     <Pressable style={styles.settingRow} onPress={onPress}>
       <View style={styles.settingIcon}>
-        <Ionicons name={icon} size={20} color={Colors.accentSoft} />
+        <Ionicons name={icon} size={20} color={c.accentSoft} />
       </View>
       <Text style={styles.settingLabel}>{label}</Text>
       {toggle && (
         <Switch
           value={value}
           onValueChange={onToggle}
-          trackColor={{ false: Colors.bgMid, true: Colors.accentSoft }}
-          thumbColor={value ? Colors.accent : Colors.textMuted}
+          trackColor={{ false: c.bgMid, true: c.accentSoft }}
+          thumbColor={value ? c.accent : c.textMuted}
         />
       )}
-      {chevron && <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />}
+      {chevron && <Ionicons name="chevron-forward" size={18} color={c.textMuted} />}
     </Pressable>
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDeep },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDeep },
   scroll: { paddingHorizontal: 20, gap: 20 },
 
   // Avatar
   avatarSection: { alignItems: 'center', paddingVertical: 24, gap: 8 },
   avatarWrapper: { marginBottom: 4 },
-  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: Colors.accent },
-  avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: Colors.accent },
-  avatarInitials: { fontSize: 36, fontWeight: '800', color: Colors.textWhite },
-  avatarEditBadge: { position: 'absolute', bottom: 0, right: 0, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: Colors.bgDark },
-  userName: { fontSize: 24, fontWeight: '800', color: Colors.textWhite },
-  userPhone: { fontSize: 15, color: Colors.textMuted },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.bgGlassStrong, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: Colors.border },
-  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.online },
-  statusText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: c.accent },
+  avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: c.accent },
+  avatarInitials: { fontSize: 36, fontWeight: '800', color: c.textWhite },
+  avatarEditBadge: { position: 'absolute', bottom: 0, right: 0, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.bgDark },
+  userName: { fontSize: 24, fontWeight: '800', color: c.textWhite },
+  userPhone: { fontSize: 15, color: c.textMuted },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.bgGlassStrong, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: c.border },
+  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.online },
+  statusText: { color: c.textSecondary, fontSize: 12, fontWeight: '600' },
 
   // Upload overlay
   uploadOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 99, gap: 12 },
-  uploadOverlayText: { color: Colors.textWhite, fontSize: 15, fontWeight: '600' },
+  uploadOverlayText: { color: c.textWhite, fontSize: 15, fontWeight: '600' },
 
   // Sections
   sections: { gap: 14 },
   section: { padding: 20, gap: 4 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: c.textMuted, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 },
 
   // Profile info rows
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
-  infoIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.bgGlass, alignItems: 'center', justifyContent: 'center' },
+  infoIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: c.bgGlass, alignItems: 'center', justifyContent: 'center' },
   infoContent: { flex: 1, gap: 2 },
-  infoLabel: { fontSize: 11, color: Colors.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  infoValue: { fontSize: 15, color: Colors.textPrimary, fontWeight: '500' },
-  nameInput: { fontSize: 15, color: Colors.textWhite, fontWeight: '500', borderBottomWidth: 1, borderBottomColor: Colors.accent, paddingVertical: 2 },
+  infoLabel: { fontSize: 11, color: c.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  infoValue: { fontSize: 15, color: c.textPrimary, fontWeight: '500' },
+  nameInput: { fontSize: 15, color: c.textWhite, fontWeight: '500', borderBottomWidth: 1, borderBottomColor: c.accent, paddingVertical: 2 },
   editActions: { flexDirection: 'row', gap: 8 },
-  cancelBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.bgGlass },
-  cancelBtnText: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
-  saveBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.accent },
+  cancelBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: c.bgGlass },
+  cancelBtnText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
+  saveBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: c.accent },
   saveBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   accountBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(0,230,118,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
-  accountBadgeText: { color: Colors.online, fontSize: 12, fontWeight: '700' },
+  accountBadgeText: { color: c.online, fontSize: 12, fontWeight: '700' },
 
   // Payment modal
-  paymentModal: { flex: 1, backgroundColor: Colors.bgDeep },
-  paymentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12, backgroundColor: Colors.bgDeep, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  paymentHeaderTitle: { fontSize: 18, fontWeight: '800', color: Colors.textWhite },
-  paymentCloseBtn: { padding: 8, backgroundColor: Colors.bgGlass, borderRadius: 10 },
-  paymentLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: Colors.bgDeep },
-  paymentLoadingText: { color: Colors.textMuted, fontSize: 14 },
+  paymentModal: { flex: 1, backgroundColor: c.bgDeep },
+  paymentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12, backgroundColor: c.bgDeep, borderBottomWidth: 1, borderBottomColor: c.border },
+  paymentHeaderTitle: { fontSize: 18, fontWeight: '800', color: c.textWhite },
+  paymentCloseBtn: { padding: 8, backgroundColor: c.bgGlass, borderRadius: 10 },
+  paymentLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: c.bgDeep },
+  paymentLoadingText: { color: c.textMuted, fontSize: 14 },
 
   // Subscription
   subHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  planName: { fontSize: 17, fontWeight: '700', color: Colors.textWhite, marginBottom: 4 },
+  planName: { fontSize: 17, fontWeight: '700', color: c.textWhite, marginBottom: 4 },
   subStatusBadge: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 },
   subStatusText: { fontSize: 12, fontWeight: '700' },
-  upgradeBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8 },
+  upgradeBtn: { backgroundColor: c.accent, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8 },
   upgradeBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   cancelSubBtn: { borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(229,57,53,0.4)', backgroundColor: 'rgba(229,57,53,0.1)' },
-  cancelSubText: { color: Colors.danger, fontWeight: '700', fontSize: 13 },
+  cancelSubText: { color: c.danger, fontWeight: '700', fontSize: 13 },
   featuresList: { gap: 6, marginTop: 4 },
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  featureText: { color: Colors.textSecondary, fontSize: 14 },
+  featureText: { color: c.textSecondary, fontSize: 14 },
   subFallback: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
 
   // Settings
   settingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 14 },
-  settingIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.bgGlass, alignItems: 'center', justifyContent: 'center' },
-  settingLabel: { flex: 1, fontSize: 15, color: Colors.textPrimary, fontWeight: '500' },
+  settingIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: c.bgGlass, alignItems: 'center', justifyContent: 'center' },
+  settingLabel: { flex: 1, fontSize: 15, color: c.textPrimary, fontWeight: '500' },
+  themeToggle: { flexDirection: 'row', gap: 6, backgroundColor: c.bgMid, borderRadius: 12, padding: 3 },
+  themeOption: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 9 },
+  themeOptionSelected: { backgroundColor: c.accent },
+  themeOptionText: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
+  themeOptionTextSelected: { color: '#fff' },
 
   // Sign out
   updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(10,92,53,0.15)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(10,92,53,0.4)', marginBottom: 10 },
-  updateText: { color: Colors.accent, fontSize: 15, fontWeight: '700' },
+  updateText: { color: c.accent, fontSize: 15, fontWeight: '700' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(229,57,53,0.1)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(229,57,53,0.25)' },
-  logoutText: { color: Colors.danger, fontSize: 16, fontWeight: '700' },
+  logoutText: { color: c.danger, fontSize: 16, fontWeight: '700' },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, marginTop: 4 },
-  deleteText: { color: Colors.danger, fontSize: 14, fontWeight: '600', opacity: 0.85 },
-  version: { textAlign: 'center', color: Colors.textMuted, fontSize: 12, paddingBottom: 8 },
+  deleteText: { color: c.danger, fontSize: 14, fontWeight: '600', opacity: 0.85 },
+  version: { textAlign: 'center', color: c.textMuted, fontSize: 12, paddingBottom: 8 },
 
   // Location history modal
   historyOverlay: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 14 },
   historyCard: { padding: 20, gap: 12, maxHeight: '80%', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
-  historyHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: 'center', marginBottom: 2 },
+  historyHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: 'center', marginBottom: 2 },
   historyHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   historyTitleBlock: { flex: 1 },
-  historyTitle: { fontSize: 19, fontWeight: '800', color: Colors.textPrimary },
-  historySubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
-  historyCloseBtn: { padding: 6, backgroundColor: Colors.bgMid, borderRadius: 10 },
+  historyTitle: { fontSize: 19, fontWeight: '800', color: c.textPrimary },
+  historySubtitle: { fontSize: 13, color: c.textMuted, marginTop: 2 },
+  historyCloseBtn: { padding: 6, backgroundColor: c.bgMid, borderRadius: 10 },
   historyCenter: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, gap: 12 },
-  historyMutedText: { color: Colors.textMuted, fontSize: 14, textAlign: 'center' },
-  historyRetryBtn: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: 10, backgroundColor: Colors.bgGlassStrong, borderWidth: 1, borderColor: Colors.border },
-  historyRetryText: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
-  historyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.divider },
+  historyMutedText: { color: c.textMuted, fontSize: 14, textAlign: 'center' },
+  historyRetryBtn: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: 10, backgroundColor: c.bgGlassStrong, borderWidth: 1, borderColor: c.border },
+  historyRetryText: { color: c.accent, fontSize: 14, fontWeight: '700' },
+  historyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.divider },
   historyDot: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(0,200,83,0.12)', alignItems: 'center', justifyContent: 'center' },
   historyRowContent: { flex: 1, gap: 2 },
-  historyCoords: { fontSize: 14, color: Colors.textPrimary, fontWeight: '700', fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }) },
-  historyMeta: { fontSize: 12, color: Colors.textMuted },
+  historyCoords: { fontSize: 14, color: c.textPrimary, fontWeight: '700', fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }) },
+  historyMeta: { fontSize: 12, color: c.textMuted },
 })

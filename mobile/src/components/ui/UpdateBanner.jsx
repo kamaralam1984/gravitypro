@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { View, Text, Pressable, StyleSheet, Animated } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { checkForUpdate, downloadUpdate } from '../../services/appUpdates'
-import { Colors } from '../../theme/colors'
+import { useTheme } from '../../theme/ThemeContext'
 
 export default function UpdateBanner() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const [update, setUpdate] = useState(null)
   const [dismissed, setDismissed] = useState(false)
   const slideAnim = React.useRef(new Animated.Value(-80)).current
@@ -37,7 +39,7 @@ export default function UpdateBanner() {
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => StyleSheet.create({
   banner: {
     position: 'absolute',
     top: 0,
@@ -47,7 +49,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     paddingHorizontal: 16,
     paddingVertical: 12,
     shadowColor: '#000',

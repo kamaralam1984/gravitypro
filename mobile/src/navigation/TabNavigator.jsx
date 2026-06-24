@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { View, StyleSheet, Platform } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { BlurView } from 'expo-blur'
@@ -10,7 +10,7 @@ import CirclesScreen from '../screens/CirclesScreen'
 import AlertsScreen from '../screens/AlertsScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import WebPanelScreen from '../screens/WebPanelScreen'
-import { Colors } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 
 const Tab = createBottomTabNavigator()
 
@@ -38,6 +38,8 @@ const TAB_ICONS = {
 }
 
 export default function TabNavigator({ unresolvedSosCount = 0 }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
 
   return (
@@ -45,8 +47,8 @@ export default function TabNavigator({ unresolvedSosCount = 0 }) {
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarShowLabel: true,
-        tabBarActiveTintColor: Colors.accent,
-        tabBarInactiveTintColor: Colors.textMuted,
+        tabBarActiveTintColor: c.accent,
+        tabBarInactiveTintColor: c.textMuted,
         tabBarStyle: {
           position: 'absolute',
           borderTopWidth: 0,
@@ -99,7 +101,7 @@ export default function TabNavigator({ unresolvedSosCount = 0 }) {
           tabBarLabel: 'Alerts',
           tabBarBadge: unresolvedSosCount > 0 ? unresolvedSosCount : undefined,
           tabBarBadgeStyle: {
-            backgroundColor: Colors.danger,
+            backgroundColor: c.danger,
             color: '#fff',
             fontSize: 10,
             fontWeight: '700',
@@ -120,7 +122,7 @@ export default function TabNavigator({ unresolvedSosCount = 0 }) {
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => StyleSheet.create({
   iconWrap: {
     width: 40,
     height: 32,
@@ -129,6 +131,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   iconWrapActive: {
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
   },
 })

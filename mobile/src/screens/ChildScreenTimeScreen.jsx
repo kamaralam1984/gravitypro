@@ -15,7 +15,8 @@ import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { parentalAPI } from '../services/api'
-import { Colors, Gradients } from '../theme/colors'
+import { Gradients } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,8 @@ function formatDuration(sec) {
 // ── App row ─────────────────────────────────────────────────────────────────
 
 function AppRow({ item, maxSeconds }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const secs = Number(item.foreground_seconds) || 0
   const opens = Number(item.opens) || 0
   const label = item.app_label || item.package_name || 'Unknown app'
@@ -67,7 +70,7 @@ function AppRow({ item, maxSeconds }) {
   return (
     <View style={styles.row}>
       <View style={styles.rowIcon}>
-        <Ionicons name="apps" size={18} color={Colors.accent} />
+        <Ionicons name="apps" size={18} color={c.accent} />
       </View>
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>
@@ -90,6 +93,8 @@ function AppRow({ item, maxSeconds }) {
 // ── Screen ──────────────────────────────────────────────────────────────────
 
 export default function ChildScreenTimeScreen() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
   const navigation = useNavigation()
   const route = useRoute()
@@ -156,13 +161,13 @@ export default function ChildScreenTimeScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       {/* Header */}
       <LinearGradient colors={Gradients.hero} style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+            <Ionicons name="chevron-back" size={24} color={c.textPrimary} />
           </Pressable>
           <View style={styles.headerTitleWrap}>
             <Text style={styles.headerTitle} numberOfLines={1}>
@@ -178,10 +183,10 @@ export default function ChildScreenTimeScreen() {
         {/* Date selector */}
         <View style={styles.dateBar}>
           <Pressable onPress={() => setDate((d) => shiftDay(d, -1))} hitSlop={8} style={styles.dateArrow}>
-            <Ionicons name="chevron-back" size={20} color={Colors.textSecondary} />
+            <Ionicons name="chevron-back" size={20} color={c.textSecondary} />
           </Pressable>
           <View style={styles.dateLabelWrap}>
-            <Ionicons name="calendar-outline" size={15} color={Colors.accent} />
+            <Ionicons name="calendar-outline" size={15} color={c.accent} />
             <Text style={styles.dateLabel}>{formatLabelDate(date)}</Text>
           </View>
           <Pressable
@@ -192,7 +197,7 @@ export default function ChildScreenTimeScreen() {
             <Ionicons
               name="chevron-forward"
               size={20}
-              color={isToday(date) ? Colors.textMuted : Colors.textSecondary}
+              color={isToday(date) ? c.textMuted : c.textSecondary}
             />
           </Pressable>
         </View>
@@ -207,16 +212,16 @@ export default function ChildScreenTimeScreen() {
       {/* Body */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ActivityIndicator size="large" color={c.accent} />
         </View>
       ) : error ? (
         <ScrollView
           contentContainerStyle={styles.center}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
           }
         >
-          <Ionicons name="alert-circle-outline" size={48} color={Colors.warning} />
+          <Ionicons name="alert-circle-outline" size={48} color={c.warning} />
           <Text style={styles.emptyTitle}>Couldn't load data</Text>
           <Text style={styles.emptyText}>{error}</Text>
           <Pressable onPress={() => load(true)} style={styles.retryBtn}>
@@ -227,10 +232,10 @@ export default function ChildScreenTimeScreen() {
         <ScrollView
           contentContainerStyle={styles.center}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
           }
         >
-          <Ionicons name="phone-portrait-outline" size={48} color={Colors.textMuted} />
+          <Ionicons name="phone-portrait-outline" size={48} color={c.textMuted} />
           <Text style={styles.emptyTitle}>No screen-time data yet</Text>
           <Text style={styles.emptyText}>
             Needs the child device to report usage (requires native Usage Access).
@@ -243,7 +248,7 @@ export default function ChildScreenTimeScreen() {
           renderItem={({ item }) => <AppRow item={item} maxSeconds={maxSeconds} />}
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
           }
         />
       )}
@@ -251,20 +256,20 @@ export default function ChildScreenTimeScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDark },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDark },
 
   header: {
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: c.border,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitleWrap: { flex: 1, alignItems: 'center' },
-  headerTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '700' },
-  headerSub: { color: Colors.textSecondary, fontSize: 13, marginTop: 1 },
+  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '700' },
+  headerSub: { color: c.textSecondary, fontSize: 13, marginTop: 1 },
 
   dateBar: {
     flexDirection: 'row',
@@ -278,60 +283,60 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
   },
   dateArrowDisabled: { opacity: 0.4 },
   dateLabelWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dateLabel: { color: Colors.textPrimary, fontSize: 15, fontWeight: '600' },
+  dateLabel: { color: c.textPrimary, fontSize: 15, fontWeight: '600' },
 
   totalWrap: { alignItems: 'center', marginTop: 14 },
-  totalLabel: { color: Colors.textSecondary, fontSize: 12, letterSpacing: 0.5 },
-  totalValue: { color: Colors.accent, fontSize: 32, fontWeight: '800', marginTop: 2 },
+  totalLabel: { color: c.textSecondary, fontSize: 12, letterSpacing: 0.5 },
+  totalValue: { color: c.accent, fontSize: 32, fontWeight: '800', marginTop: 2 },
 
   center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '700', marginTop: 14 },
-  emptyText: { color: Colors.textMuted, fontSize: 14, textAlign: 'center', marginTop: 6, lineHeight: 20 },
+  emptyTitle: { color: c.textPrimary, fontSize: 16, fontWeight: '700', marginTop: 14 },
+  emptyText: { color: c.textMuted, fontSize: 14, textAlign: 'center', marginTop: 6, lineHeight: 20 },
 
   retryBtn: {
     marginTop: 18,
     paddingHorizontal: 22,
     paddingVertical: 10,
     borderRadius: 22,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  retryText: { color: Colors.accent, fontWeight: '700' },
+  retryText: { color: c.accent, fontWeight: '700' },
 
   row: {
     flexDirection: 'row',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     padding: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   rowIcon: {
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   rowBody: { flex: 1 },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowLabel: { flex: 1, color: Colors.textPrimary, fontSize: 15, fontWeight: '600', marginRight: 8 },
-  rowTime: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  rowLabel: { flex: 1, color: c.textPrimary, fontSize: 15, fontWeight: '600', marginRight: 8 },
+  rowTime: { color: c.accent, fontSize: 14, fontWeight: '700' },
   barTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
     marginTop: 8,
     overflow: 'hidden',
   },
-  barFill: { height: 6, borderRadius: 3, backgroundColor: Colors.accentSoft },
-  rowMeta: { color: Colors.textMuted, fontSize: 12, marginTop: 6 },
+  barFill: { height: 6, borderRadius: 3, backgroundColor: c.accentSoft },
+  rowMeta: { color: c.textMuted, fontSize: 12, marginTop: 6 },
 })
