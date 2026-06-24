@@ -42,6 +42,12 @@ jobs:
     env:
       REMOTE_PATH: /var/www/gravitypro/landing-react/downloads/GravityPro.apk
       PUBLIC_URL: https://gravitypro.kvlbusinesssolutions.com/downloads/GravityPro.apk
+      # Secrets cannot be used in a step `if:` directly — map them to env here so
+      # the scp step can gate on `env.VPS_HOST` (this avoids the parse-time error
+      # that made every run fail at 0s).
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -97,11 +103,7 @@ jobs:
       # Upload to the VPS download dir via SSH. Skipped automatically when the
       # VPS_HOST secret is not set (e.g. before secrets are configured).
       - name: Publish APK to the VPS download page (scp)
-        if: ${{ secrets.VPS_HOST != '' }}
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        if: ${{ env.VPS_HOST != '' }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
