@@ -30,7 +30,7 @@ export default function AddChildScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const insets = useSafeAreaInsets()
-  const { colors } = useTheme()
+  const colors = useTheme()
   const s = makeStyles(colors)
 
   const [circles, setCircles] = useState([])
@@ -41,6 +41,8 @@ export default function AddChildScreen() {
   const [day, setDay] = useState('')
   const [phone, setPhone] = useState('')
   const [avatarUrl, setAvatarUrl] = useState(null)
+  const [avatarBase64, setAvatarBase64] = useState(null)
+  const [avatarType, setAvatarType] = useState('image/jpeg')
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -65,9 +67,15 @@ export default function AddChildScreen() {
       if (!perm.granted) return Alert.alert('Permission needed', 'Allow photo access to set a picture.')
       const r = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true, aspect: [1, 1], quality: 0.6,
+        allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true,
       })
-      if (!r.canceled && r.assets?.[0]?.uri) setAvatarUrl(r.assets[0].uri)
+      if (!r.canceled && r.assets?.[0]?.uri) {
+        const a = r.assets[0]
+        setAvatarUrl(a.uri)
+        setAvatarBase64(a.base64 || null)
+        const ext = (a.uri.split('.').pop() || 'jpg').toLowerCase()
+        setAvatarType(ext === 'png' ? 'image/png' : 'image/jpeg')
+      }
     } catch (e) {
       Alert.alert('Error', 'Could not pick an image.')
     }
@@ -76,22 +84,13 @@ export default function AddChildScreen() {
   // Upload a local photo (file:// URI) using the same presign → PUT → confirm
   // sequence as ProfileScreen. Returns the public URL, or null on failure so
   // the caller can still create the child without a photo.
-  const uploadAvatar = async (localUri) => {
+  const uploadAvatar = async () => {
+    if (!avatarBase64) return null
     setUploading(true)
     try {
-      const ext = (localUri.split('.').pop() || 'jpg').toLowerCase()
-      const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
-      // Step 1: presign (backend returns { uploadUrl, key, publicUrl })
-      const { uploadUrl, publicUrl } = await mediaAPI.presignAvatar({ contentType })
-      // Step 2: Upload the binary to R2
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': contentType },
-        body: await (await fetch(localUri)).blob(),
-      })
-      // Step 3: Confirm the upload
-      await mediaAPI.confirmAvatar({ publicUrl })
-      return publicUrl
+      // Upload base64 to the backend local-disk store (no R2). Returns { url }.
+      const { url } = await mediaAPI.uploadImage({ dataBase64: avatarBase64, contentType: avatarType })
+      return url
     } catch (e) {
       console.error('Child avatar upload error:', e)
       Alert.alert(
@@ -123,8 +122,8 @@ export default function AddChildScreen() {
       // to creating the child without a photo (toast below) rather than blocking.
       if (avatarUrl && /^https?:\/\//.test(avatarUrl)) {
         body.avatar_url = avatarUrl
-      } else if (avatarUrl) {
-        const publicUrl = await uploadAvatar(avatarUrl)
+      } else if (avatarBase64) {
+        const publicUrl = await uploadAvatar()
         if (publicUrl) body.avatar_url = publicUrl
       }
 

@@ -13,7 +13,7 @@ import { familyAPI } from '../services/familyApi'
 export default function EmergencyContactsScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { colors } = useTheme()
+  const colors = useTheme()
   const s = makeStyles(colors)
 
   const [contacts, setContacts] = useState([])

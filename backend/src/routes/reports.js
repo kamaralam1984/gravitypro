@@ -81,33 +81,27 @@ function resolveEnd(req) {
   return end || toDateKey(new Date())
 }
 
-// GET /reports/weekly/:userId?end=YYYY-MM-DD  -> JSON weekly aggregate
-router.get('/weekly/:userId', authenticate, async (req, res) => {
-  const { userId } = req.params
-  const end = resolveEnd(req)
-  if (end === null) return res.status(400).json({ error: 'end must be YYYY-MM-DD' })
-  if (!(await canView(req.user.id, userId))) {
-    return res.status(403).json({ error: 'Not allowed to view this user' })
-  }
-  const data = await buildWeekly(userId, end)
-  res.json(data)
-})
-
 // CSV escaping: wrap in quotes + double any embedded quotes.
 function csvCell(v) {
   const s = String(v == null ? '' : v)
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-// GET /reports/weekly/:userId.csv?end=YYYY-MM-DD  -> text/csv attachment
-router.get('/weekly/:userId.csv', authenticate, async (req, res) => {
-  const { userId } = req.params
+// GET /reports/weekly/:userId(.csv)?end=YYYY-MM-DD
+// JSON weekly aggregate, OR a text/csv attachment when the path ends in `.csv`.
+// Express 5 routes `:userId` greedily (matches dots), so a separate `.csv` route
+// would be shadowed — instead we detect the `.csv` suffix inside this one handler.
+router.get('/weekly/:userId', authenticate, async (req, res) => {
+  let userId = req.params.userId
+  let wantCsv = false
+  if (userId.endsWith('.csv')) { wantCsv = true; userId = userId.slice(0, -4) }
   const end = resolveEnd(req)
   if (end === null) return res.status(400).json({ error: 'end must be YYYY-MM-DD' })
   if (!(await canView(req.user.id, userId))) {
     return res.status(403).json({ error: 'Not allowed to view this user' })
   }
   const data = await buildWeekly(userId, end)
+  if (!wantCsv) return res.json(data)
 
   const rows = []
   rows.push(['Date', 'Distance (m)', 'Moving (s)', 'Places Visited', 'Time at Home (s)', 'Time at School (s)'])

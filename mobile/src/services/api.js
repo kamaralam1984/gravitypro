@@ -98,6 +98,8 @@ export const geofenceAPI = {
 export const mediaAPI = {
   presignAvatar: (data) => api.post('/media/avatar/presign', data),
   confirmAvatar: (data) => api.post('/media/avatar/confirm', data),
+  // Direct base64 upload to the backend's local-disk store (no R2 needed). Returns { url }.
+  uploadImage: (data) => api.post('/media/upload', data),
   presignCircleIcon: (circleId, data) => api.post(`/media/circle/${circleId}/icon/presign`, data),
   confirmCircleIcon: (circleId, data) => api.post(`/media/circle/${circleId}/icon/confirm`, data),
 }

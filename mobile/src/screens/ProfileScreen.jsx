@@ -104,7 +104,8 @@ export default function ProfileScreen() {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.6,
+      base64: true,
     })
     if (result.canceled) return
     const asset = result.assets[0]
@@ -112,17 +113,10 @@ export default function ProfileScreen() {
     try {
       const ext = (asset.uri.split('.').pop() || 'jpg').toLowerCase()
       const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
-      // Step 1: presign (backend returns { uploadUrl, key, publicUrl })
-      const { uploadUrl, publicUrl } = await mediaAPI.presignAvatar({ contentType, fileSize: asset.fileSize })
-      // Step 2: Upload to R2
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': contentType },
-        body: await (await fetch(asset.uri)).blob(),
-      })
-      // Step 3: Confirm upload, then sync the profile
-      await mediaAPI.confirmAvatar({ publicUrl })
-      const { user: updated } = await userAPI.updateMe({ avatar_url: publicUrl })
+      if (!asset.base64) throw new Error('No image data')
+      // Upload base64 straight to the backend (local-disk store, no R2). Returns { url }.
+      const { url } = await mediaAPI.uploadImage({ dataBase64: asset.base64, contentType })
+      const { user: updated } = await userAPI.updateMe({ avatar_url: url })
       updateUser(updated)
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     } catch (e) {

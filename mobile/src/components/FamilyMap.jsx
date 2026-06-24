@@ -79,6 +79,8 @@ function buildHtml(members, zones, me, pickMode, pick, isLight) {
   .plbl{background:rgba(6,16,28,.92);color:#67E8F9;border:1px solid #1e6a7a;border-radius:8px;
         padding:1px 7px;font:700 11px system-ui;white-space:nowrap}
   .leaflet-tile{filter:brightness(${isLight ? '1' : '.85'})}
+  /* push the +/- zoom control down from the very top */
+  .leaflet-top{top:84px}
 </style></head><body><div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>

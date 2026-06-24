@@ -51,23 +51,26 @@ const updateDeviceStatus = async (userId, point, recordedAt) => {
 const saveLocation = async (userId, point) => {
   const { lat, lon, altitude, accuracy, speed, bearing, timestamp } = point
   if (lat == null || lon == null || isNaN(lat) || isNaN(lon)) return
+  const battery = point.battery ?? point.battery_level ?? null
   const locationWKT = `POINT(${parseFloat(lon)} ${parseFloat(lat)})`
   const recordedAt = timestamp ? new Date(typeof timestamp === 'number' && timestamp < 1e12 ? timestamp * 1000 : timestamp) : new Date()
   if (isNaN(recordedAt.getTime())) return
 
   await query(
-    `INSERT INTO device_locations (user_id, geom, accuracy, speed, bearing, altitude, recorded_at)
-     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6, $7)`,
-    [userId, locationWKT, accuracy ?? null, speed ?? null, bearing ?? null, altitude ?? null, recordedAt]
+    `INSERT INTO device_locations (user_id, geom, accuracy, speed, bearing, altitude, battery_level, recorded_at)
+     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6, $7, $8)`,
+    [userId, locationWKT, accuracy ?? null, speed ?? null, bearing ?? null, altitude ?? null, battery, recordedAt]
   )
 
   await query(
-    `INSERT INTO user_latest_locations (user_id, geom, accuracy, updated_at)
-     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4)
+    `INSERT INTO user_latest_locations (user_id, geom, accuracy, battery_level, updated_at)
+     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5)
      ON CONFLICT (user_id) DO UPDATE
-       SET geom = EXCLUDED.geom, accuracy = EXCLUDED.accuracy, updated_at = EXCLUDED.updated_at
+       SET geom = EXCLUDED.geom, accuracy = EXCLUDED.accuracy,
+           battery_level = COALESCE(EXCLUDED.battery_level, user_latest_locations.battery_level),
+           updated_at = EXCLUDED.updated_at
        WHERE user_latest_locations.updated_at < EXCLUDED.updated_at`,
-    [userId, locationWKT, accuracy ?? null, recordedAt]
+    [userId, locationWKT, accuracy ?? null, battery, recordedAt]
   )
 
   const circlesResult = await query(
