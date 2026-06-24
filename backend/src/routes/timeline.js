@@ -57,18 +57,11 @@ router.get('/:userId/days', authenticate, async (req, res) => {
   res.json({ days: result.rows.map((r) => r.day) })
 })
 
-// GET /:userId?date=YYYY-MM-DD
-// ordered sequence of STAYS and TRIPS for the day + totals summary
-router.get('/:userId', authenticate, async (req, res) => {
-  const { userId } = req.params
-  const date = String(req.query.date || '')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ error: 'date must be YYYY-MM-DD' })
-  }
-  if (!(await canView(req.user.id, userId))) {
-    return res.status(403).json({ error: 'Not allowed to view this user' })
-  }
-
+// ---- Core per-day computation (reused by /reports) ----
+// Computes the ordered STAY/TRIP segments + summary for one user/day.
+// Returns { date, segments, summary }. Does NOT do auth — callers must.
+// Each `stay` segment carries place/zoneId/category (category from safe_zones).
+async function computeDay(userId, date) {
   const zeros = { totalDistanceMeters: 0, placesVisited: 0, movingSec: 0, stillSec: 0 }
 
   // Fetch the day's ordered points (lat/lng + timestamp)
@@ -89,7 +82,7 @@ router.get('/:userId', authenticate, async (req, res) => {
   }))
 
   if (points.length === 0) {
-    return res.json({ date, segments: [], summary: { ...zeros } })
+    return { date, segments: [], summary: { ...zeros } }
   }
 
   // ---- Cluster consecutive points within STAY_RADIUS_M into candidate stays ----
@@ -117,7 +110,7 @@ router.get('/:userId', authenticate, async (req, res) => {
   // Load safe zones (with polygon centroid) for the target user's circles, so we
   // can name each stay by its nearest zone and tell if the centroid is inside it.
   const zonesRes = await query(
-    `SELECT DISTINCT sz.id, sz.name,
+    `SELECT DISTINCT sz.id, sz.name, sz.category,
             ST_Y(ST_Centroid(sz.geom)) AS clat,
             ST_X(ST_Centroid(sz.geom)) AS clng,
             sz.geom
@@ -131,12 +124,13 @@ router.get('/:userId', authenticate, async (req, res) => {
   const zones = zonesRes.rows.map((z) => ({
     id: z.id,
     name: z.name,
+    category: z.category || null,
     clat: Number(z.clat),
     clng: Number(z.clng),
   }))
 
   async function nearestZone(lat, lng) {
-    if (!zones.length) return { place: 'Unknown', zoneId: null, inside: false }
+    if (!zones.length) return { place: 'Unknown', zoneId: null, category: null, inside: false }
     let best = null
     let bestD = Infinity
     for (const z of zones) {
@@ -156,7 +150,12 @@ router.get('/:userId', authenticate, async (req, res) => {
       )
       inside = !!(r.rows[0] && r.rows[0].inside)
     }
-    return { place: best ? best.name : 'Unknown', zoneId: best ? best.id : null, inside }
+    return {
+      place: best ? best.name : 'Unknown',
+      zoneId: best ? best.id : null,
+      category: best ? best.category : null,
+      inside,
+    }
   }
 
   // ---- Build ordered segments: stays, with trips between them ----
@@ -245,6 +244,7 @@ router.get('/:userId', authenticate, async (req, res) => {
         lng: c.cLng,
         place: nz.inside ? nz.place : 'Unknown',
         zoneId: nz.inside ? nz.zoneId : null,
+        category: nz.inside ? nz.category : null,
         arrive: arrive.iso,
         leave: leave.iso,
         durationSec: durSec,
@@ -262,7 +262,25 @@ router.get('/:userId', authenticate, async (req, res) => {
     stillSec,
   }
 
-  res.json({ date, segments, summary })
+  return { date, segments, summary }
+}
+
+// GET /:userId?date=YYYY-MM-DD
+// ordered sequence of STAYS and TRIPS for the day + totals summary
+router.get('/:userId', authenticate, async (req, res) => {
+  const { userId } = req.params
+  const date = String(req.query.date || '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' })
+  }
+  if (!(await canView(req.user.id, userId))) {
+    return res.status(403).json({ error: 'Not allowed to view this user' })
+  }
+  const result = await computeDay(userId, date)
+  res.json(result)
 })
 
 module.exports = router
+// Reusable helpers for other routes (e.g. /reports).
+module.exports.computeDay = computeDay
+module.exports.canView = canView

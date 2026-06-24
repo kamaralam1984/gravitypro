@@ -14,6 +14,9 @@ import UpdateBanner from '../src/components/ui/UpdateBanner'
 import { registerForPushNotifications } from '../src/services/notifications'
 import { syncOfflineLocations, reportBatteryLevel, startBackgroundTracking } from '../src/services/location'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext'
+import gpsWatch from '../src/services/gpsWatch'
+import { ensureReliableTracking } from '../src/services/reliability'
+import { storage } from '../src/utils/storage'
 
 const queryClient = new QueryClient()
 
@@ -72,6 +75,19 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isAuthenticated) return
     startBackgroundTracking().catch(e => console.warn('Background tracking not started', e?.message))
+    // Watch for GPS/location-services being turned off → alerts the family.
+    try { gpsWatch.start() } catch (e) { console.warn('gpsWatch not started', e?.message) }
+    // One-time prompt to whitelist battery optimisation / auto-start (reliability).
+    ;(async () => {
+      try {
+        const done = await storage.getItem('reliability_prompted')
+        if (!done) {
+          await ensureReliableTracking()
+          await storage.setItem('reliability_prompted', '1')
+        }
+      } catch {}
+    })()
+    return () => { try { gpsWatch.stop() } catch {} }
   }, [isAuthenticated])
 
   // Sync offline location queue whenever app comes to foreground

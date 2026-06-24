@@ -47,6 +47,10 @@ const appRoutes = require('./routes/app')
 app.use('/api/v1/app', appRoutes)
 app.use('/api/v1/timeline', require('./routes/timeline'))
 app.use('/api/v1/parental', require('./routes/parental'))
+app.use('/api/v1/family', require('./routes/family'))
+app.use('/api/v1/device', require('./routes/deviceStatus'))
+app.use('/api/v1/reports', require('./routes/reports'))
+app.use('/api/v1/devices', require('./routes/devices'))
 app.use('/webhooks/traccar', traccarWebhook)
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'gravity-backend', timestamp: new Date().toISOString() }))
@@ -63,6 +67,7 @@ const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
   console.log(`Gravity Backend running on port ${PORT}`)
   startJobs()
+  try { require('./services/deviceMonitor').start() } catch (e) { console.error('deviceMonitor failed to start:', e) }
 })
 
 module.exports = app

@@ -4,6 +4,9 @@ import TabNavigator from './TabNavigator'
 import ChildHubScreen from '../screens/ChildHubScreen'
 import ChildTimelineScreen from '../screens/ChildTimelineScreen'
 import SafeZonesScreen from '../screens/SafeZonesScreen'
+import AddChildScreen from '../screens/AddChildScreen'
+import EmergencyContactsScreen from '../screens/EmergencyContactsScreen'
+import ReportsScreen from '../screens/ReportsScreen'
 
 const Stack = createStackNavigator()
 
@@ -16,6 +19,9 @@ export default function MainNavigator() {
       <Stack.Screen name="ChildHub" component={ChildHubScreen} />
       <Stack.Screen name="ChildTimeline" component={ChildTimelineScreen} />
       <Stack.Screen name="SafeZones" component={SafeZonesScreen} />
+      <Stack.Screen name="AddChild" component={AddChildScreen} />
+      <Stack.Screen name="EmergencyContacts" component={EmergencyContactsScreen} />
+      <Stack.Screen name="Reports" component={ReportsScreen} />
     </Stack.Navigator>
   )
 }

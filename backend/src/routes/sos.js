@@ -49,6 +49,47 @@ router.post('/', authenticate, async (req, res) => {
       }
     }
   } catch {}
+  // ── Also notify the raiser's emergency contacts ──────────────────────────────
+  // Emergency contacts are free-form (name/phone/relation) and have no push
+  // tokens of their own. We (a) log each one, and (b) if a contact's phone
+  // matches a registered user who has a push token, send them a push too.
+  // (No SMS gateway util exists in this codebase yet — see integration notes.)
+  try {
+    const contacts = await query(
+      'SELECT name, phone, relation FROM emergency_contacts WHERE owner_user_id = $1',
+      [userId]
+    )
+    if (contacts.rows.length) {
+      console.log(
+        `[SOS] Notifying ${contacts.rows.length} emergency contact(s) for user ${userId}:`,
+        contacts.rows.map(c => `${c.name}${c.phone ? ' <' + c.phone + '>' : ''}`).join(', ')
+      )
+      const phones = contacts.rows.map(c => c.phone).filter(Boolean)
+      if (phones.length) {
+        const ecTokens = await query(
+          "SELECT DISTINCT push_token FROM users WHERE phone = ANY($1) AND push_token IS NOT NULL AND id != $2",
+          [phones, userId]
+        )
+        if (ecTokens.rows.length) {
+          const ecMessages = ecTokens.rows.map(t => ({
+            to: t.push_token,
+            title: "🆘 Emergency Contact SOS",
+            body: (sosData.userName || "Someone") + " listed you as an emergency contact and needs help! " + sosData.message,
+            data: { type: "sos", latitude: sosData.latitude, longitude: sosData.longitude },
+            sound: "default",
+            priority: "high",
+          }))
+          fetch("https://exp.host/--/api/v2/push/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify(ecMessages)
+          }).catch(() => {})
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[SOS] emergency-contact notify failed:', e.message)
+  }
   // Log SOS to DB
   for (const row of circles.rows) {
     await query(

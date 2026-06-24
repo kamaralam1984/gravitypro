@@ -3,6 +3,18 @@ import * as Location from 'expo-location'
 
 const LOCATION_TASK_NAME = 'gravity-background-location'
 
+// ── Transport-mode detection (derived from GPS speed in metres/second) ─────────
+// Thresholds are deliberately conservative so a stationary/walking member is not
+// mislabelled as a vehicle on noisy GPS. speed may be null/-1 (unknown) on Android.
+export const speedToMode = (speedMps) => {
+  const s = typeof speedMps === 'number' && speedMps >= 0 ? speedMps : null
+  if (s == null) return { key: 'unknown', label: 'Unknown', icon: 'help-circle-outline' }
+  if (s < 0.5) return { key: 'still', label: 'Still', icon: 'pause-circle-outline' }
+  if (s < 2.2) return { key: 'walking', label: 'Walking', icon: 'walk-outline' }
+  if (s < 7) return { key: 'cycling', label: 'Cycling', icon: 'bicycle-outline' }
+  return { key: 'vehicle', label: 'Driving', icon: 'car-outline' }
+}
+
 const getBatteryLevel = async () => {
   try {
     const Battery = require('expo-battery')
@@ -36,9 +48,12 @@ if (Platform.OS !== 'web') {
         const deviceId = await storage.getItem('user_phone')
         if (!deviceId) continue
 
+        const mode = speedToMode(speed).key
+
         const point = {
           lat: latitude, lon: longitude,
           altitude, accuracy, speed,
+          mode,
           bearing: heading,
           timestamp: location.timestamp,
         }
@@ -64,7 +79,7 @@ if (Platform.OS !== 'web') {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + token,
               },
-              body: JSON.stringify({ latitude, longitude, accuracy, battery_level }),
+              body: JSON.stringify({ latitude, longitude, accuracy, battery_level, speed, mode }),
             })
           }
         } catch (e) {

@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useNavigation } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
 import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../store/authStore'
@@ -27,6 +28,7 @@ export default function ProfileScreen() {
   const updateUser = useAuthStore(s => s.updateUser)
   const logout = useAuthStore(s => s.logout)
   const insets = useSafeAreaInsets()
+  const navigation = useNavigation()
 
   // Avatar
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
@@ -426,6 +428,23 @@ export default function ProfileScreen() {
               label="Location History"
               chevron
               onPress={openHistory}
+            />
+          </GradientCard>
+
+          {/* ── Family ── */}
+          <GradientCard style={styles.section}>
+            <Text style={styles.sectionTitle}>Family</Text>
+            <SettingRow
+              icon="person-add-outline"
+              label="Add Child"
+              chevron
+              onPress={() => navigation.navigate('AddChild')}
+            />
+            <SettingRow
+              icon="alert-circle-outline"
+              label="Emergency Contacts"
+              chevron
+              onPress={() => navigation.navigate('EmergencyContacts')}
             />
           </GradientCard>
 

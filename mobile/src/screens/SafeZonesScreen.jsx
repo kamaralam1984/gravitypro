@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import Slider from '@react-native-community/slider'
 import { circleAPI, geofenceAPI } from '../services/api'
+import { ZONE_CATEGORIES, categoryMeta, groupZonesByMember } from '../services/zonesApi'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
 import { useTheme } from '../theme/ThemeContext'
@@ -45,6 +46,10 @@ function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
 
   const located = memberStats || []
   const insideCount = located.filter(s => s.inside).length
+  const cat = categoryMeta(zone.category)
+  const assignLabel = zone.assigned_user_id
+    ? (zone.assigned_user_name || 'Assigned')
+    : 'Shared'
 
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 12 }}>
@@ -54,15 +59,28 @@ function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
             <LinearGradient
               colors={['rgba(0,200,83,0.22)', 'rgba(0,200,83,0.07)']}
               style={styles.zoneIconWrap}>
-              <Ionicons name="shield-checkmark" size={22} color={c.accentSoft} />
+              <Ionicons name={cat.icon} size={22} color={c.accentSoft} />
             </LinearGradient>
 
             <View style={styles.zoneTextBlock}>
               <Text style={styles.zoneName}>{zone.name}</Text>
               <Text style={styles.zoneRadius}>{formatRadius(Number(zone.radius_meters))} radius</Text>
-              <Text style={styles.zoneCoords}>
-                {formatCoord(Number(zone.center_lat))}, {formatCoord(Number(zone.center_lng))}
-              </Text>
+              <View style={styles.zoneTagRow}>
+                <View style={styles.zoneTag}>
+                  <Ionicons name={cat.icon} size={10} color={c.accentSoft} />
+                  <Text style={styles.zoneTagText}>{cat.label}</Text>
+                </View>
+                <View style={[styles.zoneTag, zone.assigned_user_id && styles.zoneTagAssigned]}>
+                  <Ionicons
+                    name={zone.assigned_user_id ? 'person' : 'people'}
+                    size={10}
+                    color={zone.assigned_user_id ? c.accent : c.textMuted}
+                  />
+                  <Text style={[styles.zoneTagText, zone.assigned_user_id && styles.zoneTagTextAssigned]} numberOfLines={1}>
+                    {assignLabel}
+                  </Text>
+                </View>
+              </View>
             </View>
           </Pressable>
 
@@ -140,6 +158,8 @@ export default function SafeZonesScreen() {
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [zoneName, setZoneName] = useState('')
   const [radius, setRadius] = useState(200)
+  const [assignedUserId, setAssignedUserId] = useState(null) // null = shared (whole circle)
+  const [category, setCategory] = useState('other')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [pickingOnMap, setPickingOnMap] = useState(false)
@@ -244,6 +264,8 @@ export default function SafeZonesScreen() {
     setSelectedLocation(myLocation ? { ...myLocation } : null)
     setZoneName('')
     setRadius(200)
+    setAssignedUserId(null)
+    setCategory('other')
     setError('')
     setPickingOnMap(false)
     Animated.spring(modalAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }).start()
@@ -256,6 +278,8 @@ export default function SafeZonesScreen() {
     setSelectedLocation({ latitude: Number(zone.center_lat), longitude: Number(zone.center_lng) })
     setZoneName(zone.name)
     setRadius(Number(zone.radius_meters))
+    setAssignedUserId(zone.assigned_user_id ?? null)
+    setCategory(zone.category || 'other')
     setError('')
     setPickingOnMap(false)
     Animated.spring(modalAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }).start()
@@ -290,6 +314,8 @@ export default function SafeZonesScreen() {
         center_lat: Number(selectedLocation.latitude),
         center_lng: Number(selectedLocation.longitude),
         radius_meters: Number(radius),
+        assigned_user_id: assignedUserId ?? null, // null = shared with whole circle
+        category,
       }
       if (editingZone) {
         await geofenceAPI.update(editingZone.id, payload)
@@ -434,17 +460,33 @@ export default function SafeZonesScreen() {
           {safeZones.length === 0 ? (
             <EmptyZones onAddPress={openCreateModal} />
           ) : (
-            safeZones.map((zone, index) => (
-              <ZoneCard
-                key={zone.id}
-                zone={zone}
-                index={index}
-                onDelete={handleDeleteZone}
-                onFocus={focusZoneOnMap}
-                onEdit={openEditModal}
-                memberStats={statsForZone(zone)}
-              />
-            ))
+            (() => {
+              let i = 0
+              return groupZonesByMember(safeZones, members).map((group) => (
+                <View key={group.key} style={styles.groupBlock}>
+                  <View style={styles.groupHeader}>
+                    <Ionicons
+                      name={group.userId ? 'person-circle' : 'people-circle'}
+                      size={16}
+                      color={c.accentSoft}
+                    />
+                    <Text style={styles.groupTitle}>{group.name}</Text>
+                    <Text style={styles.groupCount}>{group.zones.length}</Text>
+                  </View>
+                  {group.zones.map((zone) => (
+                    <ZoneCard
+                      key={zone.id}
+                      zone={zone}
+                      index={i++}
+                      onDelete={handleDeleteZone}
+                      onFocus={focusZoneOnMap}
+                      onEdit={openEditModal}
+                      memberStats={statsForZone(zone)}
+                    />
+                  ))}
+                </View>
+              ))
+            })()
           )}
         </Animated.ScrollView>
       )}
@@ -533,6 +575,66 @@ export default function SafeZonesScreen() {
                     returnKeyType="done"
                   />
                 </View>
+              </View>
+
+              {/* Assign to member */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Assign To</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.pickerRow}>
+                  <Pressable
+                    onPress={() => setAssignedUserId(null)}
+                    style={[styles.pickerChip, assignedUserId == null && styles.pickerChipActive]}>
+                    <Ionicons
+                      name="people"
+                      size={13}
+                      color={assignedUserId == null ? c.accent : c.textMuted}
+                    />
+                    <Text style={[styles.pickerChipText, assignedUserId == null && styles.pickerChipTextActive]}>
+                      Whole family
+                    </Text>
+                  </Pressable>
+                  {(members || []).map((m) => {
+                    const on = assignedUserId === m.id
+                    return (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => setAssignedUserId(m.id)}
+                        style={[styles.pickerChip, on && styles.pickerChipActive]}>
+                        <Ionicons name="person" size={13} color={on ? c.accent : c.textMuted} />
+                        <Text style={[styles.pickerChipText, on && styles.pickerChipTextActive]} numberOfLines={1}>
+                          {m.name || m.email || 'Member'}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Category */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Category</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.pickerRow}>
+                  {ZONE_CATEGORIES.map((cat) => {
+                    const on = category === cat.value
+                    return (
+                      <Pressable
+                        key={cat.value}
+                        onPress={() => setCategory(cat.value)}
+                        style={[styles.pickerChip, on && styles.pickerChipActive]}>
+                        <Ionicons name={cat.icon} size={13} color={on ? c.accent : c.textMuted} />
+                        <Text style={[styles.pickerChipText, on && styles.pickerChipTextActive]}>
+                          {cat.label}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </ScrollView>
               </View>
 
               {/* Radius Slider */}
@@ -743,7 +845,62 @@ const makeStyles = (c) => StyleSheet.create({
   zoneName: { fontSize: 16, fontWeight: '700', color: c.textPrimary },
   zoneRadius: { fontSize: 12, color: c.accentSoft, fontWeight: '600' },
   zoneCoords: { fontSize: 11, color: c.textMuted, letterSpacing: 0.3 },
+  zoneTagRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' },
+  zoneTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: c.bgMid,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: c.border,
+    maxWidth: 150,
+  },
+  zoneTagAssigned: { borderColor: c.borderStrong, backgroundColor: 'rgba(0,200,83,0.08)' },
+  zoneTagText: { fontSize: 11, color: c.textMuted, fontWeight: '600' },
+  zoneTagTextAssigned: { color: c.accent },
   zoneActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+  // Grouped-by-member sections
+  groupBlock: { marginBottom: 6 },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  groupTitle: { flex: 1, fontSize: 13, fontWeight: '800', color: c.textSecondary, letterSpacing: 0.3 },
+  groupCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: c.accentSoft,
+    backgroundColor: c.bgGlassStrong,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
+
+  // Member / category pickers (modal)
+  pickerRow: { gap: 8, paddingVertical: 2, paddingRight: 8 },
+  pickerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 20,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.bgMid,
+    maxWidth: 170,
+  },
+  pickerChipActive: { borderColor: c.borderStrong, backgroundColor: 'rgba(0,200,83,0.1)' },
+  pickerChipText: { fontSize: 13, color: c.textMuted, fontWeight: '600' },
+  pickerChipTextActive: { color: c.accent, fontWeight: '700' },
   editBtn: {
     padding: 9,
     backgroundColor: 'rgba(0,200,83,0.1)',

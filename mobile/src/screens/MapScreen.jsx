@@ -29,6 +29,7 @@ import { circleAPI, sosAPI, geofenceAPI, userAPI } from '../services/api'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 import { storage } from '../utils/storage'
 import { useTheme } from '../theme/ThemeContext'
+import { speedToMode } from '../services/location'
 
 const getBatteryLevel = async () => {
   try {
@@ -178,7 +179,7 @@ export default function MapScreen() {
       es.addEventListener('location_update', (e) => {
         try {
           const data = JSON.parse(e.data)
-          const { userId, latitude, longitude, battery_level, timestamp } = data
+          const { userId, latitude, longitude, battery_level, speed, mode, timestamp } = data
           if (!userId || latitude == null || longitude == null) return
           setMemberLocations((prev) => ({
             ...prev,
@@ -186,6 +187,8 @@ export default function MapScreen() {
               latitude: Number(latitude),
               longitude: Number(longitude),
               battery: battery_level ?? prev[userId]?.battery ?? null,
+              speed: speed != null ? Number(speed) : (prev[userId]?.speed ?? null),
+              mode: mode ?? prev[userId]?.mode ?? null,
               timestamp: timestamp || new Date().toISOString(),
             },
           }))
@@ -302,6 +305,8 @@ export default function MapScreen() {
               latitude: Number(m.latitude),
               longitude: Number(m.longitude),
               battery: m.battery_level ?? null,
+              speed: m.speed != null ? Number(m.speed) : (prev[m.id]?.speed ?? null),
+              mode: m.mode ?? prev[m.id]?.mode ?? null,
               timestamp: m.location_updated_at || m.updated_at || null,
             }
           }
@@ -429,6 +434,13 @@ export default function MapScreen() {
     [members, memberLocations]
   )
   const selectedLoc = selectedMember ? memberLocations[selectedMember.id] : null
+
+  // Transport mode for the selected member: derive from latest GPS speed.
+  // (speedToMode also maps a missing speed → an "Unknown" placeholder.)
+  const selectedMode = useMemo(
+    () => speedToMode(selectedLoc?.speed),
+    [selectedLoc?.speed]
+  )
 
   // ── distances for the selected member ──────────────────────────────────────
   // Nearest safe zone (name + distance) and distance from the parent (myLocation).
@@ -710,6 +722,14 @@ export default function MapScreen() {
                 <Text style={styles.cardStatValue}>
                   {selectedLoc ? 'Shared' : 'Hidden'}
                 </Text>
+              </View>
+
+              <View style={styles.cardDivider} />
+
+              <View style={styles.cardStat}>
+                <Ionicons name={selectedMode.icon} size={16} color={c.textMuted} />
+                <Text style={styles.cardStatLabel}>Mode</Text>
+                <Text style={styles.cardStatValue}>{selectedMode.label}</Text>
               </View>
             </View>
 

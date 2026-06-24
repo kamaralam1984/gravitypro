@@ -9,6 +9,8 @@ import { useTheme } from '../theme/ThemeContext'
 
 const ACTIONS = [
   { key: 'ChildTimeline', icon: 'map', title: 'Location Timeline', desc: 'Where they went, stays & trips by day' },
+  { key: 'SafeZones', icon: 'shield-checkmark', title: 'Safe Zones', desc: 'Home, school & other zones for this child' },
+  { key: 'Reports', icon: 'bar-chart', title: 'Weekly Report', desc: 'Distance, time at home/school, daily breakdown' },
 ]
 
 export default function ChildHubScreen() {

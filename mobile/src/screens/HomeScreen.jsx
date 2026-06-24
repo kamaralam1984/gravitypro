@@ -20,7 +20,7 @@ import { MemberAvatar } from '../components/MemberAvatar'
 import { BatteryIndicator } from '../components/BatteryIndicator'
 import { userAPI, circleAPI, sosAPI, geofenceAPI } from '../services/api'
 import { useTheme } from '../theme/ThemeContext'
-import { getCurrentLocation } from '../services/location'
+import { getCurrentLocation, speedToMode } from '../services/location'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 
 // ── Greeting helper ───────────────────────────────────────────────────────────
@@ -89,6 +89,7 @@ function MemberChip({ member, memberLocations }) {
   const isOnline = loc
     ? (!loc.timestamp || Date.now() - new Date(loc.timestamp).getTime() < 5 * 60 * 1000)
     : false
+  const mode = speedToMode(loc?.speed)
 
   return (
     <View style={styles.memberChip}>
@@ -98,6 +99,12 @@ function MemberChip({ member, memberLocations }) {
       </Text>
       {loc?.battery != null && (
         <BatteryIndicator level={loc.battery} showText size="sm" />
+      )}
+      {isOnline && mode.key !== 'unknown' && (
+        <View style={styles.modeChip}>
+          <Ionicons name={mode.icon} size={11} color={c.accent} />
+          <Text style={styles.modeChipText} numberOfLines={1}>{mode.label}</Text>
+        </View>
       )}
     </View>
   )
@@ -184,6 +191,7 @@ export default function HomeScreen() {
             latitude: m.latitude,
             longitude: m.longitude,
             battery: m.battery_level,
+            speed: m.speed != null ? Number(m.speed) : null,
             timestamp: m.location_updated_at || m.updated_at,
           }
         }
@@ -618,6 +626,8 @@ const makeStyles = (c) => StyleSheet.create({
   memberList:        { paddingRight: 4, gap: 12 },
   memberChip:        { alignItems: 'center', gap: 6, width: 72 },
   memberChipName:    { color: c.textSecondary, fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  modeChip:          { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
+  modeChipText:      { color: c.accent, fontSize: 10, fontWeight: '700', maxWidth: 60 },
   shimmerRow:        { flexDirection: 'row', gap: 12 },
   memberChipShimmer: { width: 72, height: 90, borderRadius: 16 },
 
