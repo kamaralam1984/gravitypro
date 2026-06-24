@@ -39,6 +39,29 @@ interface Zone {
 // ── LEAFLET DYNAMIC IMPORT ──
 declare const L: typeof import('leaflet')
 
+// ── DISTANCE HELPERS ──
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+function fmtDist(m: number): string {
+  return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 1 : 0) + ' km'
+}
+function nearestZone(lat: number | null, lng: number | null, zones: Zone[]): { name: string; dist: number; inside: boolean } | null {
+  if (lat == null || lng == null) return null
+  let best: { name: string; dist: number; inside: boolean } | null = null
+  for (const z of zones) {
+    if (z.center_lat == null || z.center_lng == null) continue
+    const d = haversineMeters(lat, lng, z.center_lat, z.center_lng)
+    if (!best || d < best.dist) best = { name: z.name, dist: d, inside: d <= z.radius }
+  }
+  return best
+}
+
 const API_BASE = window.location.origin + '/api/v1'
 
 function getToken(): string | null { return localStorage.getItem('gravity_token') }
@@ -82,6 +105,7 @@ export default function ParentPanel() {
   const leafletMapRef = useRef<InstanceType<typeof L.Map> | null>(null)
   const tileLayerRef = useRef<InstanceType<typeof L.TileLayer> | null>(null)
   const memberMarkersRef = useRef<Record<string, InstanceType<typeof L.Marker>>>({})
+  const zoneCirclesRef = useRef<InstanceType<typeof L.Circle>[]>([])
   const mapInitedRef = useRef(false)
 
   const [activeTab, setActiveTab] = useState<'map' | 'family' | 'alerts' | 'geofence' | 'settings'>('map')
@@ -244,12 +268,17 @@ export default function ParentPanel() {
         iconSize: [46, 56],
         iconAnchor: [23, 56],
       })
+      const nz = nearestZone(m.lat!, m.lng!, zones)
+      const distLine = nz
+        ? `<div style="font-size:10px;color:${nz.inside ? '#00E676' : '#5E8B6E'};margin-top:2px;">${nz.inside ? '🛡️ Inside ' + nz.name : '📍 ' + fmtDist(nz.dist) + ' from ' + nz.name}</div>`
+        : ''
       const marker = L2.marker([m.lat!, m.lng!], { icon }).addTo(leafletMapRef.current!)
       marker.bindPopup(
         `<div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border:1px solid rgba(0,230,118,0.2);border-radius:10px;padding:10px;min-width:140px;">
           <div style="font-weight:800;font-size:13px;color:${color};margin-bottom:4px;">${m.name}</div>
           <div style="font-size:11px;color:#5E8B6E;margin-bottom:2px;">${m.role}</div>
           <div style="font-size:10px;color:#5E8B6E;margin-top:4px;">🔋 ${m.battery}%</div>
+          ${distLine}
         </div>`,
         { className: 'custom-popup' }
       )
@@ -261,7 +290,35 @@ export default function ParentPanel() {
       leafletMapRef.current.setView([located[0].lat!, located[0].lng!], 14)
     }
     setTimeout(() => leafletMapRef.current?.invalidateSize(), 100)
-  }, [members, activeTab])
+  }, [members, zones, activeTab])
+
+  // ── MAP SAFE-ZONE CIRCLES ──
+  useEffect(() => {
+    if (!leafletMapRef.current) return
+    const L2 = (window as unknown as { L: typeof import('leaflet') }).L
+    if (!L2) return
+    zoneCirclesRef.current.forEach((c) => leafletMapRef.current!.removeLayer(c))
+    zoneCirclesRef.current = []
+    zones
+      .filter((z) => z.active && z.center_lat != null && z.center_lng != null)
+      .forEach((z) => {
+        const circle = L2.circle([z.center_lat, z.center_lng], {
+          radius: z.radius,
+          color: '#00E676',
+          weight: 2,
+          fillColor: '#00E676',
+          fillOpacity: 0.12,
+        }).addTo(leafletMapRef.current!)
+        circle.bindPopup(
+          `<div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border:1px solid rgba(0,230,118,0.2);border-radius:10px;padding:10px;min-width:140px;">
+            <div style="font-weight:800;font-size:13px;color:#00E676;margin-bottom:4px;">🛡️ ${z.name}</div>
+            <div style="font-size:10px;color:#5E8B6E;">Radius: ${z.radius} m</div>
+          </div>`,
+          { className: 'custom-popup' }
+        )
+        zoneCirclesRef.current.push(circle)
+      })
+  }, [zones, members, activeTab])
 
   // ── MAP TYPE SWITCH ──
   function switchMapType(type: typeof mapType) {
@@ -870,6 +927,7 @@ export default function ParentPanel() {
                   const bc = battColor(m.battery)
                   const statusText = m.status === 'active' ? 'Active' : m.status === 'sos' ? 'SOS' : 'Offline'
                   const statusColor = m.status === 'active' ? '#00E676' : m.status === 'sos' ? '#FF5252' : '#5E8B6E'
+                  const nz = nearestZone(m.lat, m.lng, zones)
                   return (
                     <div key={m.id} className={styles.reveal} style={{ background: '#0D1F13', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 14, padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
                       <img src={m.avatar} alt={m.name} style={{ width: 36, height: 36, borderRadius: '50%', border: `2px solid ${m.color}`, flexShrink: 0 }} />
@@ -885,6 +943,7 @@ export default function ParentPanel() {
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                         <div style={{ fontSize: 9, fontWeight: 800, color: statusColor, background: statusColor + '18', border: `1px solid ${statusColor}44`, padding: '2px 7px', borderRadius: 10 }}>{statusText}</div>
                         <div style={{ fontSize: 9, color: '#5E8B6E' }}>{m.lastSeen !== 'Unknown' ? '🕐 ' + m.lastSeen : '—'}</div>
+                        {nz && <div style={{ fontSize: 9, fontWeight: 700, color: nz.inside ? '#00E676' : '#5E8B6E' }}>{nz.inside ? '🛡️ In ' + nz.name : '📍 ' + fmtDist(nz.dist)}</div>}
                       </div>
                     </div>
                   )
