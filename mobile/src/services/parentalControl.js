@@ -101,4 +101,60 @@ export async function syncBlockedApps() {
   }
 }
 
-export default { reportUsageToServer, syncBlockedApps }
+// ── Permission helpers (child device) ─────────────────────────────────────────
+// Usage Access and Accessibility are SPECIAL permissions — they cannot be granted
+// by a runtime dialog. The user must toggle them in system Settings. These helpers
+// check current state and deep-link into the right Settings screen.
+
+/** True if the native parental modules exist in this build (native APK only). */
+export function parentalNativeAvailable() {
+  return !!getNative('GravityUsage') || !!getNative('GravityBlocker')
+}
+
+/** Screen-time: is "Usage access" granted for this app? */
+export async function hasUsageAccess() {
+  const Usage = getNative('GravityUsage')
+  if (!Usage || typeof Usage.hasUsagePermission !== 'function') return false
+  try { return !!(await Usage.hasUsagePermission()) } catch { return false }
+}
+
+/** Open Settings → Usage access so the user can enable it. */
+export async function openUsageAccessSettings() {
+  const Usage = getNative('GravityUsage')
+  if (!Usage || typeof Usage.openUsageAccessSettings !== 'function') return false
+  try { await Usage.openUsageAccessSettings(); return true } catch { return false }
+}
+
+/** App-lock: is the GravityPro accessibility service enabled? */
+export async function hasAccessibility() {
+  const Blocker = getNative('GravityBlocker')
+  if (!Blocker || typeof Blocker.isAccessibilityEnabled !== 'function') return false
+  try { return !!(await Blocker.isAccessibilityEnabled()) } catch { return false }
+}
+
+/** Open Settings → Accessibility so the user can enable the blocker service. */
+export async function openAccessibilitySettings() {
+  const Blocker = getNative('GravityBlocker')
+  if (!Blocker || typeof Blocker.openAccessibilitySettings !== 'function') return false
+  try { await Blocker.openAccessibilitySettings(); return true } catch { return false }
+}
+
+/**
+ * One-shot child-device sync: report today's usage AND apply the latest blocked
+ * list. Safe to call on login, on foreground, and on an interval. Each half
+ * degrades to a no-op if its permission/native module is missing.
+ */
+export async function runChildParentalSync() {
+  return Promise.allSettled([reportUsageToServer(), syncBlockedApps()])
+}
+
+export default {
+  reportUsageToServer,
+  syncBlockedApps,
+  parentalNativeAvailable,
+  hasUsageAccess,
+  openUsageAccessSettings,
+  hasAccessibility,
+  openAccessibilitySettings,
+  runChildParentalSync,
+}

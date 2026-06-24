@@ -14,7 +14,7 @@ import * as ImagePicker from 'expo-image-picker'
 import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../store/authStore'
 import { mediaAPI, userAPI, subscriptionAPI } from '../services/api'
-import { stopBackgroundTracking } from '../services/location'
+import { startBackgroundTracking, stopBackgroundTracking } from '../services/location'
 import { registerForPushNotifications } from '../services/notifications'
 import { promptAndUpdate } from '../services/appUpdates'
 import { GradientCard } from '../components/ui/GradientCard'
@@ -495,7 +495,13 @@ export default function ProfileScreen() {
               value={trackingEnabled}
               onToggle={async (v) => {
                 setTrackingEnabled(v)
-                if (!v) await stopBackgroundTracking()
+                try {
+                  if (v) await startBackgroundTracking()
+                  else await stopBackgroundTracking()
+                } catch (e) {
+                  setTrackingEnabled(!v)
+                  Alert.alert('Location permission needed', 'Please allow location access "Always" so your family can see you even when the app is closed.')
+                }
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
               }}
               toggle

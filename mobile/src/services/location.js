@@ -103,14 +103,17 @@ export const startBackgroundTracking = async () => {
   const isRegistered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false)
   if (!isRegistered) {
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      useSignificantChanges: true,
-      accuracy: Location.Accuracy.Balanced,
-      distanceInterval: 50,
-      deferredUpdatesInterval: 60000,
+      // Near-real-time tracking: report at least every ~3s and on any movement.
+      accuracy: Location.Accuracy.High,
+      timeInterval: 3000,        // Android: minimum 3s between updates
+      distanceInterval: 0,       // 0 = report on the time interval even when still
+      deferredUpdatesInterval: 0, // do not batch — deliver each fix immediately
+      pausesUpdatesAutomatically: false, // iOS: never auto-pause when stationary
+      activityType: Location.ActivityType.Other,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'Gravity is active',
-        notificationBody: 'Your location is being shared with your family.',
+        notificationBody: 'Sharing your live location with your family.',
         notificationColor: '#0A5C35',
       },
     })
