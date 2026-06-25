@@ -27,7 +27,7 @@ router.post('/', authenticate, async (req, res) => {
   // Send push notifications to all circle members
   try {
     const tokens = await query(
-      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2",
+      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2 AND u.notif_sos = TRUE",
       [circles.rows.map(r => r.circle_id), userId]
     )
     if (tokens.rows.length) {
@@ -140,7 +140,7 @@ router.post('/safe', authenticate, async (req, res) => {
   }
   try {
     const tokens = await query(
-      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2",
+      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2 AND u.notif_sos = TRUE",
       [circles.rows.map(r => r.circle_id), userId]
     )
     if (tokens.rows.length) {

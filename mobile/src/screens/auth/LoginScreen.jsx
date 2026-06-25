@@ -346,23 +346,9 @@ export default function LoginScreen({ navigation }) {
               </>
             )}
 
-            {/* Divider */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Continue with Google */}
-            <Pressable
-              onPress={handleGoogleSignIn}
-              disabled={googleLoading}
-              style={({ pressed }) => [styles.googleBtn, pressed && { opacity: 0.85 }]}>
-              <Ionicons name="logo-google" size={20} color={c.textWhite} />
-              <Text style={styles.googleBtnText}>
-                {googleLoading ? 'Signing in…' : 'Continue with Google'}
-              </Text>
-            </Pressable>
+            {/* Google sign-in hidden until OAuth client IDs are configured.
+                Backend (POST /auth/google via authAPI.google) + signInWithGoogleToken()
+                are ready — re-add the button once Google.useIdTokenAuthRequest is wired. */}
 
             {/* Bottom link */}
             <View style={styles.registerRow}>

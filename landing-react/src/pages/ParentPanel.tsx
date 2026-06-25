@@ -537,7 +537,7 @@ export default function ParentPanel() {
       radius: z.radius_meters as number,
       center_lat: z.center_lat as number,
       center_lng: z.center_lng as number,
-      active: true,
+      active: z.active !== false,
       assigned_user_id: (z.assigned_user_id as string) ?? null,
       category: (z.category as string) || 'other',
       assigned_user_name: (z.assigned_user_name as string) ?? null,
@@ -713,15 +713,18 @@ export default function ParentPanel() {
   }
 
   // ── GEOFENCE ACTIONS ──
-  function toggleZone(id: string, checked: boolean) {
-    // Optimistic local update.
+  async function toggleZone(id: string, checked: boolean) {
+    // Optimistic local update, then persist; roll back if the request fails.
     setZones((prev) => prev.map((z) => (z.id === id ? { ...z, active: checked } : z)))
-    // TODO(backend): persist active state. PATCH /geofences/:id (updateZoneSchema)
-    // does NOT currently accept an `active` field and the safe_zones UPDATE query
-    // ignores it, so calling it would be a no-op / drop the toggle. Add `active` to
-    // updateZoneSchema + the UPDATE in backend/src/routes/geofences.js, then wire:
-    //   apiPatch('/geofences/' + id, { active: checked })
-    // Until then this toggle is local-only and resets on reload.
+    try {
+      const res = await apiPatch('/geofences/' + id, { active: checked })
+      if (res?.error || res === null) throw new Error(res?.error || 'failed')
+      showToast(checked ? 'Zone enabled' : 'Zone disabled', 'success')
+    } catch {
+      // revert on failure
+      setZones((prev) => prev.map((z) => (z.id === id ? { ...z, active: !checked } : z)))
+      showToast('Could not update zone', 'error')
+    }
   }
 
   function openZoneModal() {

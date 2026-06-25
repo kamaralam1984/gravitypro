@@ -27,7 +27,7 @@ router.get('/circle/:circleId', authenticate, async (req, res) => {
   if (!membership.rows.length) return res.status(403).json({ error: 'Access denied' })
   const result = await query(
     `SELECT sz.id, sz.name, sz.radius_meters, sz.created_at,
-       sz.assigned_user_id, sz.category,
+       sz.assigned_user_id, sz.category, sz.active,
        u.name as assigned_user_name,
        ST_AsGeoJSON(sz.geom)::json as geometry,
        ST_X(ST_Centroid(sz.geom)) as center_lng,
@@ -107,12 +107,13 @@ const updateZoneSchema = z.object({
   // null => unassign (back to circle-wide / shared)
   assigned_user_id: z.string().uuid().nullable().optional(),
   category: categorySchema.optional(),
+  active: z.boolean().optional(),
 })
 
 router.patch('/:id', authenticate, validate(updateZoneSchema), async (req, res) => {
   const zone = await query(
     `SELECT sz.id, sz.name, sz.radius_meters, sz.circle_id,
-       sz.assigned_user_id, sz.category,
+       sz.assigned_user_id, sz.category, sz.active,
        ST_X(ST_Centroid(sz.geom)) as center_lng,
        ST_Y(ST_Centroid(sz.geom)) as center_lat,
        cm.role
@@ -129,6 +130,7 @@ router.patch('/:id', authenticate, validate(updateZoneSchema), async (req, res) 
   const lng = req.body.center_lng ?? current.center_lng
   const radius = req.body.radius_meters ?? current.radius_meters
   const category = req.body.category ?? current.category
+  const active = ('active' in req.body) ? req.body.active : current.active
   // assigned_user_id: only change if the key is present; allow explicit null to unassign.
   const assigned_user_id = ('assigned_user_id' in req.body)
     ? req.body.assigned_user_id
@@ -149,12 +151,13 @@ router.patch('/:id', authenticate, validate(updateZoneSchema), async (req, res) 
          geom = ST_Buffer(ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $4)::geometry,
          radius_meters = $4,
          assigned_user_id = $6,
-         category = $7
+         category = $7,
+         active = $8
      WHERE id = $5
-     RETURNING id, name, radius_meters, created_at, assigned_user_id, category,
+     RETURNING id, name, radius_meters, created_at, assigned_user_id, category, active,
        ST_X(ST_Centroid(geom)) as center_lng,
        ST_Y(ST_Centroid(geom)) as center_lat`,
-    [name, lng, lat, radius, req.params.id, assigned_user_id, category]
+    [name, lng, lat, radius, req.params.id, assigned_user_id, category, active]
   )
   res.json({ safe_zone: result.rows[0] })
 })

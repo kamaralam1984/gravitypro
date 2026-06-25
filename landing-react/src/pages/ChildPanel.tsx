@@ -86,6 +86,9 @@ export default function ChildPanel() {
     }
   })
   const [precision, setPrecisionState] = useState<string>('exact')
+  // Mirror of `toggles` for use inside long-lived geolocation callbacks (avoids stale closures).
+  const togglesRef = useRef(toggles)
+  useEffect(() => { togglesRef.current = toggles }, [toggles])
   const [hasCircle, setHasCircle] = useState<boolean | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [joinCode, setJoinCode] = useState<string>('')
@@ -224,7 +227,27 @@ export default function ChildPanel() {
     })
     return res.json()
   }, [gravityToken])
-  void apiPatch
+
+  // Load persisted privacy/notification settings from the backend (source of truth)
+  // and reconcile the local toggles with them on mount.
+  useEffect(() => {
+    if (!gravityToken) return
+    apiGet('/users/me/settings').then(data => {
+      const s = data?.settings
+      if (!s) return
+      setToggles(prev => {
+        const next = {
+          ...prev,
+          shareLocation: s.share_location !== false,
+          familyArrivals: s.notif_arrivals !== false,
+          sosAlerts: s.notif_sos !== false,
+          geofence: s.notif_geofence !== false,
+        }
+        try { localStorage.setItem('gravity_toggles', JSON.stringify(next)) } catch { /* ignore */ }
+        return next
+      })
+    }).catch(() => { /* keep local defaults */ })
+  }, [gravityToken, apiGet])
 
   // Load location history
   const loadLocationHistory = useCallback(async () => {
@@ -356,6 +379,8 @@ export default function ChildPanel() {
         const ampm = ts.getHours() >= 12 ? 'PM' : 'AM'
         setLocationLastUpdated(`${h12}:${mm} ${ampm}`)
         setGpsActive(true)
+        // Respect "Share my location" OFF — don't post (backend also enforces this).
+        if (!togglesRef.current.shareLocation) return
         const now = Date.now()
         if (now - lastLocationSentRef.current < 30000) return // throttle to 30 s
         lastLocationSentRef.current = now
@@ -708,11 +733,27 @@ export default function ChildPanel() {
     }
   }, [apiPost, showToast])
 
+  // Map UI toggle keys → backend settings fields (autoSos is client-only behaviour).
+  const TOGGLE_FIELD: Record<string, string> = {
+    shareLocation: 'share_location',
+    familyArrivals: 'notif_arrivals',
+    sosAlerts: 'notif_sos',
+    geofence: 'notif_geofence',
+  }
+
   const toggleSwitch = (key: string) => {
     setToggles(prev => {
-      const next = { ...prev, [key]: !prev[key] }
-      showToast(next[key] ? '✓ Setting enabled' : '○ Setting disabled')
+      const value = !prev[key]
+      const next = { ...prev, [key]: value }
+      showToast(value ? '✓ Setting enabled' : '○ Setting disabled')
       try { localStorage.setItem('gravity_toggles', JSON.stringify(next)) } catch { /* ignore */ }
+      // Persist & ENFORCE on the backend (so e.g. "Share my location" actually stops sharing).
+      const field = TOGGLE_FIELD[key]
+      if (field) {
+        apiPatch('/users/me/settings', { [field]: value }).catch(() => {
+          showToast('Could not save setting', 'error')
+        })
+      }
       return next
     })
   }

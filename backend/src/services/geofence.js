@@ -12,6 +12,7 @@ const checkGeofenceStatus = async (userId, latitude, longitude) => {
      FROM safe_zones sz
      JOIN circle_members cm ON cm.circle_id = sz.circle_id
      WHERE cm.user_id = $2
+       AND sz.active = TRUE
        AND (sz.assigned_user_id = $2 OR sz.assigned_user_id IS NULL)`,
     [locationWKT, userId]
   )
@@ -43,7 +44,8 @@ const notifyCircleMembers = async (userId, zone, eventType) => {
     `SELECT u.push_token, u.name as member_name
      FROM circle_members cm
      JOIN users u ON u.id = cm.user_id
-     WHERE cm.circle_id = $1 AND cm.user_id != $2 AND u.push_token IS NOT NULL`,
+     WHERE cm.circle_id = $1 AND cm.user_id != $2 AND u.push_token IS NOT NULL
+       AND u.notif_geofence = TRUE`,
     [zone.circle_id, userId]
   )
   const triggerUser = await query('SELECT name FROM users WHERE id = $1', [userId])
