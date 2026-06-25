@@ -5,14 +5,17 @@
     "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#050F08",
-    "runtimeVersion": { "policy": "appVersion" },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
-      "url": "https://u.expo.dev/aacddc46-fdbb-45a7-9f01-2dd951ffcaa5",
+      "url": "https://u.expo.dev/7b9ad9d0-b6d8-43f1-b80c-288ad4597c3e",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "requestHeaders": { "expo-channel-name": "preview" }
     },
     "splash": {
       "image": "./assets/splash.png",
@@ -25,7 +28,7 @@
         "backgroundColor": "#050F08"
       },
       "package": "com.trackalways.gravity",
-      "versionCode": 4,
+      "versionCode": 9,
       "minSdkVersion": 24,
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
@@ -33,10 +36,14 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
         "POST_NOTIFICATIONS",
         "CAMERA",
+        "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES"
@@ -52,8 +59,13 @@
         "NSLocationWhenInUseUsageDescription": "Gravity needs your location to show your position on the family map.",
         "NSCameraUsageDescription": "Gravity needs camera access to update your profile photo.",
         "NSPhotoLibraryUsageDescription": "Gravity needs photo library access to select your profile photo.",
+        "NSMicrophoneUsageDescription": "Gravity needs microphone access to record voice notes in family chat.",
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "remote-notification"
+        ]
       }
     },
     "plugins": [
@@ -67,7 +79,9 @@
       [
         "expo-notifications",
         {
-          "sounds": ["./assets/notification.wav"]
+          "sounds": [
+            "./assets/notification.wav"
+          ]
         }
       ],
       [
@@ -79,7 +93,7 @@
             "minSdkVersion": 24,
             "buildToolsVersion": "35.0.0",
             "ndkVersion": "27.1.12297006",
-            "kotlinVersion": "2.0.21"
+            "kotlinVersion": "2.1.20"
           },
           "ios": {
             "deploymentTarget": "16.4"
@@ -88,7 +102,11 @@
       ]
     ],
     "scheme": "gravity",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "web": {
       "bundler": "metro",
       "output": "single",
@@ -96,9 +114,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "aacddc46-fdbb-45a7-9f01-2dd951ffcaa5"
+        "projectId": "7b9ad9d0-b6d8-43f1-b80c-288ad4597c3e"
       }
     },
-    "owner": "gravitynew"
+    "owner": "gravitypro"
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, Animated, Pressable,
   TextInput, Modal, ActivityIndicator, Alert, Platform, FlatList, RefreshControl,
@@ -11,9 +11,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import * as Haptics from 'expo-haptics'
 import * as Clipboard from 'expo-clipboard'
-import { circleAPI } from '../services/api'
+import { circleAPI, userAPI } from '../services/api'
 import { useCircleStore } from '../store/circleStore'
-import { Colors, Gradients } from '../theme/colors'
+import { useAuthStore } from '../store/authStore'
+import { useTheme } from '../theme/ThemeContext'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
 import { MemberAvatar } from '../components/MemberAvatar'
@@ -21,6 +22,8 @@ import { MemberAvatar } from '../components/MemberAvatar'
 // ─── Toast ──────────────────────────────────────────────────────────────────
 
 function Toast({ message, visible }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const opacity = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -36,7 +39,7 @@ function Toast({ message, visible }) {
   if (!message) return null
   return (
     <Animated.View style={[styles.toast, { opacity }]} pointerEvents="none">
-      <Ionicons name="checkmark-circle" size={16} color={Colors.accent} />
+      <Ionicons name="checkmark-circle" size={16} color={c.accent} />
       <Text style={styles.toastText}>{message}</Text>
     </Animated.View>
   )
@@ -54,16 +57,37 @@ function relativeTime(ts) {
 }
 
 function MemberRow({ member, isAdmin, onRemove }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const navigation = useNavigation()
   // Badge reflects the USER's account type (Parent/Child), not the circle role.
   const isParent = (member.account_type || (member.role === 'admin' ? 'parent' : 'child')) === 'parent'
   const roleLabel = isParent ? 'Parent' : 'Child'
-  const roleColor = isParent ? Colors.accent : Colors.accentSoft
+  const roleColor = isParent ? c.accent : c.accentSoft
   const lastSeen = member.location_updated_at
-  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000) : false
+  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 10 * 60 * 1000) : false
   const battery = member.battery_level
-  // Tapping a child opens the parental-controls hub (timeline / screen-time / blocking).
-  const openHub = isParent ? undefined : () => navigation.navigate('ChildHub', { member })
+  // Parental controls (ChildHub) are parent-only. A child viewer never gets to open them,
+  // even on another child's row.
+  const meIsChild = useAuthStore(s => s.user?.account_type) === 'child'
+  // Tapping a child opens the child hub (location timeline) — parents only.
+  const openHub = (isParent || meIsChild) ? undefined : () => navigation.navigate('ChildHub', { member })
+
+  // Parent can remotely refresh a child's app (pull OTA + reload + come online).
+  const canRefresh = !meIsChild && !isParent
+  const [refreshing, setRefreshing] = useState(false)
+  const handleRefresh = async () => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    setRefreshing(true)
+    try {
+      await userAPI.refreshMember(member.id)
+      Alert.alert('Refresh sent', `${member.name}'s app will update and come online. The first time, they may need to tap the notification.`)
+    } catch (e) {
+      Alert.alert('Could not refresh', e?.error || 'Ask them to open the app once, then try again.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   return (
     <Pressable onPress={openHub} style={({ pressed }) => [styles.memberRow, pressed && openHub && { opacity: 0.7 }]}>
@@ -71,7 +95,7 @@ function MemberRow({ member, isAdmin, onRemove }) {
       <View style={styles.memberInfo}>
         <Text style={styles.memberName}>{member.name}</Text>
         <View style={styles.memberMetaRow}>
-          <View style={[styles.statusDot, { backgroundColor: isOnline ? Colors.accent : Colors.textMuted }]} />
+          <View style={[styles.statusDot, { backgroundColor: isOnline ? c.accent : c.textMuted }]} />
           <Text style={styles.memberMeta} numberOfLines={1}>
             {isOnline ? 'Online' : (lastSeen ? `Last seen ${relativeTime(lastSeen)}` : 'No location yet')}
             {battery != null ? `  ·  🔋 ${battery}%` : ''}
@@ -82,12 +106,19 @@ function MemberRow({ member, isAdmin, onRemove }) {
         <View style={[styles.roleBadge, { borderColor: roleColor }]}>
           <Text style={[styles.roleText, { color: roleColor }]}>{roleLabel}</Text>
         </View>
-        {isAdmin && !isParent && (
-          <Pressable onPress={() => onRemove(member)} style={styles.removeBtn} hitSlop={8}>
-            <Ionicons name="person-remove-outline" size={16} color={Colors.danger} />
+        {canRefresh && (
+          <Pressable onPress={handleRefresh} disabled={refreshing} style={styles.removeBtn} hitSlop={8}>
+            {refreshing
+              ? <ActivityIndicator size="small" color={c.accent} />
+              : <Ionicons name="refresh" size={16} color={c.accent} />}
           </Pressable>
         )}
-        {!isParent && <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />}
+        {isAdmin && !isParent && (
+          <Pressable onPress={() => onRemove(member)} style={styles.removeBtn} hitSlop={8}>
+            <Ionicons name="person-remove-outline" size={16} color={c.danger} />
+          </Pressable>
+        )}
+        {openHub && <Ionicons name="chevron-forward" size={16} color={c.textMuted} />}
       </View>
     </Pressable>
   )
@@ -96,6 +127,9 @@ function MemberRow({ member, isAdmin, onRemove }) {
 // ─── Circle Card ─────────────────────────────────────────────────────────────
 
 function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
+  const c = useTheme()
+  const navigation = useNavigation()
+  const styles = useMemo(() => makeStyles(c), [c])
   const slideAnim = useRef(new Animated.Value(40)).current
   const fadeAnim = useRef(new Animated.Value(0)).current
   const expandAnim = useRef(new Animated.Value(0)).current
@@ -216,8 +250,8 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
       <GradientCard style={styles.circleCard}>
         {/* Card header — tap to expand */}
         <Pressable onPress={toggleExpand} style={styles.circleCardHeader}>
-          <LinearGradient colors={Gradients.button} style={styles.circleIconBg}>
-            <Ionicons name="shield-checkmark" size={22} color={Colors.accent} />
+          <LinearGradient colors={c.gradients.button} style={styles.circleIconBg}>
+            <Ionicons name="shield-checkmark" size={22} color={c.accent} />
           </LinearGradient>
 
           <View style={styles.circleInfo}>
@@ -230,16 +264,16 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
                   autoFocus
                   returnKeyType="done"
                   onSubmitEditing={handleRename}
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor={c.textMuted}
                   maxLength={40}
                 />
                 <Pressable onPress={handleRename} style={styles.renameSaveBtn} hitSlop={8} disabled={savingName}>
                   {savingName
-                    ? <ActivityIndicator size="small" color={Colors.accent} />
-                    : <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+                    ? <ActivityIndicator size="small" color={c.accent} />
+                    : <Ionicons name="checkmark" size={18} color={c.accent} />}
                 </Pressable>
                 <Pressable onPress={() => { setRenaming(false); setNameDraft(circle.name) }} style={styles.renameSaveBtn} hitSlop={8}>
-                  <Ionicons name="close" size={18} color={Colors.textMuted} />
+                  <Ionicons name="close" size={18} color={c.textMuted} />
                 </Pressable>
               </View>
             ) : (
@@ -250,7 +284,7 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
                     onPress={(e) => { e.stopPropagation?.(); setNameDraft(circle.name); setRenaming(true) }}
                     hitSlop={8}
                     style={styles.renamePencil}>
-                    <Ionicons name="pencil-outline" size={14} color={Colors.accentSoft} />
+                    <Ionicons name="pencil-outline" size={14} color={c.accentSoft} />
                   </Pressable>
                 )}
               </View>
@@ -268,7 +302,7 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
             <Ionicons
               name={expanded ? 'chevron-up' : 'chevron-down'}
               size={18}
-              color={Colors.textMuted}
+              color={c.textMuted}
               style={{ marginTop: 6 }}
             />
           </View>
@@ -277,11 +311,11 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
         {/* Copy code row */}
         <View style={styles.copyRow}>
           <View style={styles.codeBlock}>
-            <Ionicons name="key-outline" size={14} color={Colors.accentSoft} />
+            <Ionicons name="key-outline" size={14} color={c.accentSoft} />
             <Text style={styles.codeText}>{circle.invite_code}</Text>
           </View>
           <Pressable onPress={handleCopy} style={styles.copyBtn}>
-            <Ionicons name="copy-outline" size={15} color={Colors.accent} />
+            <Ionicons name="copy-outline" size={15} color={c.accent} />
             <Text style={styles.copyBtnText}>Copy Invite Code</Text>
           </Pressable>
         </View>
@@ -291,7 +325,7 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
           <View style={styles.memberList}>
             <View style={styles.divider} />
             {loadingMembers ? (
-              <ActivityIndicator size="small" color={Colors.accent} style={{ marginVertical: 16 }} />
+              <ActivityIndicator size="small" color={c.accent} style={{ marginVertical: 16 }} />
             ) : members.length === 0 ? (
               <Text style={styles.noMembersText}>No members found</Text>
             ) : (
@@ -307,12 +341,20 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
           </View>
         )}
 
+        {/* Chat */}
+        <Pressable
+          onPress={() => navigation.navigate('Chat', { circleId: circle.id, circleName: circle.name })}
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.bgGlass, borderRadius: 12, paddingVertical: 12, marginTop: 12, borderWidth: 1, borderColor: c.border }, pressed && { opacity: 0.75 }]}>
+          <Ionicons name="chatbubbles-outline" size={18} color={c.accent} />
+          <Text style={{ color: c.accent, fontWeight: '700', fontSize: 14 }}>Family Chat</Text>
+        </Pressable>
+
         {/* Footer */}
         <View style={styles.circleFooter}>
-          <Ionicons name="shield-checkmark" size={13} color={Colors.accentSoft} />
+          <Ionicons name="shield-checkmark" size={13} color={c.accentSoft} />
           <Text style={styles.circleStatus}>Active · Location sharing on</Text>
           <Pressable onPress={handleLeave} style={styles.leaveBtn} hitSlop={8}>
-            <Ionicons name="exit-outline" size={14} color={Colors.danger} />
+            <Ionicons name="exit-outline" size={14} color={c.danger} />
             <Text style={styles.leaveBtnText}>Leave circle</Text>
           </Pressable>
         </View>
@@ -324,9 +366,13 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function CirclesScreen() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
   const removeCircleFromStore = useCircleStore(s => s.removeCircle)
   const setStoreCircles = useCircleStore(s => s.setCircles)
+  // Only a parent can CREATE/manage a circle; a child can only JOIN one.
+  const isChild = useAuthStore(s => s.user?.account_type) === 'child'
   const [circles, setCircles] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -422,6 +468,7 @@ export default function CirclesScreen() {
   }
 
   const handleCreateCircle = async () => {
+    if (isChild) { setError('Only a parent can create a circle. Ask your parent for the invite code to join.'); return }
     if (!circleName.trim()) { setError('Circle name is required'); return }
     setActionLoading(true)
     setError('')
@@ -459,7 +506,7 @@ export default function CirclesScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       {/* Header */}
       <LinearGradient
@@ -472,7 +519,7 @@ export default function CirclesScreen() {
           </Text>
         </View>
         <View style={styles.headerBadge}>
-          <Ionicons name="people" size={16} color={Colors.accent} />
+          <Ionicons name="people" size={16} color={c.accent} />
           <Text style={styles.headerBadgeText}>{circles.length}</Text>
         </View>
       </LinearGradient>
@@ -484,16 +531,16 @@ export default function CirclesScreen() {
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} colors={[Colors.accent]} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} colors={[c.accent]} />
         }>
 
         {loading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color={Colors.accent} />
+            <ActivityIndicator size="large" color={c.accent} />
             <Text style={styles.loadingText}>Loading circles…</Text>
           </View>
         ) : circles.length === 0 ? (
-          <EmptyState onCreatePress={openCreate} onJoinPress={openJoin} />
+          <EmptyState onCreatePress={openCreate} onJoinPress={openJoin} isChild={isChild} />
         ) : (
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
             {circles.map((circle, index) => (
@@ -510,11 +557,11 @@ export default function CirclesScreen() {
         )}
       </ScrollView>
 
-      {/* FAB */}
+      {/* FAB — child can only Join, so open the Join modal directly */}
       <Pressable
-        onPress={openFABSheet}
-        style={[styles.fab, { bottom: insets.bottom + 24 }]}>
-        <LinearGradient colors={Gradients.buttonHero} style={styles.fabGrad}>
+        onPress={isChild ? openJoin : openFABSheet}
+        style={[styles.fab, { bottom: insets.bottom + 88 }]}>
+        <LinearGradient colors={c.gradients.buttonHero} style={styles.fabGrad}>
           <Ionicons name="add" size={28} color="#fff" />
         </LinearGradient>
       </Pressable>
@@ -534,28 +581,32 @@ export default function CirclesScreen() {
               <Text style={styles.sheetTitle}>Add a Circle</Text>
               <Text style={styles.sheetSubtitle}>Create a new group or join an existing one</Text>
 
-              <Pressable onPress={openCreate} style={styles.sheetOption}>
-                <LinearGradient colors={Gradients.button} style={styles.sheetOptionIcon}>
-                  <Ionicons name="add-circle" size={22} color={Colors.accent} />
-                </LinearGradient>
-                <View style={styles.sheetOptionText}>
-                  <Text style={styles.sheetOptionTitle}>Create Circle</Text>
-                  <Text style={styles.sheetOptionDesc}>Start a new family group</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-              </Pressable>
+              {!isChild && (
+                <>
+                  <Pressable onPress={openCreate} style={styles.sheetOption}>
+                    <LinearGradient colors={c.gradients.button} style={styles.sheetOptionIcon}>
+                      <Ionicons name="add-circle" size={22} color={c.accent} />
+                    </LinearGradient>
+                    <View style={styles.sheetOptionText}>
+                      <Text style={styles.sheetOptionTitle}>Create Circle</Text>
+                      <Text style={styles.sheetOptionDesc}>Start a new family group</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
+                  </Pressable>
 
-              <View style={styles.sheetDivider} />
+                  <View style={styles.sheetDivider} />
+                </>
+              )}
 
               <Pressable onPress={openJoin} style={styles.sheetOption}>
                 <LinearGradient colors={['#0A5C35', '#063D22']} style={styles.sheetOptionIcon}>
-                  <Ionicons name="enter-outline" size={22} color={Colors.accentSoft} />
+                  <Ionicons name="enter-outline" size={22} color={c.accentSoft} />
                 </LinearGradient>
                 <View style={styles.sheetOptionText}>
                   <Text style={styles.sheetOptionTitle}>Join with Code</Text>
                   <Text style={styles.sheetOptionDesc}>Enter an invite code to join</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+                <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
               </Pressable>
             </GradientCard>
           </Animated.View>
@@ -569,8 +620,8 @@ export default function CirclesScreen() {
           <GradientCard style={styles.modal}>
             <View style={styles.modalHandle} />
             <View style={styles.modalTitleRow}>
-              <LinearGradient colors={Gradients.button} style={styles.modalIconBg}>
-                <Ionicons name="people" size={20} color={Colors.accent} />
+              <LinearGradient colors={c.gradients.button} style={styles.modalIconBg}>
+                <Ionicons name="people" size={20} color={c.accent} />
               </LinearGradient>
               <View>
                 <Text style={styles.modalTitle}>Create a Circle</Text>
@@ -579,13 +630,13 @@ export default function CirclesScreen() {
             </View>
 
             <View style={styles.modalInput}>
-              <Ionicons name="people-outline" size={20} color={Colors.accentSoft} />
+              <Ionicons name="people-outline" size={20} color={c.accentSoft} />
               <TextInput
                 style={styles.modalTextInput}
                 value={circleName}
                 onChangeText={setCircleName}
                 placeholder="e.g. Smith Family"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={c.textMuted}
                 autoFocus
                 returnKeyType="done"
                 onSubmitEditing={handleCreateCircle}
@@ -594,7 +645,7 @@ export default function CirclesScreen() {
 
             {error ? (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle-outline" size={15} color={Colors.danger} />
+                <Ionicons name="alert-circle-outline" size={15} color={c.danger} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
@@ -622,7 +673,7 @@ export default function CirclesScreen() {
             <View style={styles.modalHandle} />
             <View style={styles.modalTitleRow}>
               <LinearGradient colors={['#0A5C35', '#063D22']} style={styles.modalIconBg}>
-                <Ionicons name="key-outline" size={20} color={Colors.accentSoft} />
+                <Ionicons name="key-outline" size={20} color={c.accentSoft} />
               </LinearGradient>
               <View>
                 <Text style={styles.modalTitle}>Join a Circle</Text>
@@ -631,13 +682,13 @@ export default function CirclesScreen() {
             </View>
 
             <View style={styles.modalInput}>
-              <Ionicons name="key-outline" size={20} color={Colors.accentSoft} />
+              <Ionicons name="key-outline" size={20} color={c.accentSoft} />
               <TextInput
                 style={[styles.modalTextInput, styles.monoInput]}
                 value={inviteCode}
                 onChangeText={t => setInviteCode(t.toUpperCase())}
                 placeholder="XXXXXXXXXXXXXXXX"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={c.textMuted}
                 autoCapitalize="characters"
                 autoFocus
                 returnKeyType="done"
@@ -648,7 +699,7 @@ export default function CirclesScreen() {
 
             {error ? (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle-outline" size={15} color={Colors.danger} />
+                <Ionicons name="alert-circle-outline" size={15} color={c.danger} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
@@ -673,7 +724,9 @@ export default function CirclesScreen() {
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
-function EmptyState({ onCreatePress, onJoinPress }) {
+function EmptyState({ onCreatePress, onJoinPress, isChild }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const floatAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -689,26 +742,28 @@ function EmptyState({ onCreatePress, onJoinPress }) {
     <View style={styles.emptyBox}>
       <Animated.View style={[styles.emptyIllustration, { transform: [{ translateY: floatAnim }] }]}>
         <LinearGradient colors={['rgba(0,200,83,0.2)', 'rgba(10,92,53,0.1)']} style={styles.emptyIconRing}>
-          <LinearGradient colors={Gradients.button} style={styles.emptyIconBg}>
-            <Ionicons name="people" size={44} color={Colors.accent} />
+          <LinearGradient colors={c.gradients.button} style={styles.emptyIconBg}>
+            <Ionicons name="people" size={44} color={c.accent} />
           </LinearGradient>
         </LinearGradient>
       </Animated.View>
 
-      <Text style={styles.emptyTitle}>Create your family circle</Text>
+      <Text style={styles.emptyTitle}>{isChild ? 'Join your family circle' : 'Create your family circle'}</Text>
       <Text style={styles.emptyText}>
         Connect with your family and friends.{'\n'}Share locations, stay safe together.
       </Text>
 
       <View style={styles.emptyActions}>
-        <PremiumButton
-          title="Create Circle"
-          onPress={onCreatePress}
-          icon={<Ionicons name="add-circle" size={18} color="#fff" />}
-          style={{ flex: 1 }}
-        />
+        {!isChild && (
+          <PremiumButton
+            title="Create Circle"
+            onPress={onCreatePress}
+            icon={<Ionicons name="add-circle" size={18} color="#fff" />}
+            style={{ flex: 1 }}
+          />
+        )}
         <Pressable onPress={onJoinPress} style={styles.emptyJoinBtn}>
-          <Ionicons name="enter-outline" size={18} color={Colors.accent} />
+          <Ionicons name="enter-outline" size={18} color={c.accent} />
           <Text style={styles.emptyJoinText}>Join with Code</Text>
         </Pressable>
       </View>
@@ -718,8 +773,8 @@ function EmptyState({ onCreatePress, onJoinPress }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDeep },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDeep },
 
   // Header
   header: {
@@ -730,26 +785,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTextBlock: { flex: 1 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: Colors.textWhite },
-  headerSubtitle: { fontSize: 14, color: Colors.textMuted, marginTop: 2 },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: c.textWhite },
+  headerSubtitle: { fontSize: 14, color: c.textMuted, marginTop: 2 },
   headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  headerBadgeText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
+  headerBadgeText: { color: c.accent, fontWeight: '700', fontSize: 14 },
 
   // Scroll
   scrollArea: { flex: 1 },
   scroll: { padding: 20 },
   loadingBox: { paddingVertical: 80, alignItems: 'center', gap: 14 },
-  loadingText: { color: Colors.textMuted, fontSize: 14 },
+  loadingText: { color: c.textMuted, fontSize: 14 },
 
   // Circle Card
   circleCard: { padding: 18, gap: 2 },
@@ -757,32 +812,32 @@ const styles = StyleSheet.create({
   circleIconBg: {
     width: 50, height: 50, borderRadius: 15,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: Colors.border,
+    borderWidth: 1, borderColor: c.border,
   },
   circleInfo: { flex: 1, gap: 4 },
-  circleName: { fontSize: 17, fontWeight: '700', color: Colors.textPrimary },
+  circleName: { fontSize: 17, fontWeight: '700', color: c.textPrimary },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   renamePencil: { padding: 2 },
   renameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  renameInput: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.textWhite, borderBottomWidth: 1, borderBottomColor: Colors.accent, paddingVertical: 2 },
-  renameSaveBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bgGlass },
+  renameInput: { flex: 1, fontSize: 17, fontWeight: '700', color: c.textWhite, borderBottomWidth: 1, borderBottomColor: c.accent, paddingVertical: 2 },
+  renameSaveBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bgGlass },
   inviteChipRow: { flexDirection: 'row' },
   inviteChip: {
     fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }),
     fontSize: 11,
-    color: Colors.accentSoft,
-    backgroundColor: Colors.bgGlass,
+    color: c.accentSoft,
+    backgroundColor: c.bgGlass,
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     letterSpacing: 1.2,
   },
   circleRight: { alignItems: 'center', gap: 2 },
   memberCountWrap: { alignItems: 'center' },
-  memberCountNum: { fontSize: 22, fontWeight: '800', color: Colors.accent },
-  memberCountLabel: { fontSize: 11, color: Colors.textMuted },
+  memberCountNum: { fontSize: 22, fontWeight: '800', color: c.accent },
+  memberCountLabel: { fontSize: 11, color: c.textMuted },
 
   // Copy row
   copyRow: {
@@ -790,18 +845,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 12,
-    backgroundColor: Colors.bgMid,
+    backgroundColor: c.bgMid,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   codeBlock: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   codeText: {
     fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }),
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     letterSpacing: 1.5,
     fontWeight: '700',
   },
@@ -809,33 +864,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  copyBtnText: { color: Colors.accent, fontSize: 12, fontWeight: '700' },
+  copyBtnText: { color: c.accent, fontSize: 12, fontWeight: '700' },
 
   // Member list
-  divider: { height: 1, backgroundColor: Colors.divider, marginVertical: 14 },
+  divider: { height: 1, backgroundColor: c.divider, marginVertical: 14 },
   memberList: { gap: 0 },
-  noMembersText: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 12 },
+  noMembersText: { color: c.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 12 },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
+    borderBottomColor: c.divider,
   },
   memberInfo: { flex: 1 },
-  memberName: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
-  memberJoined: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
+  memberName: { fontSize: 14, fontWeight: '700', color: c.textPrimary },
+  memberJoined: { fontSize: 11, color: c.textMuted, marginTop: 1 },
   memberMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
-  memberMeta: { fontSize: 11, color: Colors.textMuted, flexShrink: 1 },
+  memberMeta: { fontSize: 11, color: c.textMuted, flexShrink: 1 },
   memberRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   roleBadge: {
     borderRadius: 6,
@@ -858,9 +913,9 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.divider,
+    borderTopColor: c.divider,
   },
-  circleStatus: { fontSize: 12, color: Colors.textMuted, flex: 1 },
+  circleStatus: { fontSize: 12, color: c.textMuted, flex: 1 },
   leaveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -870,14 +925,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  leaveBtnText: { color: Colors.danger, fontSize: 12, fontWeight: '700' },
+  leaveBtnText: { color: c.danger, fontSize: 12, fontWeight: '700' },
 
   // FAB
   fab: {
     position: 'absolute',
     right: 20,
     borderRadius: 28,
-    shadowColor: Colors.accentSoft,
+    shadowColor: c.accentSoft,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.5,
     shadowRadius: 16,
@@ -896,20 +951,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 24,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
-    shadowColor: Colors.accentSoft,
+    borderColor: c.borderStrong,
+    shadowColor: c.accentSoft,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 10,
     zIndex: 999,
   },
-  toastText: { color: Colors.textPrimary, fontSize: 14, fontWeight: '600' },
+  toastText: { color: c.textPrimary, fontSize: 14, fontWeight: '600' },
 
   // FAB Bottom Sheet
   sheetOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 0 },
@@ -931,12 +986,12 @@ const styles = StyleSheet.create({
   },
   sheetHandle: {
     width: 36, height: 4, borderRadius: 2,
-    backgroundColor: Colors.border,
+    backgroundColor: c.border,
     alignSelf: 'center',
     marginBottom: 10,
   },
-  sheetTitle: { fontSize: 20, fontWeight: '800', color: Colors.textPrimary },
-  sheetSubtitle: { fontSize: 13, color: Colors.textMuted, marginBottom: 8 },
+  sheetTitle: { fontSize: 20, fontWeight: '800', color: c.textPrimary },
+  sheetSubtitle: { fontSize: 13, color: c.textMuted, marginBottom: 8 },
   sheetOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -946,12 +1001,12 @@ const styles = StyleSheet.create({
   sheetOptionIcon: {
     width: 46, height: 46, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: Colors.border,
+    borderWidth: 1, borderColor: c.border,
   },
   sheetOptionText: { flex: 1 },
-  sheetOptionTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  sheetOptionDesc: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
-  sheetDivider: { height: 1, backgroundColor: Colors.divider, marginVertical: 2 },
+  sheetOptionTitle: { fontSize: 16, fontWeight: '700', color: c.textPrimary },
+  sheetOptionDesc: { fontSize: 13, color: c.textMuted, marginTop: 2 },
+  sheetDivider: { height: 1, backgroundColor: c.divider, marginVertical: 2 },
 
   // Modal shared
   centeredOverlay: {
@@ -972,7 +1027,7 @@ const styles = StyleSheet.create({
   },
   modalHandle: {
     width: 36, height: 4, borderRadius: 2,
-    backgroundColor: Colors.border,
+    backgroundColor: c.border,
     alignSelf: 'center',
     marginBottom: 4,
   },
@@ -981,19 +1036,19 @@ const styles = StyleSheet.create({
     width: 44, height: 44, borderRadius: 13,
     alignItems: 'center', justifyContent: 'center',
   },
-  modalTitle: { fontSize: 19, fontWeight: '800', color: Colors.textPrimary },
-  modalSubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 1 },
+  modalTitle: { fontSize: 19, fontWeight: '800', color: c.textPrimary },
+  modalSubtitle: { fontSize: 13, color: c.textMuted, marginTop: 1 },
   modalInput: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.bgMid,
+    backgroundColor: c.bgMid,
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  modalTextInput: { flex: 1, color: Colors.textPrimary, fontSize: 16 },
+  modalTextInput: { flex: 1, color: c.textPrimary, fontSize: 16 },
   monoInput: {
     fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }),
     letterSpacing: 2,
@@ -1007,10 +1062,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
-  errorText: { color: Colors.danger, fontSize: 13, flex: 1 },
+  errorText: { color: c.danger, fontSize: 13, flex: 1 },
   modalActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   modalCancel: { paddingHorizontal: 16, paddingVertical: 16 },
-  modalCancelText: { color: Colors.textMuted, fontSize: 15, fontWeight: '600' },
+  modalCancelText: { color: c.textMuted, fontSize: 15, fontWeight: '600' },
 
   // Empty state
   emptyBox: {
@@ -1027,10 +1082,10 @@ const styles = StyleSheet.create({
   emptyIconBg: {
     width: 88, height: 88, borderRadius: 44,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: Colors.borderStrong,
+    borderWidth: 2, borderColor: c.borderStrong,
   },
-  emptyTitle: { fontSize: 22, fontWeight: '800', color: Colors.textSecondary, textAlign: 'center' },
-  emptyText: { fontSize: 14, color: Colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { fontSize: 22, fontWeight: '800', color: c.textSecondary, textAlign: 'center' },
+  emptyText: { fontSize: 14, color: c.textMuted, textAlign: 'center', lineHeight: 22 },
   emptyActions: { width: '100%', gap: 12, marginTop: 8 },
   emptyJoinBtn: {
     flexDirection: 'row',
@@ -1040,8 +1095,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
-    backgroundColor: Colors.bgCard,
+    borderColor: c.borderStrong,
+    backgroundColor: c.bgCard,
   },
-  emptyJoinText: { color: Colors.accent, fontSize: 15, fontWeight: '700' },
+  emptyJoinText: { color: c.accent, fontSize: 15, fontWeight: '700' },
 })

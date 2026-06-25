@@ -210,15 +210,26 @@
 /* MAIN CONTENT */
 .appContent {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
-  padding-bottom: 80px;
+  /* Generous bottom padding so the last content (e.g. LOCATION OVERVIEW)
+     clears BOTH the website's own bottom nav AND the mobile app's native
+     bottom tab bar overlaid on the WebView. */
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   scrollbar-width: none;
 }
 .appContent::-webkit-scrollbar { display: none; }
+
+/* Extra safety: every tab section gets bottom padding so its last items
+   are always reachable above the app's bottom navigation bar, on every tab
+   (map / family / alerts / geofence / settings). */
+.tabSection {
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
+}
 
 /* TAB SECTIONS */
 .tabSection {
@@ -978,19 +989,6 @@
 }
 .settingsUserName { font-size: 17px; font-weight: 800; color: #fff; margin-bottom: 2px; }
 .settingsUserEmail { font-size: 12px; color: #5E8B6E; margin-bottom: 8px; line-height: 1.4; }
-.settingsPlanBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  font-weight: 800;
-  color: #00E676;
-  background: rgba(0,230,118,0.1);
-  border: 1px solid rgba(0,230,118,0.25);
-  padding: 3px 10px;
-  border-radius: 20px;
-  letter-spacing: 0.5px;
-}
 
 .settingsGroups {
   padding: 0 16px;

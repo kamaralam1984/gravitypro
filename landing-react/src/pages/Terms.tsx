@@ -49,25 +49,22 @@ export default function Terms() {
           <li>Using automated scripts or bots to access the service</li>
         </ul>
 
-        <h2 style={S.h2}>6. Subscription and Payments</h2>
-        <p style={S.p}>Free plan features are available at no cost. Paid plans (Family, Premium) are billed monthly. You may cancel at any time and access continues until the end of the billing period. Refunds are available within 7 days of purchase by contacting support. We accept Razorpay, M-Pesa, Pesapal, Stripe, and PayPal.</p>
+        <h2 style={S.h2}>6. Data and Privacy</h2>
+        <p style={S.p}>Your location data is encrypted in transit and at rest. We do not sell your personal data to third parties. Location history is retained for up to 30 days. See our <Link to="/privacy" style={{ color: '#00E676' }}>Privacy Policy</Link> for full details.</p>
 
-        <h2 style={S.h2}>7. Data and Privacy</h2>
-        <p style={S.p}>Your location data is encrypted in transit and at rest. We do not sell your personal data to third parties. Location history is retained based on your plan (24 hours for Free, up to 30 days for Premium). See our <Link to="/privacy" style={{ color: '#00E676' }}>Privacy Policy</Link> for full details.</p>
-
-        <h2 style={S.h2}>8. SOS and Emergency Features</h2>
+        <h2 style={S.h2}>7. SOS and Emergency Features</h2>
         <p style={S.p}>The SOS feature is provided as a convenience tool. Gravity is not an emergency service. In a genuine emergency, always call local emergency services (112, 911, 999, etc.) first. Gravity makes no guarantee of delivery time for SOS notifications.</p>
 
-        <h2 style={S.h2}>9. Limitation of Liability</h2>
+        <h2 style={S.h2}>8. Limitation of Liability</h2>
         <p style={S.p}>Gravity is provided "as is." We are not liable for any indirect, incidental, or consequential damages arising from your use of the service, including but not limited to loss of data, location inaccuracies, missed alerts, or service interruptions.</p>
 
-        <h2 style={S.h2}>10. Termination</h2>
+        <h2 style={S.h2}>9. Termination</h2>
         <p style={S.p}>We reserve the right to suspend or terminate accounts that violate these terms. You may delete your account at any time from account settings, which will permanently remove your data.</p>
 
-        <h2 style={S.h2}>11. Changes to Terms</h2>
+        <h2 style={S.h2}>10. Changes to Terms</h2>
         <p style={S.p}>We may update these terms from time to time. Continued use of the service after changes constitutes acceptance. We will notify you of material changes via the app or email.</p>
 
-        <h2 style={S.h2}>12. Contact</h2>
+        <h2 style={S.h2}>11. Contact</h2>
         <p style={S.p}>For questions about these terms, contact us at: <span style={{ color: '#00E676' }}>support@trackalways.com</span></p>
 
         <div style={{ marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>

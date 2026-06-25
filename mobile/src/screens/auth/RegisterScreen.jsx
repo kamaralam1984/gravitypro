@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import {
   View, Text, TextInput, StyleSheet, ScrollView, Animated,
   KeyboardAvoidingView, Platform, Pressable,
@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics'
 import { authAPI } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { PremiumButton } from '../../components/ui/PremiumButton'
-import { Colors, Gradients } from '../../theme/colors'
+import { useTheme } from '../../theme/ThemeContext'
 
 const OTP_LENGTH = 6
 
@@ -32,6 +32,8 @@ const isValidName = (name) => name.trim().length >= 2
 
 // ── Step progress dots ────────────────────────────────────────────────────────
 function StepDots({ current, total }) {
+  const c = useTheme()
+  const stepStyles = useMemo(() => makeStepStyles(c), [c])
   return (
     <View style={stepStyles.row}>
       {Array.from({ length: total }).map((_, i) => (
@@ -47,34 +49,36 @@ function StepDots({ current, total }) {
   )
 }
 
-const stepStyles = StyleSheet.create({
+const makeStepStyles = (c) => StyleSheet.create({
   row: { flexDirection: 'row', gap: 8, justifyContent: 'center' },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  dotActive: { width: 28, backgroundColor: Colors.accent },
-  dotDone: { backgroundColor: Colors.accentSoft || '#00C853' },
-  dotIdle: { backgroundColor: Colors.border || '#1A3A2A' },
+  dotActive: { width: 28, backgroundColor: c.accent },
+  dotDone: { backgroundColor: c.accentSoft || '#00C853' },
+  dotIdle: { backgroundColor: c.border || '#1A3A2A' },
 })
 
 // ── Validation indicator ──────────────────────────────────────────────────────
 function FieldStatus({ valid, show }) {
+  const c = useTheme()
   if (!show) return null
   return (
     <Ionicons
       name={valid ? 'checkmark-circle' : 'close-circle'}
       size={18}
-      color={valid ? Colors.accent : Colors.danger}
+      color={valid ? c.accent : c.danger}
     />
   )
 }
 
 export default function RegisterScreen({ navigation }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   // EMAIL is the PRIMARY / required path. PHONE (SMS) is OPTIONAL.
   // step: 0 = profile (name + email), 1 = email otp (creates account),
   //       2 = optional phone, 3 = optional phone otp
   const [step, setStep] = useState(0)
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''))
-  const [phoneToken, setPhoneToken] = useState(null)
   const [devBanner, setDevBanner] = useState('')
 
   // Email OTP
@@ -82,7 +86,6 @@ export default function RegisterScreen({ navigation }) {
   const [emailToken, setEmailToken] = useState(null)
   const [emailDevBanner, setEmailDevBanner] = useState('')
   const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false)
-  const [addPhone, setAddPhone] = useState(false)
 
   // Profile fields
   const [name, setName] = useState('')
@@ -266,14 +269,14 @@ export default function RegisterScreen({ navigation }) {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <LinearGradient colors={Gradients.hero} style={{ flex: 1 }}>
-      <StatusBar style="light" />
+    <LinearGradient colors={c.gradients.hero} style={{ flex: 1 }}>
+      <StatusBar style={c.statusBarStyle} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           {/* Header */}
           <View style={styles.header}>
-            <LinearGradient colors={Gradients.buttonHero} style={styles.logoCircle}>
+            <LinearGradient colors={c.gradients.buttonHero} style={styles.logoCircle}>
               <Ionicons name="people" size={36} color="#fff" />
             </LinearGradient>
             <Text style={styles.brand}>Join Gravity</Text>
@@ -298,13 +301,13 @@ export default function RegisterScreen({ navigation }) {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Full Name</Text>
                   <View style={styles.inputWrap}>
-                    <Ionicons name="person-outline" size={20} color={Colors.accentSoft} style={styles.inputIcon} />
+                    <Ionicons name="person-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
                       value={name}
                       onChangeText={setName}
                       placeholder="Your full name"
-                      placeholderTextColor={Colors.textMuted}
+                      placeholderTextColor={c.textMuted}
                       autoCapitalize="words"
                       autoComplete="name"
                     />
@@ -316,13 +319,13 @@ export default function RegisterScreen({ navigation }) {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Email Address</Text>
                   <View style={styles.inputWrap}>
-                    <Ionicons name="mail-outline" size={20} color={Colors.accentSoft} style={styles.inputIcon} />
+                    <Ionicons name="mail-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
                       value={email}
                       onChangeText={setEmail}
                       placeholder="you@example.com"
-                      placeholderTextColor={Colors.textMuted}
+                      placeholderTextColor={c.textMuted}
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoComplete="email"
@@ -372,7 +375,7 @@ export default function RegisterScreen({ navigation }) {
 
                 {!!error && (
                   <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                    <Ionicons name="alert-circle" size={16} color={c.danger} />
                     <Text style={styles.errorText}>{error}</Text>
                   </View>
                 )}
@@ -401,7 +404,7 @@ export default function RegisterScreen({ navigation }) {
 
                 {/* Email recap */}
                 <View style={styles.phoneRecap}>
-                  <Ionicons name="mail-outline" size={16} color={Colors.accentSoft} />
+                  <Ionicons name="mail-outline" size={16} color={c.accentSoft} />
                   <Text style={styles.phoneRecapText}>{email.trim().toLowerCase()}</Text>
                   <Pressable onPress={() => { setStep(0); setError(''); setEmailDevBanner(''); setEmailAlreadyRegistered(false) }}>
                     <Text style={styles.changeLink}>Change</Text>
@@ -431,7 +434,7 @@ export default function RegisterScreen({ navigation }) {
                 {/* Email already registered notice */}
                 {emailAlreadyRegistered && (
                   <View style={styles.infoBox}>
-                    <Ionicons name="information-circle" size={16} color={Colors.accent} />
+                    <Ionicons name="information-circle" size={16} color={c.accent} />
                     <Text style={styles.infoText}>Email already registered. </Text>
                     <Pressable onPress={() => navigation?.navigate('Login')}>
                       <Text style={styles.inlineLink}>Sign in instead.</Text>
@@ -441,7 +444,7 @@ export default function RegisterScreen({ navigation }) {
 
                 {!!error && !emailAlreadyRegistered && (
                   <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                    <Ionicons name="alert-circle" size={16} color={c.danger} />
                     <Text style={styles.errorText}>{error}</Text>
                   </View>
                 )}
@@ -465,7 +468,7 @@ export default function RegisterScreen({ navigation }) {
             {step === 2 && (
               <>
                 <View style={styles.infoBox}>
-                  <Ionicons name="information-circle" size={16} color={Colors.accent} />
+                  <Ionicons name="information-circle" size={16} color={c.accent} />
                   <Text style={styles.infoText}>
                     Optional: add a phone number for SMS alerts. You can skip this and add it later.
                   </Text>
@@ -474,13 +477,13 @@ export default function RegisterScreen({ navigation }) {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Phone Number (optional)</Text>
                   <View style={styles.inputWrap}>
-                    <Ionicons name="call-outline" size={20} color={Colors.accentSoft} style={styles.inputIcon} />
+                    <Ionicons name="call-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
                       value={phone}
                       onChangeText={setPhone}
                       placeholder="+91 98765 43210"
-                      placeholderTextColor={Colors.textMuted}
+                      placeholderTextColor={c.textMuted}
                       keyboardType="phone-pad"
                       autoComplete="tel"
                       returnKeyType="done"
@@ -491,7 +494,7 @@ export default function RegisterScreen({ navigation }) {
 
                 {!!error && (
                   <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                    <Ionicons name="alert-circle" size={16} color={c.danger} />
                     <Text style={styles.errorText}>{error}</Text>
                   </View>
                 )}
@@ -524,7 +527,7 @@ export default function RegisterScreen({ navigation }) {
 
                 {/* Phone recap */}
                 <View style={styles.phoneRecap}>
-                  <Ionicons name="call-outline" size={16} color={Colors.accentSoft} />
+                  <Ionicons name="call-outline" size={16} color={c.accentSoft} />
                   <Text style={styles.phoneRecapText}>{phone.trim()}</Text>
                   <Pressable onPress={() => { setStep(2); setError(''); setDevBanner(''); setAlreadyRegistered(false) }}>
                     <Text style={styles.changeLink}>Change</Text>
@@ -554,7 +557,7 @@ export default function RegisterScreen({ navigation }) {
                 {/* Phone already registered notice */}
                 {alreadyRegistered && (
                   <View style={styles.infoBox}>
-                    <Ionicons name="information-circle" size={16} color={Colors.accent} />
+                    <Ionicons name="information-circle" size={16} color={c.accent} />
                     <Text style={styles.infoText}>This phone is already registered. </Text>
                     <Pressable onPress={handleSkipPhone}>
                       <Text style={styles.inlineLink}>Finish with email only.</Text>
@@ -564,7 +567,7 @@ export default function RegisterScreen({ navigation }) {
 
                 {!!error && !alreadyRegistered && (
                   <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                    <Ionicons name="alert-circle" size={16} color={c.danger} />
                     <Text style={styles.errorText}>{error}</Text>
                   </View>
                 )}
@@ -603,17 +606,17 @@ export default function RegisterScreen({ navigation }) {
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 70, paddingBottom: 40, gap: 28 },
   header: { alignItems: 'center', gap: 12 },
   logoCircle: {
     width: 80, height: 80, borderRadius: 40,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.accentSoft, shadowOffset: { width: 0, height: 6 },
+    shadowColor: c.accentSoft, shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.5, shadowRadius: 16, elevation: 12,
   },
-  brand: { fontSize: 28, fontWeight: '900', color: Colors.textWhite, letterSpacing: 1 },
-  subtitle: { fontSize: 16, color: Colors.textSecondary, textAlign: 'center' },
+  brand: { fontSize: 28, fontWeight: '900', color: c.textWhite, letterSpacing: 1 },
+  subtitle: { fontSize: 16, color: c.textSecondary, textAlign: 'center' },
   form: { gap: 18 },
   devBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -622,66 +625,66 @@ const styles = StyleSheet.create({
   },
   devBannerText: { color: '#FFD600', fontSize: 13, flex: 1, fontWeight: '600' },
   inputGroup: { gap: 8 },
-  label: { fontSize: 12, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
+  label: { fontSize: 12, fontWeight: '700', color: c.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
   inputWrap: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.bgCard, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: c.bgCard, borderRadius: 16,
+    borderWidth: 1, borderColor: c.border,
     paddingHorizontal: 16, height: 56,
   },
   inputIcon: { marginRight: 12 },
-  input: { flex: 1, color: Colors.textPrimary, fontSize: 16 },
+  input: { flex: 1, color: c.textPrimary, fontSize: 16 },
   phoneRecap: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.bgCard, borderRadius: 12,
+    backgroundColor: c.bgCard, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: 1, borderColor: Colors.border,
+    borderWidth: 1, borderColor: c.border,
   },
-  phoneRecapText: { flex: 1, color: Colors.textPrimary, fontSize: 15, fontWeight: '600' },
-  changeLink: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  phoneRecapText: { flex: 1, color: c.textPrimary, fontSize: 15, fontWeight: '600' },
+  changeLink: { color: c.accent, fontSize: 14, fontWeight: '700' },
   otpRow: { flexDirection: 'row', gap: 10, justifyContent: 'space-between' },
   otpBox: {
     flex: 1, height: 56, borderRadius: 14,
-    backgroundColor: Colors.bgCard, borderWidth: 1.5, borderColor: Colors.border,
-    color: Colors.textPrimary, fontSize: 22, fontWeight: '800',
+    backgroundColor: c.bgCard, borderWidth: 1.5, borderColor: c.border,
+    color: c.textPrimary, fontSize: 22, fontWeight: '800',
   },
-  otpBoxFilled: { borderColor: Colors.accent },
+  otpBoxFilled: { borderColor: c.accent },
   infoBox: {
     flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4,
     backgroundColor: 'rgba(0,230,118,0.08)', borderRadius: 12, padding: 12,
     borderWidth: 1, borderColor: 'rgba(0,230,118,0.25)',
   },
-  infoText: { color: Colors.textSecondary, fontSize: 14 },
-  inlineLink: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  infoText: { color: c.textSecondary, fontSize: 14 },
+  inlineLink: { color: c.accent, fontSize: 14, fontWeight: '700' },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(229,57,53,0.12)', borderRadius: 12, padding: 12,
     borderWidth: 1, borderColor: 'rgba(229,57,53,0.3)',
   },
-  errorText: { color: Colors.danger, fontSize: 14, flex: 1 },
+  errorText: { color: c.danger, fontSize: 14, flex: 1 },
   resendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
-  resendText: { color: Colors.textMuted, fontSize: 14 },
-  resendLink: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  resendText: { color: c.textMuted, fontSize: 14 },
+  resendLink: { color: c.accent, fontSize: 14, fontWeight: '700' },
   toggleRow: { flexDirection: 'row', gap: 12 },
   toggleBtn: {
     flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: 'center',
-    backgroundColor: Colors.bgCard, borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: c.bgCard, borderWidth: 1.5, borderColor: c.border,
   },
-  toggleBtnSelected: { borderColor: Colors.accent, backgroundColor: 'rgba(0,230,118,0.1)' },
-  toggleLabel: { fontSize: 15, fontWeight: '600', color: Colors.textMuted },
-  toggleLabelSelected: { color: Colors.accent },
+  toggleBtnSelected: { borderColor: c.accent, backgroundColor: 'rgba(0,230,118,0.1)' },
+  toggleLabel: { fontSize: 15, fontWeight: '600', color: c.textMuted },
+  toggleLabelSelected: { color: c.accent },
   countryRow: { flexDirection: 'row', gap: 10, paddingVertical: 4 },
   countryChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 20, backgroundColor: Colors.bgCard,
-    borderWidth: 1.5, borderColor: Colors.border,
+    borderRadius: 20, backgroundColor: c.bgCard,
+    borderWidth: 1.5, borderColor: c.border,
   },
-  countryChipSelected: { borderColor: Colors.accent, backgroundColor: 'rgba(0,230,118,0.1)' },
+  countryChipSelected: { borderColor: c.accent, backgroundColor: 'rgba(0,230,118,0.1)' },
   countryFlag: { fontSize: 18 },
-  countryLabel: { fontSize: 13, fontWeight: '600', color: Colors.textMuted },
-  countryLabelSelected: { color: Colors.accent },
+  countryLabel: { fontSize: 13, fontWeight: '600', color: c.textMuted },
+  countryLabelSelected: { color: c.accent },
   loginRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8 },
-  loginText: { color: Colors.textMuted, fontSize: 15 },
-  loginLink: { color: Colors.accent, fontSize: 15, fontWeight: '700' },
+  loginText: { color: c.textMuted, fontSize: 15 },
+  loginLink: { color: c.accent, fontSize: 15, fontWeight: '700' },
 })

@@ -44,10 +44,9 @@ export default function Privacy() {
           <tbody>
             <tr><td style={S.td}>Phone number</td><td style={S.td}>Account identity & OTP verification</td><td style={S.td}>Until account deleted</td></tr>
             <tr><td style={S.td}>Name, email</td><td style={S.td}>Profile display, notifications</td><td style={S.td}>Until account deleted</td></tr>
-            <tr><td style={S.td}>Location (GPS)</td><td style={S.td}>Real-time sharing with your family circle</td><td style={S.td}>24h (Free) / 30 days (Premium)</td></tr>
+            <tr><td style={S.td}>Location (GPS)</td><td style={S.td}>Real-time sharing with your family circle</td><td style={S.td}>30 days</td></tr>
             <tr><td style={S.td}>Device token</td><td style={S.td}>Push notifications (SOS, geofence alerts)</td><td style={S.td}>Until logout or account deleted</td></tr>
             <tr><td style={S.td}>Battery level</td><td style={S.td}>Shared with family circle (optional)</td><td style={S.td}>Latest value only</td></tr>
-            <tr><td style={S.td}>Payment info</td><td style={S.td}>Subscription billing (processed by gateway)</td><td style={S.td}>Order records retained 7 years</td></tr>
           </tbody>
         </table>
 
@@ -58,7 +57,7 @@ export default function Privacy() {
           <li>Sell your location data to advertisers</li>
           <li>Share your location with any third party without your consent</li>
           <li>Use your location data for profiling or targeting</li>
-          <li>Retain location history beyond the plan limit</li>
+          <li>Retain location history beyond the retention limit</li>
         </ul>
 
         <h2 style={S.h2}>3. How We Use Your Data</h2>
@@ -66,7 +65,6 @@ export default function Privacy() {
           <li>Provide real-time location sharing within your family circle</li>
           <li>Send geofence entry/exit alerts to circle members</li>
           <li>Deliver SOS emergency notifications</li>
-          <li>Process subscription payments (via Razorpay, Stripe, PayPal, M-Pesa, Pesapal)</li>
           <li>Send OTP codes for authentication</li>
           <li>Improve service reliability and fix bugs (aggregated, anonymised analytics only)</li>
         </ul>
@@ -74,7 +72,6 @@ export default function Privacy() {
         <h2 style={S.h2}>4. Data Sharing</h2>
         <p style={S.p}>We share your data only with:</p>
         <ul style={S.ul}>
-          <li><strong style={{ color: '#fff' }}>Payment processors</strong> — Razorpay, Stripe, PayPal, M-Pesa (Safaricom), Pesapal for billing</li>
           <li><strong style={{ color: '#fff' }}>SMS providers</strong> — for OTP delivery</li>
           <li><strong style={{ color: '#fff' }}>Cloud infrastructure</strong> — Neon (database), Cloudflare R2 (media), our VPS (API)</li>
           <li><strong style={{ color: '#fff' }}>Your family circle members</strong> — location, name, avatar, battery level as you've consented to share</li>

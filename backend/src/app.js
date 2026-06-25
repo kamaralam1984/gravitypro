@@ -28,7 +28,11 @@ app.use(cors({
 app.use(morgan('combined'))
 app.use(express.json({ limit: '10mb' }))
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000, standardHeaders: true, legacyHeaders: false })
+// Generous per-IP limit: a whole family (parent + several children) usually
+// shares ONE public IP (home WiFi / carrier NAT), and every device reports its
+// location every few seconds — so a low limit would 429 legitimate families.
+// 12000 / 15 min (~800/min per IP) leaves big headroom while still blocking abuse.
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 12000, standardHeaders: true, legacyHeaders: false })
 app.use('/api/', limiter)
 
 // Routes
@@ -41,16 +45,20 @@ app.use('/api/v1/media', mediaRoutes)
 app.use('/api/v1/sse', sseRoutes)
 const sosRoutes = require('./routes/sos')
 const adminRoutes = require('./routes/admin')
-const paymentRoutes = require('./routes/payments')
-const subscriptionRoutes = require('./routes/subscriptions')
 app.use('/api/v1/sos', sosRoutes)
 app.use('/api/v1/admin', adminRoutes)
-app.use('/api/v1/payments', paymentRoutes)
-app.use('/api/v1/subscriptions', subscriptionRoutes)
 const appRoutes = require('./routes/app')
 app.use('/api/v1/app', appRoutes)
 app.use('/api/v1/timeline', require('./routes/timeline'))
 app.use('/api/v1/parental', require('./routes/parental'))
+app.use('/api/v1/checkins', require('./routes/checkins'))
+app.use('/api/v1/share', require('./routes/share'))
+app.use('/api/v1/chat', require('./routes/chat'))
+app.use('/api/v1/places', require('./routes/places'))
+app.use('/api/v1/family', require('./routes/family'))
+app.use('/api/v1/device', require('./routes/deviceStatus'))
+app.use('/api/v1/reports', require('./routes/reports'))
+app.use('/api/v1/devices', require('./routes/devices'))
 app.use('/webhooks/traccar', traccarWebhook)
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'gravity-backend', timestamp: new Date().toISOString() }))
@@ -67,6 +75,7 @@ const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
   console.log(`Gravity Backend running on port ${PORT}`)
   startJobs()
+  try { require('./services/deviceMonitor').start() } catch (e) { console.error('deviceMonitor failed to start:', e) }
 })
 
 module.exports = app

@@ -19,8 +19,14 @@ api.interceptors.response.use(
   (res) => res.data,
   async (error) => {
     if (error.response?.status === 401) {
-      await storage.deleteItem('auth_token')
-      await storage.deleteItem('user_data')
+      // Expired/invalid session — fully log out (clears in-memory auth + stops
+      // tracking) so the app drops to the login screen instead of looping on a
+      // broken authenticated UI. Lazy require avoids a circular import.
+      try { await require('../store/authStore').useAuthStore.getState().logout() }
+      catch {
+        await storage.deleteItem('auth_token')
+        await storage.deleteItem('user_data')
+      }
     }
     return Promise.reject(error.response?.data || error)
   }
@@ -36,6 +42,7 @@ export const authAPI = {
   verifyEmail: (email, otp) => api.post('/auth/verify-email', { email, otp }),       // SIGNUP -> { verified, email_token, already_registered }
   verifyEmailOtp: (email, otp) => api.post('/auth/verify-email-otp', { email, otp }), // LOGIN  -> { user, token }
   registerFree: (data) => api.post('/auth/register-free', data),
+  registerWithPayment: (data) => api.post('/auth/register-with-payment', data),
   register: (data) => api.post('/auth/register', data),
   google: (id_token) => api.post('/auth/google', { id_token }),
 }
@@ -47,9 +54,15 @@ export const userAPI = {
   getStats: () => api.get('/users/me/stats'),
   postLocation: (data) => api.post('/users/location', data),       // backend: POST /users/location
   updateBattery: (data) => api.patch('/users/location', data),     // backend: PATCH /users/location
+  heartbeat: () => api.post('/users/heartbeat', {}),               // keep "online" while phone is on (stationary)
+  refreshMember: (id) => api.post(`/users/${id}/refresh`, {}),     // parent → remote-refresh a child's app
   getLocationHistory: () => api.get('/users/me/location-history'),
+  clearPushToken: () => api.delete('/users/me/push-token'),
+  // Backend reads `req.body.token` (POST /users/me/push-token) — send as { token }.
   registerPushToken: (push_token) => api.post('/users/me/push-token', { token: push_token }),
   search: (phone) => api.get(`/users/search?phone=${encodeURIComponent(phone)}`),
+  getPublicLocation: (uid) => api.get(`/users/public-location?uid=${encodeURIComponent(uid)}`),
+  batchPostLocations: (locations) => api.post('/locations/batch', { locations }),
   deleteAccount: () => api.delete('/users/me'),
 }
 
@@ -70,6 +83,7 @@ export const circleAPI = {
 // ── SOS ───────────────────────────────────────────────────────────────────────
 export const sosAPI = {
   trigger: (data) => api.post('/sos', data),
+  safe: (data) => api.post('/sos/safe', data),
   markSafe: (data = {}) => api.post('/sos/safe', data),            // backend: POST /sos/safe
   getHistory: (circleId) => api.get(`/sos/history?circle_id=${circleId}`),
   resolve: (sosId) => api.patch(`/sos/${sosId}/resolve`),
@@ -92,8 +106,27 @@ export const geofenceAPI = {
 export const mediaAPI = {
   presignAvatar: (data) => api.post('/media/avatar/presign', data),
   confirmAvatar: (data) => api.post('/media/avatar/confirm', data),
+  // Direct base64 upload to the backend's local-disk store (no R2 needed). Returns { url }.
+  uploadImage: (data) => api.post('/media/upload', data),
   presignCircleIcon: (circleId, data) => api.post(`/media/circle/${circleId}/icon/presign`, data),
   confirmCircleIcon: (circleId, data) => api.post(`/media/circle/${circleId}/icon/confirm`, data),
+}
+
+// ── Payments ──────────────────────────────────────────────────────────────────
+export const paymentAPI = {
+  getPlans: () => api.get('/payments/plans'),
+  getGateways: (currency) => api.get(`/payments/gateways?currency=${currency}`),
+  createOrder: (data) => api.post('/payments/create-order', data),
+  createOrderAnon: (data) => api.post('/payments/create-order-anon', data),
+  verify: (data) => api.post('/payments/verify', data),
+  checkStatus: (orderId) => api.get(`/payments/status/${orderId}`),
+}
+
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+export const subscriptionAPI = {
+  getMe: () => api.get('/subscriptions/me'),
+  cancel: () => api.post('/subscriptions/cancel'),
+  getHistory: () => api.get('/subscriptions/history'),
 }
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
@@ -103,22 +136,6 @@ export const mediaAPI = {
 export const timelineAPI = {
   getDays: (userId, month) => api.get(`/timeline/${userId}/days?month=${encodeURIComponent(month)}`),
   getDay: (userId, date) => api.get(`/timeline/${userId}?date=${encodeURIComponent(date)}`),
-}
-
-// ── Parental controls ─────────────────────────────────────────────────────────
-// Screen-time (app usage) + app blocking for a child member.
-//   getAppUsage(childId, 'YYYY-MM-DD') -> [{ package_name, app_label, foreground_seconds, opens }]
-//   getBlockedApps(childId) -> { apps: [{ package_name, app_label, blocked }] }
-//   setBlockedApps(childId, apps) -> updates the child's blocked-app list
-//   getMyBlockedApps() -> current (child) device's own blocked apps
-//   reportAppUsage(date, apps) -> child device reports its usage for a day
-export const parentalAPI = {
-  getAppUsage: (childId, date) =>
-    api.get(`/parental/app-usage/${childId}?date=${encodeURIComponent(date)}`),
-  getBlockedApps: (childId) => api.get(`/parental/blocked-apps/${childId}`),
-  setBlockedApps: (childId, apps) => api.put(`/parental/blocked-apps/${childId}`, { apps }),
-  getMyBlockedApps: () => api.get('/parental/blocked-apps'),
-  reportAppUsage: (date, apps) => api.post('/parental/app-usage', { date, apps }),
 }
 
 export default api

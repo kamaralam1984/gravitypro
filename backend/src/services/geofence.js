@@ -2,12 +2,18 @@ const { query } = require('../config/db')
 
 const checkGeofenceStatus = async (userId, latitude, longitude) => {
   const locationWKT = `POINT(${longitude} ${latitude})`
+  // Only evaluate zones that apply to THIS member:
+  //   - zones assigned directly to them (assigned_user_id = userId), or
+  //   - shared / circle-wide zones (assigned_user_id IS NULL)
+  // ...within circles the member actually belongs to.
   const result = await query(
     `SELECT sz.id, sz.name, sz.circle_id,
        ST_Contains(sz.geom, ST_SetSRID(ST_GeomFromText($1), 4326)) as is_inside
      FROM safe_zones sz
      JOIN circle_members cm ON cm.circle_id = sz.circle_id
-     WHERE cm.user_id = $2`,
+     WHERE cm.user_id = $2
+       AND sz.active = TRUE
+       AND (sz.assigned_user_id = $2 OR sz.assigned_user_id IS NULL)`,
     [locationWKT, userId]
   )
 
@@ -38,7 +44,8 @@ const notifyCircleMembers = async (userId, zone, eventType) => {
     `SELECT u.push_token, u.name as member_name
      FROM circle_members cm
      JOIN users u ON u.id = cm.user_id
-     WHERE cm.circle_id = $1 AND cm.user_id != $2 AND u.push_token IS NOT NULL`,
+     WHERE cm.circle_id = $1 AND cm.user_id != $2 AND u.push_token IS NOT NULL
+       AND u.notif_geofence = TRUE`,
     [zone.circle_id, userId]
   )
   const triggerUser = await query('SELECT name FROM users WHERE id = $1', [userId])

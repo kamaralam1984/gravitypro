@@ -8,6 +8,7 @@ import AdminPanel from './pages/AdminPanel'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import Share from './pages/Share'
+import LiveShare from './pages/LiveShare'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -16,11 +17,10 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/pricing" element={<Navigate to="/" replace />} />
-        <Route path="/checkout" element={<Navigate to="/" replace />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/share" element={<Share />} />
+        <Route path="/live/:token" element={<LiveShare />} />
         <Route path="/parent" element={<Navigate to="/parent/panel" replace />} />
         <Route path="/parent/panel" element={<ParentPanel />} />
         <Route path="/child" element={<Navigate to="/child/panel" replace />} />

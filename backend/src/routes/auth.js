@@ -11,6 +11,15 @@ function generateOTP() {
   return String(Math.floor(100000 + Math.random() * 900000))
 }
 
+// Resolve with the promise's result if it settles within `ms`, otherwise resolve
+// `false` and let the original promise finish in the background (its rejection is
+// swallowed). Keeps the OTP endpoint fast so the mobile client never times out.
+function sendWithin(promise, ms) {
+  const safe = Promise.resolve(promise).catch(() => false)
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(false), ms))
+  return Promise.race([safe, timeout])
+}
+
 async function sendSMS(phone, otp) {
   // MSG91 integration — set MSG91_AUTH_KEY + MSG91_TEMPLATE_ID in .env to enable
   if (process.env.MSG91_AUTH_KEY && process.env.MSG91_TEMPLATE_ID) {
@@ -95,13 +104,13 @@ router.post('/send-otp', async (req, res) => {
   }
   const cleanPhone = phone.trim()
 
-  // Rate limit: max 3 OTPs per phone in 10 minutes
+  // Rate limit: max 10 OTPs per phone in 5 minutes
   const recent = await query(
-    `SELECT COUNT(*) FROM phone_otps WHERE phone = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
+    `SELECT COUNT(*) FROM phone_otps WHERE phone = $1 AND created_at > NOW() - INTERVAL '5 minutes'`,
     [cleanPhone]
   )
-  if (parseInt(recent.rows[0].count) >= 3) {
-    return res.status(429).json({ error: 'Too many OTP requests. Wait 10 minutes.' })
+  if (parseInt(recent.rows[0].count) >= 10) {
+    return res.status(429).json({ error: 'Too many OTP requests. Wait 5 minutes.' })
   }
 
   // Invalidate old OTPs
@@ -114,7 +123,9 @@ router.post('/send-otp', async (req, res) => {
     [cleanPhone, otp, expiresAt]
   )
 
-  const smsSent = await sendSMS(cleanPhone, otp)
+  // Don't block the HTTP response on the (possibly slow) SMS provider — that caused
+  // the app to time out and show "Network Error". Wait at most 4s, then respond.
+  const smsSent = await sendWithin(sendSMS(cleanPhone, otp), 4000)
 
   res.json({
     success: true,
@@ -164,13 +175,13 @@ router.post('/send-email-otp', async (req, res) => {
     return res.status(400).json({ error: 'Valid email required' })
   }
 
-  // Rate limit: max 3 OTPs per email in 10 minutes
+  // Rate limit: max 10 OTPs per email in 5 minutes
   const recent = await query(
-    `SELECT COUNT(*) FROM email_otps WHERE email = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
+    `SELECT COUNT(*) FROM email_otps WHERE email = $1 AND created_at > NOW() - INTERVAL '5 minutes'`,
     [cleanEmail]
   )
-  if (parseInt(recent.rows[0].count) >= 3) {
-    return res.status(429).json({ error: 'Too many OTP requests. Wait 10 minutes.' })
+  if (parseInt(recent.rows[0].count) >= 10) {
+    return res.status(429).json({ error: 'Too many OTP requests. Wait 5 minutes.' })
   }
 
   // Invalidate old OTPs
@@ -183,7 +194,9 @@ router.post('/send-email-otp', async (req, res) => {
     [cleanEmail, otp, expiresAt]
   )
 
-  const emailSent = await sendEmailOTP(cleanEmail, otp)
+  // Don't block the HTTP response on the (possibly slow) SMTP send — that caused
+  // the app to time out and show "Network Error". Wait at most 4s, then respond.
+  const emailSent = await sendWithin(sendEmailOTP(cleanEmail, otp), 4000)
   res.json({
     success: true,
     email_sent: emailSent,
@@ -506,125 +519,6 @@ router.post('/register-free', async (req, res) => {
     res.status(201).json({ user, token })
   } catch (err) {
     console.error('register-free error:', err)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-})
-
-// POST /auth/register-with-payment
-// Creates account AND activates subscription atomically after successful payment.
-router.post('/register-with-payment', async (req, res) => {
-  try {
-    const {
-      phone_token,
-      name,
-      email,
-      account_type,
-      country_code,
-      plan,
-      gateway,
-      gatewayOrderId,
-      gatewayPaymentId,
-      signature,
-    } = req.body
-
-    if (!phone_token) return res.status(400).json({ error: 'phone_token required' })
-
-    // Verify phone_token
-    let tokenPayload
-    try {
-      tokenPayload = jwt.verify(phone_token, process.env.JWT_SECRET)
-    } catch (e) {
-      return res.status(401).json({ error: 'Invalid or expired phone_token' })
-    }
-    if (tokenPayload.type !== 'phone_verified') {
-      return res.status(401).json({ error: 'Invalid token type' })
-    }
-
-    const phone = tokenPayload.phone
-
-    // Validate name
-    if (!name || name.trim().length < 2) {
-      return res.status(400).json({ error: 'name must be at least 2 characters' })
-    }
-
-    // Validate email format if provided
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      return res.status(400).json({ error: 'Invalid email format' })
-    }
-
-    // Validate account_type
-    if (!['parent', 'child'].includes(account_type)) {
-      return res.status(400).json({ error: "account_type must be 'parent' or 'child'" })
-    }
-
-    // Validate country_code
-    const validCountryCodes = ['KE', 'IN', 'AE', 'GB', 'US', 'PK', 'UG', 'TZ', 'NG', 'ZA', 'CA', 'AU']
-    const resolvedCountryCode = country_code || 'IN'
-    if (!validCountryCodes.includes(resolvedCountryCode)) {
-      return res.status(400).json({ error: 'Invalid country_code' })
-    }
-
-    // Validate required payment fields
-    if (!plan) return res.status(400).json({ error: 'plan required' })
-    if (!gateway) return res.status(400).json({ error: 'gateway required' })
-    if (!gatewayPaymentId) return res.status(400).json({ error: 'gatewayPaymentId required' })
-
-    // Verify payment signature per gateway
-    if (gateway === 'razorpay') {
-      if (!gatewayOrderId) return res.status(400).json({ error: 'gatewayOrderId required for razorpay' })
-      if (!signature) return res.status(400).json({ error: 'signature required for razorpay' })
-      const expectedSig = crypto
-        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
-        .update(`${gatewayOrderId}|${gatewayPaymentId}`)
-        .digest('hex')
-      if (expectedSig !== signature) {
-        return res.status(400).json({ error: 'Invalid payment signature' })
-      }
-    } else if (gateway === 'stripe' || gateway === 'paypal') {
-      // For stripe/paypal just confirm payment ID presence (already checked above)
-    } else {
-      return res.status(400).json({ error: 'Unsupported gateway' })
-    }
-
-    // Check phone not already registered
-    const existing = await query('SELECT id FROM users WHERE phone = $1', [phone])
-    if (existing.rows.length) {
-      return res.status(409).json({ error: 'Phone already registered' })
-    }
-
-    // Generate a random password hash (OTP-only auth)
-    const randomHash2 = await bcrypt.hash(require('crypto').randomBytes(32).toString('hex'), 10)
-
-    // Create user with paid plan
-    const insertResult = await query(
-      `INSERT INTO users (phone, name, email, country_code, account_type, current_plan, password_hash)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, name, phone, email, country_code, account_type, current_plan, created_at`,
-      [phone, name.trim(), email ? email.trim() : null, resolvedCountryCode, account_type, plan, randomHash2]
-    )
-    const user = insertResult.rows[0]
-
-    // Insert active subscription
-    await query(
-      `INSERT INTO user_subscriptions
-         (user_id, plan_id, status, current_period_start, current_period_end, gateway)
-       VALUES ($1, $2, 'active', NOW(), NOW() + INTERVAL '1 month', $3)`,
-      [user.id, plan, gateway]
-    )
-
-    // Update payment_orders: link to new user and mark completed
-    if (gatewayOrderId) {
-      await query(
-        `UPDATE payment_orders SET user_id = $1, status = 'completed'
-         WHERE gateway_order_id = $2`,
-        [user.id, gatewayOrderId]
-      )
-    }
-
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN })
-    res.status(201).json({ user, token })
-  } catch (err) {
-    console.error('register-with-payment error:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 })

@@ -14,7 +14,15 @@ interface Member {
   avatar: string
   role: string
   lastSeen: string
+  lastSeenAt: number | null
 }
+
+// A member is ONLINE if their location/heartbeat is fresh within this window.
+// Matches the mobile app + the 60s presence heartbeat (which keeps a stationary
+// phone-on child fresh well inside the window).
+const ONLINE_WINDOW_MS = 10 * 60 * 1000
+const freshStatus = (lastSeenAt: number | null): 'active' | 'offline' =>
+  lastSeenAt != null && Date.now() - lastSeenAt < ONLINE_WINDOW_MS ? 'active' : 'offline'
 
 interface AlertItem {
   id: string
@@ -34,15 +42,63 @@ interface Zone {
   center_lat: number
   center_lng: number
   active: boolean
+  assigned_user_id: string | null
+  category: string
+  assigned_user_name?: string | null
 }
+
+const ZONE_CATEGORIES = ['home', 'school', 'tuition', 'playground', 'music', 'dance', 'other'] as const
+
+type Contact = { id: string; name: string; phone?: string; relation?: string }
 
 // ── LEAFLET DYNAMIC IMPORT ──
 declare const L: typeof import('leaflet')
 
+// ── DISTANCE HELPERS ──
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+function fmtDist(m: number): string {
+  return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 1 : 0) + ' km'
+}
+function nearestZone(lat: number | null, lng: number | null, zones: Zone[], memberId?: string): { name: string; dist: number; inside: boolean } | null {
+  if (lat == null || lng == null) return null
+  let best: { name: string; dist: number; inside: boolean } | null = null
+  for (const z of zones) {
+    if (z.center_lat == null || z.center_lng == null) continue
+    if (z.assigned_user_id && memberId && z.assigned_user_id !== memberId) continue
+    const d = haversineMeters(lat, lng, z.center_lat, z.center_lng)
+    if (!best || d < best.dist) best = { name: z.name, dist: d, inside: d <= z.radius }
+  }
+  return best
+}
+
+function groupZones(zones: Zone[], members: Member[]) {
+  const shared = zones.filter((z) => !z.assigned_user_id)
+  const byMember = new Map<string, Zone[]>()
+  zones.filter((z) => z.assigned_user_id).forEach((z) => {
+    const k = z.assigned_user_id as string
+    if (!byMember.has(k)) byMember.set(k, [])
+    byMember.get(k)!.push(z)
+  })
+  const groups: { key: string; label: string; zones: Zone[] }[] = []
+  if (shared.length) groups.push({ key: 'shared', label: 'Shared · whole family', zones: shared })
+  byMember.forEach((zs, uid) => {
+    const name = zs[0].assigned_user_name || members.find((m) => m.id === uid)?.name || 'Member'
+    groups.push({ key: uid, label: name, zones: zs })
+  })
+  return groups
+}
+
 const API_BASE = window.location.origin + '/api/v1'
 
 function getToken(): string | null { return localStorage.getItem('gravity_token') }
-function getUser(): { name?: string; email?: string; avatar_url?: string } | null {
+function getUser(): { name?: string; email?: string; avatar_url?: string; account_type?: string } | null {
   try { return JSON.parse(localStorage.getItem('gravity_user') || 'null') } catch { return null }
 }
 
@@ -76,12 +132,24 @@ async function apiPatch(path: string, body: unknown) {
   return res.json()
 }
 
+async function apiDelete(path: string) {
+  const token = getToken()
+  if (!token) return null
+  const res = await fetch(API_BASE + path, {
+    method: 'DELETE',
+    headers: { Authorization: 'Bearer ' + token },
+  })
+  if (!res.ok) throw await res.json().catch(() => ({}))
+  return res.json().catch(() => ({}))
+}
+
 export default function ParentPanel() {
   const navigate = useNavigate()
   const mapRef = useRef<HTMLDivElement>(null)
   const leafletMapRef = useRef<InstanceType<typeof L.Map> | null>(null)
   const tileLayerRef = useRef<InstanceType<typeof L.TileLayer> | null>(null)
   const memberMarkersRef = useRef<Record<string, InstanceType<typeof L.Marker>>>({})
+  const zoneCirclesRef = useRef<InstanceType<typeof L.Circle>[]>([])
   const mapInitedRef = useRef(false)
 
   const [activeTab, setActiveTab] = useState<'map' | 'family' | 'alerts' | 'geofence' | 'settings'>('map')
@@ -105,12 +173,34 @@ export default function ParentPanel() {
   const [znLat, setZnLat] = useState('')
   const [znLng, setZnLng] = useState('')
   const [znRadius, setZnRadius] = useState('200')
+  const [znAssigned, setZnAssigned] = useState('')
+  const [znCategory, setZnCategory] = useState('other')
   const [showEditZoneModal, setShowEditZoneModal] = useState(false)
   const [editingZone, setEditingZone] = useState<Zone | null>(null)
   const [ezName, setEzName] = useState('')
   const [ezLat, setEzLat] = useState('')
   const [ezLng, setEzLng] = useState('')
   const [ezRadius, setEzRadius] = useState('')
+  const [ezAssigned, setEzAssigned] = useState('')
+  const [ezCategory, setEzCategory] = useState('other')
+  // Add child
+  const [showChildModal, setShowChildModal] = useState(false)
+  const [childName, setChildName] = useState('')
+  const [childDob, setChildDob] = useState('')
+  const [childCircleId, setChildCircleId] = useState('')
+  const [childSaving, setChildSaving] = useState(false)
+  // Emergency contacts
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [ecName, setEcName] = useState('')
+  const [ecPhone, setEcPhone] = useState('')
+  const [ecRelation, setEcRelation] = useState('')
+  // Weekly reports
+  const [reportMemberId, setReportMemberId] = useState('')
+  const [weekly, setWeekly] = useState<{
+    totals: { totalDistanceMeters: number; timeAtHomeSec: number; timeAtSchoolSec: number }
+    days: { date: string; distanceMeters: number; placesVisited: number; timeAtHomeSec: number; timeAtSchoolSec: number }[]
+  } | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
   const [segmentVal, setSegmentVal] = useState('Exact')
   const [notifCount, setNotifCount] = useState(0)
   const [showCreateCircleModal, setShowCreateCircleModal] = useState(false)
@@ -146,6 +236,26 @@ export default function ParentPanel() {
     return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
 
+  // ── PRESENCE TICK ── re-derive online/offline from freshness every 30s so a
+  // member whose heartbeat stops (phone off / no internet) flips to Offline,
+  // and one that resumes flips back to Online. SOS state is never overridden.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMembers(prev => {
+        let changed = false
+        const next = prev.map(m => {
+          if (m.status === 'sos') return m
+          const s = freshStatus(m.lastSeenAt)
+          if (s === m.status) return m
+          changed = true
+          return { ...m, status: s }
+        })
+        return changed ? next : prev
+      })
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   // ── CLEANUP ON UNMOUNT ──
   useEffect(() => {
     return () => {
@@ -159,8 +269,22 @@ export default function ParentPanel() {
     if (!getToken()) {
       localStorage.setItem('gravity_redirect', '/parent/panel')
       navigate('/login')
+      return
+    }
+    // Role guard: only parents may use the parent panel.
+    const u = getUser()
+    if (!u || !u.account_type) {
+      navigate('/login')
+    } else if (u.account_type !== 'parent') {
+      navigate('/child/panel')
     }
   }, [navigate])
+
+  // ── LOAD EMERGENCY CONTACTS ──
+  useEffect(() => {
+    if (getToken()) loadContacts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── INIT USER PROFILE ──
   useEffect(() => {
@@ -244,12 +368,17 @@ export default function ParentPanel() {
         iconSize: [46, 56],
         iconAnchor: [23, 56],
       })
+      const nz = nearestZone(m.lat!, m.lng!, zones, m.id)
+      const distLine = nz
+        ? `<div style="font-size:10px;color:${nz.inside ? '#00E676' : '#5E8B6E'};margin-top:2px;">${nz.inside ? '🛡️ Inside ' + nz.name : '📍 ' + fmtDist(nz.dist) + ' from ' + nz.name}</div>`
+        : ''
       const marker = L2.marker([m.lat!, m.lng!], { icon }).addTo(leafletMapRef.current!)
       marker.bindPopup(
         `<div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border:1px solid rgba(0,230,118,0.2);border-radius:10px;padding:10px;min-width:140px;">
           <div style="font-weight:800;font-size:13px;color:${color};margin-bottom:4px;">${m.name}</div>
           <div style="font-size:11px;color:#5E8B6E;margin-bottom:2px;">${m.role}</div>
           <div style="font-size:10px;color:#5E8B6E;margin-top:4px;">🔋 ${m.battery}%</div>
+          ${distLine}
         </div>`,
         { className: 'custom-popup' }
       )
@@ -261,7 +390,35 @@ export default function ParentPanel() {
       leafletMapRef.current.setView([located[0].lat!, located[0].lng!], 14)
     }
     setTimeout(() => leafletMapRef.current?.invalidateSize(), 100)
-  }, [members, activeTab])
+  }, [members, zones, activeTab])
+
+  // ── MAP SAFE-ZONE CIRCLES ──
+  useEffect(() => {
+    if (!leafletMapRef.current) return
+    const L2 = (window as unknown as { L: typeof import('leaflet') }).L
+    if (!L2) return
+    zoneCirclesRef.current.forEach((c) => leafletMapRef.current!.removeLayer(c))
+    zoneCirclesRef.current = []
+    zones
+      .filter((z) => z.active && z.center_lat != null && z.center_lng != null)
+      .forEach((z) => {
+        const circle = L2.circle([z.center_lat, z.center_lng], {
+          radius: z.radius,
+          color: '#00E676',
+          weight: 2,
+          fillColor: '#00E676',
+          fillOpacity: 0.12,
+        }).addTo(leafletMapRef.current!)
+        circle.bindPopup(
+          `<div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border:1px solid rgba(0,230,118,0.2);border-radius:10px;padding:10px;min-width:140px;">
+            <div style="font-weight:800;font-size:13px;color:#00E676;margin-bottom:4px;">🛡️ ${z.name}</div>
+            <div style="font-size:10px;color:#5E8B6E;">Radius: ${z.radius} m · ${z.assigned_user_name ? 'For ' + z.assigned_user_name : 'Shared'} · ${z.category}</div>
+          </div>`,
+          { className: 'custom-popup' }
+        )
+        zoneCirclesRef.current.push(circle)
+      })
+  }, [zones, members, activeTab])
 
   // ── MAP TYPE SWITCH ──
   function switchMapType(type: typeof mapType) {
@@ -317,12 +474,13 @@ export default function ParentPanel() {
       name: m.name as string,
       lat: m.latitude ? parseFloat(m.latitude as string) : null,
       lng: m.longitude ? parseFloat(m.longitude as string) : null,
-      status: m.location_updated_at ? 'active' : 'offline',
+      status: freshStatus(m.location_updated_at ? new Date(m.location_updated_at as string).getTime() : null),
       battery: m.battery_level != null ? Math.round(m.battery_level as number) : 50,
       color: colors[i % colors.length],
       avatar: (m.avatar_url as string) || 'https://picsum.photos/seed/' + encodeURIComponent(m.name as string) + '/56/56',
       role: (m.role as string) || 'Member',
       lastSeen: m.location_updated_at ? new Date(m.location_updated_at as string).toLocaleTimeString() : 'Unknown',
+      lastSeenAt: m.location_updated_at ? new Date(m.location_updated_at as string).getTime() : null,
     }))
     setMembers(loaded)
     const active = loaded.filter((m) => m.status === 'active').length
@@ -379,10 +537,108 @@ export default function ParentPanel() {
       radius: z.radius_meters as number,
       center_lat: z.center_lat as number,
       center_lng: z.center_lng as number,
-      active: true,
+      active: z.active !== false,
+      assigned_user_id: (z.assigned_user_id as string) ?? null,
+      category: (z.category as string) || 'other',
+      assigned_user_name: (z.assigned_user_name as string) ?? null,
     }))
     setZones(loaded)
     setZoneSubtitle(loaded.length + ' zone' + (loaded.length !== 1 ? 's' : '') + ' active')
+  }
+
+  // ── EMERGENCY CONTACTS ──
+  async function loadContacts() {
+    try {
+      const r = await apiGet('/family/emergency-contacts')
+      setContacts(r?.contacts || [])
+    } catch { /* ignore */ }
+  }
+
+  async function addContact() {
+    if (!ecName.trim()) { showToast('Contact name required', 'error'); return }
+    try {
+      const res = await apiPost('/family/emergency-contacts', {
+        name: ecName.trim(),
+        phone: ecPhone.trim() || undefined,
+        relation: ecRelation.trim() || undefined,
+      })
+      if (res?.contact) {
+        setEcName(''); setEcPhone(''); setEcRelation('')
+        showToast('Contact added', 'success')
+        loadContacts()
+      } else {
+        showToast(res?.error || 'Failed to add contact', 'error')
+      }
+    } catch (e: unknown) {
+      showToast((e as { error?: string })?.error || 'Failed to add contact', 'error')
+    }
+  }
+
+  async function deleteContact(id: string) {
+    if (!confirm('Delete this emergency contact?')) return
+    try {
+      await apiDelete('/family/emergency-contacts/' + id)
+      showToast('Contact removed', 'success')
+      loadContacts()
+    } catch { showToast('Failed to remove contact', 'error') }
+  }
+
+  // ── ADD CHILD ──
+  function openChildModal() {
+    setChildName('')
+    setChildDob('')
+    setChildCircleId(circleId || (allCircles[0]?.id ?? ''))
+    setShowChildModal(true)
+  }
+
+  async function addChild() {
+    if (!childCircleId || !childName.trim()) { showToast('Pick a circle and enter a name', 'error'); return }
+    setChildSaving(true)
+    try {
+      const body: Record<string, string> = { circle_id: childCircleId, name: childName.trim() }
+      if (childDob) body.dob = childDob
+      const res = await apiPost('/family/children', body)
+      if (res?.child) {
+        showToast('Child added!', 'success')
+        setShowChildModal(false)
+        setChildName(''); setChildDob('')
+        if (childCircleId === circleId) await loadMembers(childCircleId)
+      } else {
+        showToast(res?.error || 'Failed to add child', 'error')
+      }
+    } catch (e: unknown) {
+      showToast((e as { error?: string })?.error || 'Failed to add child', 'error')
+    } finally { setChildSaving(false) }
+  }
+
+  // ── WEEKLY REPORT ──
+  async function loadWeekly(userId: string) {
+    setReportMemberId(userId)
+    if (!userId) { setWeekly(null); return }
+    setReportLoading(true)
+    try {
+      const r = await apiGet('/reports/weekly/' + userId)
+      setWeekly(r && r.totals ? r : null)
+    } catch { setWeekly(null) }
+    finally { setReportLoading(false) }
+  }
+
+  async function downloadWeeklyCsv() {
+    if (!reportMemberId) return
+    try {
+      const token = getToken()
+      const res = await fetch(API_BASE + '/reports/weekly/' + reportMemberId + '.csv', {
+        headers: { Authorization: 'Bearer ' + token },
+      })
+      if (!res.ok) { showToast('Failed to download CSV', 'error'); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'weekly-report.csv'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { showToast('Failed to download CSV', 'error') }
   }
 
   function connectSSE(cid: string) {
@@ -400,7 +656,7 @@ export default function ParentPanel() {
       setMembers((prev) =>
         prev.map((m) =>
           m.id === d.userId
-            ? { ...m, lat: d.latitude, lng: d.longitude, battery: d.battery_level != null ? Math.round(d.battery_level) : m.battery, lastSeen: new Date().toLocaleTimeString(), status: 'active' as const }
+            ? { ...m, lat: d.latitude, lng: d.longitude, battery: d.battery_level != null ? Math.round(d.battery_level) : m.battery, lastSeen: new Date().toLocaleTimeString(), lastSeenAt: Date.now(), status: 'active' as const }
             : m
         )
       )
@@ -441,21 +697,51 @@ export default function ParentPanel() {
 
   function callMember(name: string) { showToast('📞 Calling ' + name + '...', 'call') }
   function msgMember(name: string) { showToast('💬 Message sent to ' + name, 'msg') }
+  async function refreshMember(id: string, name: string) {
+    showToast('🔄 Refreshing ' + name + "'s app…", 'msg')
+    try {
+      const res = await apiPost('/users/' + id + '/refresh', {})
+      if (res?.error) showToast(res.error, 'error')
+      else showToast('✓ Refresh sent to ' + name, 'success')
+    } catch {
+      showToast('Could not reach ' + name, 'error')
+    }
+  }
 
   // ── ALERT DISMISS ──
   function dismissAlert(id: string) {
+    const alert = alerts.find((a) => a.id === id)
+    // SOS alerts must be persisted as resolved on the backend; geofence/battery
+    // alerts are local-only dismissals. Best-effort: still remove locally on failure.
+    if (alert?.type === 'sos') {
+      apiPatch('/sos/' + id + '/resolve', {}).catch((err) => {
+        console.error('Failed to resolve SOS alert', id, err)
+      })
+    }
     setAlerts((prev) => prev.filter((a) => a.id !== id))
     setNotifCount((c) => Math.max(0, c - 1))
   }
 
   // ── GEOFENCE ACTIONS ──
-  function toggleZone(id: string, checked: boolean) {
+  async function toggleZone(id: string, checked: boolean) {
+    // Optimistic local update, then persist; roll back if the request fails.
     setZones((prev) => prev.map((z) => (z.id === id ? { ...z, active: checked } : z)))
+    try {
+      const res = await apiPatch('/geofences/' + id, { active: checked })
+      if (res?.error || res === null) throw new Error(res?.error || 'failed')
+      showToast(checked ? 'Zone enabled' : 'Zone disabled', 'success')
+    } catch {
+      // revert on failure
+      setZones((prev) => prev.map((z) => (z.id === id ? { ...z, active: !checked } : z)))
+      showToast('Could not update zone', 'error')
+    }
   }
 
   function openZoneModal() {
     setZnName('')
     setZnRadius('200')
+    setZnAssigned('')
+    setZnCategory('other')
     if (leafletMapRef.current) {
       const c = leafletMapRef.current.getCenter()
       setZnLat(c.lat.toFixed(6))
@@ -477,7 +763,7 @@ export default function ParentPanel() {
     if (!radius || radius < 50) { showToast('Radius must be at least 50m', 'error'); return }
     if (!circleId) { showToast('No circle selected', 'error'); return }
     try {
-      const res = await apiPost('/geofences', { circle_id: circleId, name, center_lat: lat, center_lng: lng, radius_meters: radius })
+      const res = await apiPost('/geofences', { circle_id: circleId, name, center_lat: lat, center_lng: lng, radius_meters: radius, assigned_user_id: znAssigned || null, category: znCategory })
       if (res?.safe_zone) {
         setShowZoneModal(false)
         showToast('Safe zone created!', 'success')
@@ -494,6 +780,8 @@ export default function ParentPanel() {
     setEzLat(z.center_lat?.toString() || '')
     setEzLng(z.center_lng?.toString() || '')
     setEzRadius(z.radius.toString())
+    setEzAssigned(z.assigned_user_id || '')
+    setEzCategory(z.category || 'other')
     setShowEditZoneModal(true)
   }
 
@@ -507,7 +795,7 @@ export default function ParentPanel() {
     if (isNaN(lat) || isNaN(lng)) { showToast('Valid coordinates required', 'error'); return }
     if (!radius || radius < 50) { showToast('Radius must be at least 50m', 'error'); return }
     try {
-      const res = await apiPatch('/geofences/' + editingZone.id, { name, center_lat: lat, center_lng: lng, radius_meters: radius })
+      const res = await apiPatch('/geofences/' + editingZone.id, { name, center_lat: lat, center_lng: lng, radius_meters: radius, assigned_user_id: ezAssigned || null, category: ezCategory })
       if (res?.safe_zone) {
         showToast('Zone updated!', 'success')
         setShowEditZoneModal(false)
@@ -870,6 +1158,7 @@ export default function ParentPanel() {
                   const bc = battColor(m.battery)
                   const statusText = m.status === 'active' ? 'Active' : m.status === 'sos' ? 'SOS' : 'Offline'
                   const statusColor = m.status === 'active' ? '#00E676' : m.status === 'sos' ? '#FF5252' : '#5E8B6E'
+                  const nz = nearestZone(m.lat, m.lng, zones, m.id)
                   return (
                     <div key={m.id} className={styles.reveal} style={{ background: '#0D1F13', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 14, padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
                       <img src={m.avatar} alt={m.name} style={{ width: 36, height: 36, borderRadius: '50%', border: `2px solid ${m.color}`, flexShrink: 0 }} />
@@ -885,6 +1174,7 @@ export default function ParentPanel() {
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                         <div style={{ fontSize: 9, fontWeight: 800, color: statusColor, background: statusColor + '18', border: `1px solid ${statusColor}44`, padding: '2px 7px', borderRadius: 10 }}>{statusText}</div>
                         <div style={{ fontSize: 9, color: '#5E8B6E' }}>{m.lastSeen !== 'Unknown' ? '🕐 ' + m.lastSeen : '—'}</div>
+                        {nz && <div style={{ fontSize: 9, fontWeight: 700, color: nz.inside ? '#00E676' : '#5E8B6E' }}>{nz.inside ? '🛡️ In ' + nz.name : '📍 ' + fmtDist(nz.dist)}</div>}
                       </div>
                     </div>
                   )
@@ -900,10 +1190,16 @@ export default function ParentPanel() {
               <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 Family Circle
                 {circleId && (
-                  <button onClick={() => { setInviteCopied(false); setShowInviteModal(true) }}
-                    style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', borderRadius: 8, color: '#00E676', fontSize: 11, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    + Invite
-                  </button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={openChildModal}
+                      style={{ background: 'rgba(41,182,246,0.1)', border: '1px solid rgba(41,182,246,0.25)', borderRadius: 8, color: '#29B6F6', fontSize: 11, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      + Add Child
+                    </button>
+                    <button onClick={() => { setInviteCopied(false); setShowInviteModal(true) }}
+                      style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', borderRadius: 8, color: '#00E676', fontSize: 11, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      + Invite
+                    </button>
+                  </div>
                 )}
               </div>
               <div style={{ fontSize: 12, color: '#5E8B6E', lineHeight: 1.5 }}>{familyCount}</div>
@@ -1009,6 +1305,12 @@ export default function ParentPanel() {
                           </svg>
                           Message
                         </button>
+                        <button className={`${styles.memberBtn} ${styles.memberBtnMsg}`} onClick={(e) => { e.stopPropagation(); refreshMember(m.id, m.name) }} title="Refresh & update their app, bring online">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                          </svg>
+                          Refresh
+                        </button>
                       </div>
                     </div>
                     <div className={styles.memberRight}>
@@ -1097,37 +1399,52 @@ export default function ParentPanel() {
               {circleId && !zones.length && !zoneSubtitle.startsWith('Loading') && (
                 <div style={{ textAlign: 'center', color: '#5E8B6E', padding: '40px 20px', fontSize: 13 }}>No safe zones yet — tap + Add Zone</div>
               )}
-              {zones.map((z, i) => (
-                <div key={z.id} className={`${styles.zoneCard} ${styles.reveal}`} style={{ transitionDelay: i * 0.08 + 's', opacity: z.active ? 1 : 0.6 }}>
-                  <div className={styles.zoneTop}>
-                    <div className={styles.zoneIconWrap}>📍</div>
-                    <div className={styles.zoneInfo}>
-                      <div className={styles.zoneName}>{z.name}</div>
-                      <div className={styles.zoneAddress}>{z.address}</div>
-                    </div>
-                    <div className={styles.zoneToggleWrap}>
-                      <label className={styles.toggleSwitch}>
-                        <input type="checkbox" checked={z.active} onChange={(e) => toggleZone(z.id, e.target.checked)} />
-                        <span className={styles.toggleSlider}></span>
-                      </label>
-                    </div>
+              {groupZones(zones, members).map((g, gi) => (
+                <div key={g.key} style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#5E8B6E', textTransform: 'uppercase', letterSpacing: 0.5, padding: '4px 2px 8px' }}>
+                    {g.label} ({g.zones.length})
                   </div>
-                  <div className={styles.zoneBottom}>
-                    <div className={styles.zoneRadiusTag}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /></svg>
-                      {z.radius}m radius
+                  {g.zones.map((z, i) => (
+                    <div key={z.id} className={`${styles.zoneCard} ${styles.reveal}`} style={{ transitionDelay: (gi + i) * 0.06 + 's', opacity: z.active ? 1 : 0.6 }}>
+                      <div className={styles.zoneTop}>
+                        <div className={styles.zoneIconWrap}>📍</div>
+                        <div className={styles.zoneInfo}>
+                          <div className={styles.zoneName}>{z.name}</div>
+                          <div className={styles.zoneAddress}>{z.address}</div>
+                          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: z.assigned_user_name ? '#29B6F6' : '#5E8B6E', background: z.assigned_user_name ? 'rgba(41,182,246,0.12)' : 'rgba(94,139,110,0.12)', border: '1px solid ' + (z.assigned_user_name ? 'rgba(41,182,246,0.3)' : 'rgba(94,139,110,0.3)'), padding: '2px 7px', borderRadius: 8 }}>
+                              {z.assigned_user_name ? '👤 ' + z.assigned_user_name : '👨‍👩‍👧 Shared'}
+                            </span>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: '#00E676', background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.25)', padding: '2px 7px', borderRadius: 8 }}>
+                              {z.category}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={styles.zoneToggleWrap}>
+                          <label className={styles.toggleSwitch}>
+                            <input type="checkbox" checked={z.active} onChange={(e) => toggleZone(z.id, e.target.checked)} />
+                            <span className={styles.toggleSlider}></span>
+                          </label>
+                        </div>
+                      </div>
+                      <div className={styles.zoneBottom}>
+                        <div className={styles.zoneRadiusTag}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /></svg>
+                          {z.radius}m radius
+                        </div>
+                        <div className={styles.zoneActions}>
+                          <button className={styles.zoneActionBtn} title="Edit" onClick={() => openEditZone(z)}
+                            style={{ marginRight: 4 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                          </button>
+                          <button className={styles.zoneActionBtn} title="Delete" onClick={() => deleteZone(z.id)}>🗑️</button>
+                        </div>
+                      </div>
                     </div>
-                    <div className={styles.zoneActions}>
-                      <button className={styles.zoneActionBtn} title="Edit" onClick={() => openEditZone(z)}
-                        style={{ marginRight: 4 }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                        </svg>
-                      </button>
-                      <button className={styles.zoneActionBtn} title="Delete" onClick={() => deleteZone(z.id)}>🗑️</button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               ))}
               <div className={`${styles.addZoneCard} ${styles.reveal}`} style={{ transitionDelay: zones.length * 0.08 + 's', opacity: circleId ? 1 : 0.5, cursor: circleId ? 'pointer' : 'not-allowed' }} onClick={circleId ? openZoneModal : () => showToast('Create a family circle first (Family tab)', 'error')}>
@@ -1173,12 +1490,6 @@ export default function ParentPanel() {
               <div style={{ flex: 1 }}>
                 <div className={styles.settingsUserName}>{userName}</div>
                 <div className={styles.settingsUserEmail}>{userEmail}</div>
-                <div className={styles.settingsPlanBadge}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                  PRO PLAN
-                </div>
               </div>
             </div>
 
@@ -1309,6 +1620,107 @@ export default function ParentPanel() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span className={styles.settingsRowValue}>v2.4.1</span>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5E8B6E" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* WEEKLY REPORTS */}
+              <div className={`${styles.settingsGroup} ${styles.reveal}`} style={{ transitionDelay: '0.18s' }}>
+                <div className={styles.settingsGroupHeader}>Weekly Reports</div>
+                <div style={{ padding: '4px 14px 14px' }}>
+                  <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 6 }}>Select a member</div>
+                  <select
+                    value={reportMemberId}
+                    onChange={(e) => loadWeekly(e.target.value)}
+                    style={{ width: '100%', background: '#0F2416', border: '1px solid rgba(0,230,118,0.2)', color: '#E8F5E9', padding: '10px 14px', borderRadius: 8, boxSizing: 'border-box', fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 12 }}
+                  >
+                    <option value="">— Choose a member —</option>
+                    {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+
+                  {reportLoading && <div style={{ color: '#5E8B6E', fontSize: 12, padding: '8px 0' }}>Loading report…</div>}
+
+                  {!reportLoading && reportMemberId && !weekly && (
+                    <div style={{ color: '#5E8B6E', fontSize: 12, padding: '8px 0' }}>No report data for this member yet.</div>
+                  )}
+
+                  {!reportLoading && weekly && (
+                    <div style={{ background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 12, padding: 12 }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#00E676', background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.25)', padding: '4px 8px', borderRadius: 8 }}>
+                          {(weekly.totals.totalDistanceMeters / 1000).toFixed(1)} km
+                        </span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#29B6F6', background: 'rgba(41,182,246,0.1)', border: '1px solid rgba(41,182,246,0.25)', padding: '4px 8px', borderRadius: 8 }}>
+                          🏠 {Math.round(weekly.totals.timeAtHomeSec / 3600)} h home
+                        </span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#FFB300', background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.25)', padding: '4px 8px', borderRadius: 8 }}>
+                          🏫 {Math.round(weekly.totals.timeAtSchoolSec / 3600)} h school
+                        </span>
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                        <thead>
+                          <tr style={{ color: '#5E8B6E', textAlign: 'left' }}>
+                            <th style={{ padding: '4px 6px', fontWeight: 700 }}>Date</th>
+                            <th style={{ padding: '4px 6px', fontWeight: 700 }}>Dist</th>
+                            <th style={{ padding: '4px 6px', fontWeight: 700 }}>Places</th>
+                            <th style={{ padding: '4px 6px', fontWeight: 700 }}>Home</th>
+                            <th style={{ padding: '4px 6px', fontWeight: 700 }}>School</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {weekly.days.map((d) => (
+                            <tr key={d.date} style={{ color: '#E8F5E9', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                              <td style={{ padding: '5px 6px' }}>{d.date.slice(5)}</td>
+                              <td style={{ padding: '5px 6px' }}>{(d.distanceMeters / 1000).toFixed(1)}km</td>
+                              <td style={{ padding: '5px 6px' }}>{d.placesVisited}</td>
+                              <td style={{ padding: '5px 6px' }}>{Math.round(d.timeAtHomeSec / 60)}m</td>
+                              <td style={{ padding: '5px 6px' }}>{Math.round(d.timeAtSchoolSec / 60)}m</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <button
+                        onClick={downloadWeeklyCsv}
+                        style={{ marginTop: 12, width: '100%', background: 'linear-gradient(135deg,#00C853,#00E676)', color: '#060f0a', fontWeight: 700, padding: '10px 0', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}
+                      >
+                        ⬇ Download CSV
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* EMERGENCY CONTACTS */}
+              <div className={`${styles.settingsGroup} ${styles.reveal}`} style={{ transitionDelay: '0.2s' }}>
+                <div className={styles.settingsGroupHeader}>Emergency Contacts</div>
+                <div style={{ padding: '4px 14px 14px' }}>
+                  <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 10 }}>Also alerted on SOS.</div>
+                  {contacts.map((c) => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#050C08', border: '1px solid rgba(0,230,118,0.1)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#E8F5E9' }}>{c.name}{c.relation ? ' · ' + c.relation : ''}</div>
+                        {c.phone && <div style={{ fontSize: 11, color: '#5E8B6E' }}>{c.phone}</div>}
+                      </div>
+                      <button onClick={() => deleteContact(c.id)}
+                        style={{ background: 'rgba(255,82,82,0.12)', border: '1px solid rgba(255,82,82,0.3)', color: '#FF5252', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                  {!contacts.length && <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 8 }}>No emergency contacts yet.</div>}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                    <input placeholder="Name" value={ecName} onChange={(e) => setEcName(e.target.value)}
+                      style={{ background: '#0F2416', border: '1px solid rgba(0,230,118,0.2)', color: '#E8F5E9', padding: '9px 12px', borderRadius: 8, boxSizing: 'border-box', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input placeholder="Phone" value={ecPhone} onChange={(e) => setEcPhone(e.target.value)}
+                        style={{ flex: 1, background: '#0F2416', border: '1px solid rgba(0,230,118,0.2)', color: '#E8F5E9', padding: '9px 12px', borderRadius: 8, boxSizing: 'border-box', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                      <input placeholder="Relation" value={ecRelation} onChange={(e) => setEcRelation(e.target.value)}
+                        style={{ flex: 1, background: '#0F2416', border: '1px solid rgba(0,230,118,0.2)', color: '#E8F5E9', padding: '9px 12px', borderRadius: 8, boxSizing: 'border-box', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                    </div>
+                    <button onClick={addContact}
+                      style={{ background: 'linear-gradient(135deg,#00C853,#00E676)', color: '#060f0a', fontWeight: 700, padding: '10px 0', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
+                      + Add Contact
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1502,6 +1914,23 @@ export default function ParentPanel() {
                 <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
                   type="number" min="50" max="5000" value={ezRadius} onChange={e => setEzRadius(e.target.value)} />
               </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Assign to</div>
+                  <select style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                    value={ezAssigned} onChange={e => setEzAssigned(e.target.value)}>
+                    <option value="">Everyone (shared)</option>
+                    {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Category</div>
+                  <select style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                    value={ezCategory} onChange={e => setEzCategory(e.target.value)}>
+                    {ZONE_CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <button onClick={() => { setShowEditZoneModal(false); setEditingZone(null) }}
@@ -1511,6 +1940,45 @@ export default function ParentPanel() {
               <button onClick={updateZone}
                 style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#00E676', color: '#020C05', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Child Modal */}
+      {showChildModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#0D1F13', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 18, padding: 24, width: 'calc(100% - 48px)', maxWidth: 340 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 16 }}>Add Child</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Child Name</div>
+                <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  type="text" placeholder="e.g. Aanya" value={childName} onChange={e => setChildName(e.target.value)} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Date of Birth (optional)</div>
+                <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  type="date" value={childDob} onChange={e => setChildDob(e.target.value)} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Circle (you must be admin)</div>
+                <select style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  value={childCircleId} onChange={e => setChildCircleId(e.target.value)}>
+                  {!allCircles.length && <option value="">No circles available</option>}
+                  {allCircles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => setShowChildModal(false)}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid rgba(0,230,118,0.12)', background: 'transparent', color: '#5E8B6E', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+              <button onClick={addChild} disabled={childSaving}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: childSaving ? '#0D7A45' : '#00E676', color: '#020C05', fontSize: 13, fontWeight: 700, cursor: childSaving ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                {childSaving ? 'Adding...' : 'Add Child'}
               </button>
             </div>
           </div>
@@ -1540,6 +2008,21 @@ export default function ParentPanel() {
               <div>
                 <div className={styles.modalFieldLabel}>Radius (meters)</div>
                 <input className={styles.modalInput} type="number" placeholder="200" min="50" max="5000" value={znRadius} onChange={(e) => setZnRadius(e.target.value)} />
+              </div>
+              <div className={styles.modalRow}>
+                <div className={styles.modalHalf}>
+                  <div className={styles.modalFieldLabel}>Assign to</div>
+                  <select className={styles.modalInput} value={znAssigned} onChange={(e) => setZnAssigned(e.target.value)}>
+                    <option value="">Everyone (shared)</option>
+                    {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div className={styles.modalHalf}>
+                  <div className={styles.modalFieldLabel}>Category</div>
+                  <select className={styles.modalInput} value={znCategory} onChange={(e) => setZnCategory(e.target.value)}>
+                    {ZONE_CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+                  </select>
+                </div>
               </div>
               <div className={styles.modalTip}>Tip: Open Google Maps, long-press a location and copy the coordinates.</div>
             </div>

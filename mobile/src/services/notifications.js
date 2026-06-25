@@ -88,3 +88,24 @@ export const scheduleLocalNotification = async ({ title, body, data = {} }) => {
     trigger: null,
   })
 }
+
+// Call this once on app start (e.g. in App.js after login).
+// Returns a cleanup function — call it on unmount or logout.
+export const setupNotificationListeners = ({ onReceived, onResponse } = {}) => {
+  if (Platform.OS === 'web') return () => {}
+  let receivedSub, responseSub
+
+  import('expo-notifications').then(n => {
+    if (onReceived) {
+      receivedSub = n.addNotificationReceivedListener(onReceived)
+    }
+    if (onResponse) {
+      responseSub = n.addNotificationResponseReceivedListener(onResponse)
+    }
+  })
+
+  return () => {
+    receivedSub?.remove()
+    responseSub?.remove()
+  }
+}

@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   Modal,
   ScrollView,
-  FlatList,
+  Dimensions,
 } from 'react-native'
 import * as Location from 'expo-location'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -29,7 +29,19 @@ import { BatteryIndicator } from '../components/BatteryIndicator'
 import { circleAPI, sosAPI, geofenceAPI, userAPI } from '../services/api'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 import { storage } from '../utils/storage'
-import { Colors } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
+import { speedToMode } from '../services/location'
+
+const getBatteryLevel = async () => {
+  try {
+    const Battery = require('expo-battery')
+    const level = await Battery.getBatteryLevelAsync()
+    return level >= 0 ? Math.round(level * 100) : null
+  } catch {
+    return null
+  }
+}
+
 
 // ── SSE (NativeEventSource) ───────────────────────────────────────────────────
 const NativeEventSource =
@@ -38,6 +50,8 @@ const NativeEventSource =
 const SSE_BASE =
   (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') +
   '/api/v1/sse/stream'
+
+// ── Leaflet map is provided by the FamilyMap component (props-driven WebView) ──
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -50,17 +64,35 @@ const formatLastSeen = (ts) => {
   return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
+// A connected member counts as "online" if we've heard from them within the
+// last 10 min (consistent with Home/Circles). A missing timestamp is treated as
+// offline — never "always online" — so stale rows don't read as connected.
 const isOnlineMember = (loc) => {
-  if (!loc) return false
-  if (!loc.timestamp) return true
-  return Date.now() - new Date(loc.timestamp).getTime() < 5 * 60 * 1000
+  if (!loc || !loc.timestamp) return false
+  return Date.now() - new Date(loc.timestamp).getTime() < 10 * 60 * 1000
+}
+
+// Soft "last seen" label so a connected member never shows a bare "Offline".
+const lastSeenAgo = (ts) => {
+  if (!ts) return ''
+  const m = Math.floor((Date.now() - new Date(ts).getTime()) / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m} min ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MapScreen() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const user = useAuthStore((s) => s.user)
   const insets = useSafeAreaInsets()
+  // Cap the member-detail card body so its lower rows stay scrollable and
+  // never hide behind the bottom tab bar / SOS button (~50% of screen height).
+  const cardMaxHeight = Math.round(Dimensions.get('window').height * 0.5)
 
   // ── refs ──────────────────────────────────────────────────────────────────
   const mapRef = useRef(null)
@@ -81,6 +113,8 @@ export default function MapScreen() {
   // ── SOS ───────────────────────────────────────────────────────────────────
   const [sosModalVisible, setSosModalVisible] = useState(false)
   const [sosSending, setSosSending] = useState(false)
+  const [sosMessage, setSosMessage] = useState('SOS! I need help!')
+
 
   // ── toast ─────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState(null)               // { message, color }
@@ -113,7 +147,7 @@ export default function MapScreen() {
   }, [])
 
   // ── toast helper ──────────────────────────────────────────────────────────
-  const showToast = useCallback((message, color = Colors.accent) => {
+  const showToast = useCallback((message, color = c.accent) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast({ message, color })
     toastAnim.setValue(0)
@@ -162,7 +196,7 @@ export default function MapScreen() {
       es.addEventListener('location_update', (e) => {
         try {
           const data = JSON.parse(e.data)
-          const { userId, latitude, longitude, battery_level, timestamp } = data
+          const { userId, latitude, longitude, battery_level, speed, mode, timestamp } = data
           if (!userId || latitude == null || longitude == null) return
           setMemberLocations((prev) => ({
             ...prev,
@@ -170,6 +204,8 @@ export default function MapScreen() {
               latitude: Number(latitude),
               longitude: Number(longitude),
               battery: battery_level ?? prev[userId]?.battery ?? null,
+              speed: speed != null ? Number(speed) : (prev[userId]?.speed ?? null),
+              mode: mode ?? prev[userId]?.mode ?? null,
               timestamp: timestamp || new Date().toISOString(),
             },
           }))
@@ -183,12 +219,21 @@ export default function MapScreen() {
         } catch (_) {}
       })
 
+      es.addEventListener('sos_safe', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          showToast(`${data.name || 'Someone'} is safe`, c.success)
+          // Dismiss active SOS overlay if it's from the same user
+          setSosAlert(prev => (prev && prev.userId === data.userId) ? null : prev)
+        } catch (_) {}
+      })
+
       es.addEventListener('geofence_event', (e) => {
         try {
           const data = JSON.parse(e.data)
           const { name, eventType, zoneName } = data
           const verb = eventType === 'enter' ? 'entered' : 'left'
-          showToast(`${name || 'Someone'} ${verb} ${zoneName || 'a zone'}`, Colors.info)
+          showToast(`${name || 'Someone'} ${verb} ${zoneName || 'a zone'}`, c.info)
         } catch (_) {}
       })
 
@@ -218,24 +263,14 @@ export default function MapScreen() {
           distanceInterval: 10,
         },
         (loc) => {
-          const coord = {
+          // Only update the on-screen "my location" marker. The background
+          // foreground-service (services/location.js) already posts to the server
+          // every few seconds (with speed/mode/battery) — posting here too would
+          // double the network writes and battery use.
+          setMyLocation({
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
-          }
-          setMyLocation(coord)
-
-          // Throttled POST to server (max once per 30 s)
-          const now = Date.now()
-          if (now - lastLocationPost.current > 30_000) {
-            lastLocationPost.current = now
-            userAPI
-              .postLocation({
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
-                accuracy: loc.coords.accuracy ?? undefined,
-              })
-              .catch(() => {})
-          }
+          })
         }
       )
 
@@ -274,6 +309,8 @@ export default function MapScreen() {
               latitude: Number(m.latitude),
               longitude: Number(m.longitude),
               battery: m.battery_level ?? null,
+              speed: m.speed != null ? Number(m.speed) : (prev[m.id]?.speed ?? null),
+              mode: m.mode ?? prev[m.id]?.mode ?? null,
               timestamp: m.location_updated_at || m.updated_at || null,
             }
           }
@@ -316,19 +353,31 @@ export default function MapScreen() {
     try {
       await sosAPI.trigger({
         circle_id: activeCircle.id,
-        message: 'SOS! I need help!',
+        message: sosMessage || 'SOS! I need help!',
         latitude: myLocation?.latitude ?? null,
         longitude: myLocation?.longitude ?? null,
       })
       setSosModalVisible(false)
-      showToast('SOS sent to your family', Colors.danger)
+      showToast('SOS sent to your family', c.danger)
     } catch (e) {
       console.error('[MapScreen] SOS error:', e)
-      showToast('Failed to send SOS. Try again.', Colors.warning)
+      showToast('Failed to send SOS. Try again.', c.warning)
     } finally {
       setSosSending(false)
     }
-  }, [sosSending, activeCircle, myLocation, showToast])
+  }, [sosSending, activeCircle, myLocation, sosMessage, showToast])
+
+  // ── map pan helper ────────────────────────────────────────────────────────
+  // FamilyMap is a props-driven WebView that auto-fits members/zones/me, so
+  // there is no imperative pan API. Kept as a guarded no-op so the member card
+  // and SOS-alert "center on map" buttons stay wired without crashing.
+  const panMapTo = useCallback((_lat, _lng, _zoom = 16) => {
+    if (!mapRef.current || typeof mapRef.current.animateToRegion !== 'function') return
+    mapRef.current.animateToRegion(
+      { latitude: _lat, longitude: _lng, latitudeDelta: 0.01, longitudeDelta: 0.01 },
+      800
+    )
+  }, [])
 
   // ── member tap ────────────────────────────────────────────────────────────
   const handleMemberTap = useCallback(
@@ -336,24 +385,16 @@ export default function MapScreen() {
       setSelectedMember(member)
       showCard()
       const loc = memberLocations[member.id]
-      if (loc && mapRef.current) {
-        mapRef.current.animateToRegion(
-          { ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 },
-          600
-        )
-      }
+      if (loc) panMapTo(loc.latitude, loc.longitude, 16)
     },
-    [memberLocations, showCard]
+    [memberLocations, showCard, panMapTo]
   )
 
   // ── center on self ────────────────────────────────────────────────────────
   const centerOnMe = useCallback(() => {
-    if (!myLocation || !mapRef.current) return
-    mapRef.current.animateToRegion(
-      { ...myLocation, latitudeDelta: 0.01, longitudeDelta: 0.01 },
-      800
-    )
-  }, [myLocation])
+    if (!myLocation) return
+    panMapTo(myLocation.latitude, myLocation.longitude, 16)
+  }, [myLocation, panMapTo])
 
   // ── lifecycle: mount ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -392,11 +433,20 @@ export default function MapScreen() {
   }, [activeCircle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── derived ───────────────────────────────────────────────────────────────
+  // Exclude yourself from the count/denominator (markers & list already do).
+  const otherMembers = useMemo(() => members.filter((m) => m.id !== user?.id), [members, user?.id])
   const onlineCount = useMemo(
-    () => members.filter((m) => isOnlineMember(memberLocations[m.id])).length,
-    [members, memberLocations]
+    () => otherMembers.filter((m) => isOnlineMember(memberLocations[m.id])).length,
+    [otherMembers, memberLocations]
   )
   const selectedLoc = selectedMember ? memberLocations[selectedMember.id] : null
+
+  // Transport mode for the selected member: derive from latest GPS speed.
+  // (speedToMode also maps a missing speed → an "Unknown" placeholder.)
+  const selectedMode = useMemo(
+    () => speedToMode(selectedLoc?.speed),
+    [selectedLoc?.speed]
+  )
 
   // ── distances for the selected member ──────────────────────────────────────
   // Nearest safe zone (name + distance) and distance from the parent (myLocation).
@@ -436,14 +486,18 @@ export default function MapScreen() {
   // ─────────────────────────────────────────────────────────────────────────
   //  RENDER
   // ─────────────────────────────────────────────────────────────────────────
+  //  RENDER
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       {/* ── Full-screen map (free Leaflet/OSM via FamilyMap) ──────────────── */}
       <FamilyMap
+        ref={mapRef}
         style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]}
+        zoomTopOffset={220}
         me={myLocation}
         zones={safeZones}
         members={members
@@ -481,7 +535,7 @@ export default function MapScreen() {
                   <View
                     style={[
                       styles.memberPickDot,
-                      { backgroundColor: online ? Colors.online : Colors.offline },
+                      { backgroundColor: online ? c.online : c.offline },
                     ]}
                   />
                   <Text
@@ -520,7 +574,7 @@ export default function MapScreen() {
             <View style={styles.countChip}>
               <View style={styles.countDot} />
               <Text style={styles.countText}>
-                {onlineCount}/{members.length} online
+                {onlineCount}/{otherMembers.length} online
               </Text>
             </View>
             {/* Refresh */}
@@ -531,7 +585,7 @@ export default function MapScreen() {
               <Ionicons
                 name={refreshing ? 'sync' : 'refresh'}
                 size={18}
-                color={Colors.accent}
+                color={c.accent}
               />
             </TouchableOpacity>
           </View>
@@ -614,8 +668,16 @@ export default function MapScreen() {
           <LinearGradient colors={['#0F2518', '#081510']} style={styles.memberCardGrad}>
             {/* Close */}
             <TouchableOpacity style={styles.cardClose} onPress={hideCard}>
-              <Ionicons name="close" size={18} color={Colors.textMuted} />
+              <Ionicons name="close" size={18} color={c.textMuted} />
             </TouchableOpacity>
+
+            {/* Scrollable body — so long content clears the tab bar / SOS button */}
+            <ScrollView
+              style={{ maxHeight: cardMaxHeight }}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              nestedScrollEnabled>
 
             {/* Avatar + name */}
             <View style={styles.cardTop}>
@@ -636,11 +698,13 @@ export default function MapScreen() {
                   <View
                     style={[
                       styles.statusDot,
-                      { backgroundColor: isOnlineMember(selectedLoc) ? Colors.online : Colors.offline },
+                      { backgroundColor: isOnlineMember(selectedLoc) ? c.online : c.offline },
                     ]}
                   />
                   <Text style={styles.statusText}>
-                    {isOnlineMember(selectedLoc) ? 'Online' : 'Offline'}
+                    {isOnlineMember(selectedLoc)
+                      ? 'Online'
+                      : (selectedLoc?.timestamp ? `Last seen ${lastSeenAgo(selectedLoc.timestamp)}` : 'Connecting…')}
                   </Text>
                 </View>
               </View>
@@ -649,7 +713,7 @@ export default function MapScreen() {
             {/* Stats row */}
             <View style={styles.cardStats}>
               <View style={styles.cardStat}>
-                <Ionicons name="battery-half" size={16} color={Colors.textMuted} />
+                <Ionicons name="battery-half" size={16} color={c.textMuted} />
                 <Text style={styles.cardStatLabel}>Battery</Text>
                 {selectedLoc?.battery != null ? (
                   <BatteryIndicator level={selectedLoc.battery} showText size="sm" />
@@ -661,7 +725,7 @@ export default function MapScreen() {
               <View style={styles.cardDivider} />
 
               <View style={styles.cardStat}>
-                <Ionicons name="time-outline" size={16} color={Colors.textMuted} />
+                <Ionicons name="time-outline" size={16} color={c.textMuted} />
                 <Text style={styles.cardStatLabel}>Last seen</Text>
                 <Text style={styles.cardStatValue}>
                   {formatLastSeen(selectedLoc?.timestamp)}
@@ -671,11 +735,19 @@ export default function MapScreen() {
               <View style={styles.cardDivider} />
 
               <View style={styles.cardStat}>
-                <Ionicons name="location-outline" size={16} color={Colors.textMuted} />
+                <Ionicons name="location-outline" size={16} color={c.textMuted} />
                 <Text style={styles.cardStatLabel}>Location</Text>
                 <Text style={styles.cardStatValue}>
                   {selectedLoc ? 'Shared' : 'Hidden'}
                 </Text>
+              </View>
+
+              <View style={styles.cardDivider} />
+
+              <View style={styles.cardStat}>
+                <Ionicons name={selectedMode.icon} size={16} color={c.textMuted} />
+                <Text style={styles.cardStatLabel}>Mode</Text>
+                <Text style={styles.cardStatValue}>{selectedMode.label}</Text>
               </View>
             </View>
 
@@ -683,7 +755,7 @@ export default function MapScreen() {
             {selectedLoc && (
               <View style={styles.distanceRow}>
                 <View style={styles.distanceItem}>
-                  <Ionicons name="shield-checkmark" size={14} color={Colors.accent} />
+                  <Ionicons name="shield-checkmark" size={14} color={c.accent} />
                   <Text style={styles.distanceLabel} numberOfLines={1}>
                     {nearestZone ? nearestZone.name : 'No safe zone'}
                   </Text>
@@ -693,7 +765,7 @@ export default function MapScreen() {
                 </View>
                 <View style={styles.cardDivider} />
                 <View style={styles.distanceItem}>
-                  <Ionicons name="navigate-circle" size={14} color={Colors.info} />
+                  <Ionicons name="navigate-circle" size={14} color={c.info} />
                   <Text style={styles.distanceLabel} numberOfLines={1}>From you</Text>
                   <Text style={styles.distanceValue}>
                     {parentDist != null ? formatDistance(parentDist) : '—'}
@@ -706,18 +778,12 @@ export default function MapScreen() {
             {selectedLoc && (
               <TouchableOpacity
                 style={styles.viewOnMapBtn}
-                onPress={() => {
-                  if (mapRef.current && selectedLoc) {
-                    mapRef.current.animateToRegion(
-                      { ...selectedLoc, latitudeDelta: 0.005, longitudeDelta: 0.005 },
-                      700
-                    )
-                  }
-                }}>
-                <Ionicons name="navigate" size={15} color={Colors.accent} />
+                onPress={() => panMapTo(selectedLoc.latitude, selectedLoc.longitude, 17)}>
+                <Ionicons name="navigate" size={15} color={c.accent} />
                 <Text style={styles.viewOnMapText}>Center on map</Text>
               </TouchableOpacity>
             )}
+            </ScrollView>
           </LinearGradient>
         </Animated.View>
       )}
@@ -743,6 +809,18 @@ export default function MapScreen() {
             <Text style={styles.sosModalSubtitle}>
               Your family will be notified immediately with your current location.
             </Text>
+
+            {/* Quick message chips */}
+            <View style={styles.sosChipRow}>
+              {['SOS! I need help!', 'Medical emergency', 'Fire emergency', "I'm lost", 'Call me now'].map(msg => (
+                <Pressable
+                  key={msg}
+                  onPress={() => setSosMessage(msg)}
+                  style={[styles.sosChip, sosMessage === msg && styles.sosChipActive]}>
+                  <Text style={[styles.sosChipText, sosMessage === msg && styles.sosChipTextActive]}>{msg}</Text>
+                </Pressable>
+              ))}
+            </View>
 
             <View style={styles.sosModalBtns}>
               {/* Cancel */}
@@ -798,16 +876,8 @@ export default function MapScreen() {
             <TouchableOpacity
               style={[styles.sosSendBtn, { marginTop: 20 }]}
               onPress={() => {
-                if (sosAlert?.latitude && sosAlert?.longitude && mapRef.current) {
-                  mapRef.current.animateToRegion(
-                    {
-                      latitude: sosAlert.latitude,
-                      longitude: sosAlert.longitude,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
-                    },
-                    800
-                  )
+                if (sosAlert?.latitude && sosAlert?.longitude) {
+                  panMapTo(sosAlert.latitude, sosAlert.longitude, 16)
                 }
                 setSosAlert(null)
               }}
@@ -832,11 +902,11 @@ export default function MapScreen() {
 
 // ── styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDeep },
-  noMapPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.bgDeep },
-  noMapTitle: { color: Colors.text, fontSize: 18, fontWeight: '700', marginTop: 8 },
-  noMapSub: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDeep },
+  noMapPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: c.bgDeep },
+  noMapTitle: { color: c.text, fontSize: 18, fontWeight: '700', marginTop: 8 },
+  noMapSub: { color: c.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
 
   // ── header ──
   header: {
@@ -857,12 +927,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 2,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   headerCircle: {
     fontSize: 20,
     fontWeight: '800',
-    color: Colors.textWhite,
+    color: c.textWhite,
     marginTop: 2,
   },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -870,29 +940,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   countDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: Colors.online,
+    backgroundColor: c.online,
   },
-  countText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
+  countText: { fontSize: 12, fontWeight: '700', color: c.textSecondary },
   refreshBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
 
   // ── circle switcher ──
@@ -903,11 +973,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  circleChipActive: { borderColor: Colors.accentSoft },
-  circleChipText: { fontSize: 12, fontWeight: '700', color: Colors.textMuted },
-  circleChipTextActive: { color: Colors.textWhite },
+  circleChipActive: { borderColor: c.accentSoft },
+  circleChipText: { fontSize: 12, fontWeight: '700', color: c.textMuted },
+  circleChipTextActive: { color: c.textWhite },
 
   // ── toast ──
   toast: {
@@ -916,11 +986,11 @@ const styles = StyleSheet.create({
     right: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: Colors.shadowDeep,
+    shadowColor: c.shadowDeep,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
@@ -941,7 +1011,7 @@ const styles = StyleSheet.create({
   toastText: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     paddingLeft: 10,
     flex: 1,
   },
@@ -956,7 +1026,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: '#fff',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.8,
     shadowRadius: 8,
@@ -970,32 +1040,32 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     borderWidth: 2.5,
-    borderColor: Colors.info,
+    borderColor: c.info,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
   },
-  memberRingSelected: { borderColor: Colors.accent, borderWidth: 3 },
+  memberRingSelected: { borderColor: c.accent, borderWidth: 3 },
   memberImage: { width: 36, height: 36, borderRadius: 18 },
   memberInitialWrap: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.primaryDark,
+    backgroundColor: c.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  memberInitial: { color: Colors.accent, fontSize: 16, fontWeight: '800' },
+  memberInitial: { color: c.accent, fontSize: 16, fontWeight: '800' },
   selectedPip: {
     position: 'absolute',
     bottom: 2,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     borderWidth: 1.5,
-    borderColor: Colors.bgDeep,
+    borderColor: c.bgDeep,
   },
 
   // ── safe zone label ──
@@ -1008,9 +1078,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  zoneLabelText: { fontSize: 11, fontWeight: '700', color: Colors.accent },
+  zoneLabelText: { fontSize: 11, fontWeight: '700', color: c.accent },
 
   // ── member selector row ──
   memberPickRow: {
@@ -1024,22 +1094,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  memberPickChipActive: { borderColor: Colors.accent, backgroundColor: 'rgba(13,122,69,0.35)' },
+  memberPickChipActive: { borderColor: c.accent, backgroundColor: 'rgba(13,122,69,0.35)' },
   memberPickDot: { width: 7, height: 7, borderRadius: 4 },
-  memberPickText: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, maxWidth: 120 },
-  memberPickTextActive: { color: Colors.textWhite },
+  memberPickText: { fontSize: 13, fontWeight: '700', color: c.textSecondary, maxWidth: 120 },
+  memberPickTextActive: { color: c.textWhite },
 
   // ── locate FAB ──
   locateFab: {
     position: 'absolute',
-    shadowColor: Colors.accentSoft,
+    shadowColor: c.accentSoft,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.45,
     shadowRadius: 10,
@@ -1082,8 +1152,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
-    shadowColor: Colors.shadowDeep,
+    borderColor: c.borderStrong,
+    shadowColor: c.shadowDeep,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.7,
     shadowRadius: 20,
@@ -1097,63 +1167,63 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   cardInfo: { flex: 1 },
-  cardName: { fontSize: 18, fontWeight: '800', color: Colors.textWhite, marginBottom: 6 },
+  cardName: { fontSize: 18, fontWeight: '800', color: c.textWhite, marginBottom: 6 },
   cardBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   roleBadge: {
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  roleText: { fontSize: 10, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1 },
+  roleText: { fontSize: 10, fontWeight: '700', color: c.textMuted, letterSpacing: 1 },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
+  statusText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
 
   // card stats
   cardStats: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     marginBottom: 14,
   },
   cardStat: { flex: 1, alignItems: 'center', gap: 4 },
-  cardStatLabel: { fontSize: 10, color: Colors.textMuted, fontWeight: '600', letterSpacing: 0.5 },
-  cardStatValue: { fontSize: 13, color: Colors.textSecondary, fontWeight: '700' },
-  cardDivider: { width: 1, height: 32, backgroundColor: Colors.divider },
+  cardStatLabel: { fontSize: 10, color: c.textMuted, fontWeight: '600', letterSpacing: 0.5 },
+  cardStatValue: { fontSize: 13, color: c.textSecondary, fontWeight: '700' },
+  cardDivider: { width: 1, height: 32, backgroundColor: c.divider },
 
   // distance readouts
   distanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     marginBottom: 14,
   },
   distanceItem: { flex: 1, alignItems: 'center', gap: 4 },
   distanceLabel: {
     fontSize: 10,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontWeight: '600',
     letterSpacing: 0.5,
     maxWidth: '100%',
   },
-  distanceValue: { fontSize: 13, color: Colors.textSecondary, fontWeight: '700' },
+  distanceValue: { fontSize: 13, color: c.textSecondary, fontWeight: '700' },
 
   // center on map button
   viewOnMapBtn: {
@@ -1163,11 +1233,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  viewOnMapText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
+  viewOnMapText: { fontSize: 13, fontWeight: '700', color: c.accent },
 
   // ── modal overlay ──
   modalOverlay: {
@@ -1182,7 +1252,7 @@ const styles = StyleSheet.create({
   sosCard: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 24,
     padding: 28,
     alignItems: 'center',
@@ -1216,7 +1286,7 @@ const styles = StyleSheet.create({
   },
   sosModalSubtitle: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 28,
@@ -1233,6 +1303,35 @@ const styles = StyleSheet.create({
     color: '#FF8A80',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  sosChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    width: '100%',
+    marginBottom: 16,
+    justifyContent: 'center',
+  },
+  sosChip: {
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(255,23,68,0.3)',
+    backgroundColor: 'rgba(255,23,68,0.07)',
+  },
+  sosChipActive: {
+    borderColor: '#FF1744',
+    backgroundColor: 'rgba(255,23,68,0.2)',
+  },
+  sosChipText: {
+    color: '#FF8A80',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sosChipTextActive: {
+    color: '#fff',
+    fontWeight: '700',
   },
   sosModalBtns: {
     flexDirection: 'row',

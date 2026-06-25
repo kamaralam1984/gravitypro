@@ -3,6 +3,28 @@ import * as Location from 'expo-location'
 
 const LOCATION_TASK_NAME = 'gravity-background-location'
 
+// ── Transport-mode detection (derived from GPS speed in metres/second) ─────────
+// Thresholds are deliberately conservative so a stationary/walking member is not
+// mislabelled as a vehicle on noisy GPS. speed may be null/-1 (unknown) on Android.
+export const speedToMode = (speedMps) => {
+  const s = typeof speedMps === 'number' && speedMps >= 0 ? speedMps : null
+  if (s == null) return { key: 'unknown', label: 'Unknown', icon: 'help-circle-outline' }
+  if (s < 0.5) return { key: 'still', label: 'Still', icon: 'pause-circle-outline' }
+  if (s < 2.2) return { key: 'walking', label: 'Walking', icon: 'walk-outline' }
+  if (s < 7) return { key: 'cycling', label: 'Cycling', icon: 'bicycle-outline' }
+  return { key: 'vehicle', label: 'Driving', icon: 'car-outline' }
+}
+
+const getBatteryLevel = async () => {
+  try {
+    const Battery = require('expo-battery')
+    const level = await Battery.getBatteryLevelAsync()
+    return level >= 0 ? Math.round(level * 100) : null
+  } catch {
+    return null
+  }
+}
+
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
 const TRACCAR_ENDPOINT = `${API_BASE}/telemetry`
 
@@ -26,38 +48,54 @@ if (Platform.OS !== 'web') {
         const deviceId = await storage.getItem('user_phone')
         if (!deviceId) continue
 
+        const mode = speedToMode(speed).key
+
         const point = {
           lat: latitude, lon: longitude,
           altitude, accuracy, speed,
+          mode,
           bearing: heading,
           timestamp: location.timestamp,
         }
 
-        let online = false
+        // Best-effort Traccar hardware telemetry (optional; NEVER drives online
+        // state). Null/unknown params are omitted so Traccar doesn't reject the
+        // request (Android reports speed/heading as null or -1 when unknown).
         try {
-          const res = await fetchWithTimeout(
-            `${TRACCAR_ENDPOINT}/?id=${encodeURIComponent(deviceId)}&lat=${latitude}&lon=${longitude}&altitude=${altitude}&speed=${speed}&bearing=${heading}&accuracy=${accuracy}&timestamp=${location.timestamp}`
-          )
-          if (res.ok) online = true
+          const params = [
+            `id=${encodeURIComponent(deviceId)}`,
+            `lat=${latitude}`, `lon=${longitude}`,
+            `timestamp=${location.timestamp}`,
+          ]
+          if (accuracy != null) params.push(`accuracy=${accuracy}`)
+          if (speed != null && speed >= 0) params.push(`speed=${speed}`)
+          if (heading != null && heading >= 0) params.push(`bearing=${heading}`)
+          if (altitude != null) params.push(`altitude=${altitude}`)
+          await fetchWithTimeout(`${TRACCAR_ENDPOINT}/?${params.join('&')}`)
         } catch {
-          // No internet or Traccar down
+          // Traccar optional/down — ignore
         }
 
-        // Post location to Gravity API for SSE broadcast
+        // Post location to Gravity API. THIS result (not Traccar) decides whether
+        // we're online: if it succeeds we flush the offline queue, otherwise we
+        // queue this point for later.
+        let online = false
         try {
           const token = await storage.getItem('auth_token')
           if (token) {
-            await fetchWithTimeout(`${API_BASE}/api/v1/users/location`, {
+            const battery_level = await getBatteryLevel()
+            const res = await fetchWithTimeout(`${API_BASE}/api/v1/users/location`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + token,
               },
-              body: JSON.stringify({ latitude, longitude, accuracy, battery_level: null }),
+              body: JSON.stringify({ latitude, longitude, accuracy, battery_level, speed, mode }),
             })
+            if (res.ok) online = true
           }
         } catch (e) {
-          // Ignore — will retry on next update
+          // network down — will queue below
         }
 
         if (online) {
@@ -92,15 +130,24 @@ export const startBackgroundTracking = async () => {
   const isRegistered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false)
   if (!isRegistered) {
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      useSignificantChanges: true,
-      accuracy: Location.Accuracy.Balanced,
-      distanceInterval: 50,
-      deferredUpdatesInterval: 60000,
+      // Live tracking while MOVING, but no GPS churn when stationary (the 60s
+      // presence heartbeat keeps a still device "online", so we don't need a fix
+      // every few seconds when it isn't moving — that was a major battery drain).
+      accuracy: Location.Accuracy.High,
+      timeInterval: 5000,        // at most one fix per ~5s
+      distanceInterval: 12,      // only when moved ≥12m → near-zero drain when still
+      deferredUpdatesInterval: 0, // do not batch — deliver each fix immediately
+      pausesUpdatesAutomatically: false, // iOS: never auto-pause when stationary
+      activityType: Location.ActivityType.Other,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'Gravity is active',
-        notificationBody: 'Your location is being shared with your family.',
+        notificationBody: 'Sharing your live location with your family.',
         notificationColor: '#0A5C35',
+        // Keep the location foreground-service ALIVE even after the user swipes
+        // the app away from recents / closes it. As long as the phone is ON,
+        // location keeps flowing so the child shows ONLINE to the parent.
+        killServiceOnDestroy: false,
       },
     })
   }
@@ -152,6 +199,18 @@ export const reportBatteryLevel = async () => {
     await userAPI.updateBattery({ battery_level })
   } catch (e) {
     // best-effort; ignore failures
+  }
+}
+
+// Presence heartbeat — keeps the device ONLINE to the family even when it is
+// stationary and Android stops delivering background GPS fixes. Best-effort.
+export const sendHeartbeat = async () => {
+  if (Platform.OS === 'web') return
+  try {
+    const { userAPI } = require('./api')
+    await userAPI.heartbeat()
+  } catch (e) {
+    // best-effort; ignore (offline, etc.)
   }
 }
 

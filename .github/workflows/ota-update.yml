@@ -1,0 +1,43 @@
+name: OTA Live Update (EAS)
+
+# Publishes an Expo OTA update on every push to the deployed branch, so
+# already-installed mobile apps live-update without a store release.
+# Only fires when files under mobile/ change.
+on:
+  push:
+    branches: [shivam-repo]
+    paths:
+      - 'mobile/**'
+  workflow_dispatch: {}   # allow manual runs from the Actions tab
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      # Publish to BOTH channels so the update reaches every installed app:
+      # the public APK is built with the "preview" profile (channel "preview"),
+      # while "production" covers any store/production-channel installs. Either
+      # channel having no matching builds is harmless.
+      - name: Publish OTA update to channels "preview" and "production"
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx --yes eas-cli update \
+            --channel preview \
+            --message "${{ github.event.head_commit.message }}" \
+            --non-interactive
+          npx --yes eas-cli update \
+            --channel production \
+            --message "${{ github.event.head_commit.message }}" \
+            --non-interactive

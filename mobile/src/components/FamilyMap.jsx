@@ -1,7 +1,10 @@
-import React, { useMemo } from 'react'
-import { View, StyleSheet } from 'react-native'
+import React, { useMemo, useRef, useImperativeHandle, forwardRef } from 'react'
+import { View, StyleSheet, useColorScheme } from 'react-native'
 import { WebView } from 'react-native-webview'
-import { Colors } from '../theme/colors'
+import { useTheme, useThemeMode } from '../theme/ThemeContext'
+
+const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
 /**
  * FamilyMap — a self-contained Leaflet/OSM map rendered inside a WebView.
@@ -37,7 +40,9 @@ export function formatDistance(m) {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10000 ? 2 : 1)} km`
 }
 
-function buildHtml(members, zones, me, pickMode, pick) {
+function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset) {
+  const tileUrl = isLight ? TILE_LIGHT : TILE_DARK
+  const bg = isLight ? '#eef2f0' : '#0b0f0d'
   const data = {
     members: (members || [])
       .filter(m => m.latitude != null && m.longitude != null)
@@ -56,7 +61,7 @@ function buildHtml(members, zones, me, pickMode, pick) {
         lng: Number(z.center_lng),
         radius: Number(z.radius_meters) || 200,
       })),
-    me: me && me.latitude != null ? { lat: Number(me.latitude), lng: Number(me.longitude) } : null,
+    me: me && me.latitude != null && me.longitude != null ? { lat: Number(me.latitude), lng: Number(me.longitude) } : null,
     pickMode: !!pickMode,
     pick: pick && pick.latitude != null ? { lat: Number(pick.latitude), lng: Number(pick.longitude), radius: Number(pick.radius) || 200 } : null,
   }
@@ -66,14 +71,16 @@ function buildHtml(members, zones, me, pickMode, pick) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
-  html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#0b0f0d}
+  html,body,#map{margin:0;padding:0;height:100%;width:100%;background:${bg}}
   .lbl{background:rgba(8,20,14,.9);color:#7CFFB2;border:1px solid #1f6e44;border-radius:6px;
        padding:1px 6px;font:600 11px system-ui;white-space:nowrap}
   .dlbl{background:rgba(8,20,14,.92);color:#FFD27C;border:1px solid #7a5a1e;border-radius:8px;
         padding:1px 7px;font:700 11px system-ui;white-space:nowrap}
   .plbl{background:rgba(6,16,28,.92);color:#67E8F9;border:1px solid #1e6a7a;border-radius:8px;
         padding:1px 7px;font:700 11px system-ui;white-space:nowrap}
-  .leaflet-tile{filter:brightness(.85)}
+  .leaflet-tile{filter:brightness(${isLight ? '1' : '.85'})}
+  /* push the +/- zoom control down from the very top */
+  .leaflet-top{top:${zoomTopOffset}px}
 </style></head><body><div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -85,7 +92,7 @@ function buildHtml(members, zones, me, pickMode, pick) {
   function fmt(m){return m<1000?Math.round(m)+' m':(m/1000).toFixed(m<10000?2:1)+' km';}
 
   var map = L.map('map',{zoomControl:true,attributionControl:false}).setView([20.59,78.96],4);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+  L.tileLayer('${tileUrl}',{maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'}).addTo(map);
 
   var bounds=[];
 
@@ -102,8 +109,9 @@ function buildHtml(members, zones, me, pickMode, pick) {
   D.members.forEach(function(m){ if(!parent && m.type==='parent'){ parent={lat:m.lat,lng:m.lng}; parentName=m.name; } });
   if(!parent && D.me){ parent={lat:D.me.lat,lng:D.me.lng}; parentName='You'; }
 
-  // Self (only draw the generic self marker when it is not already the parent marker)
-  if(D.me && !(parent && parent.lat===D.me.lat && parent.lng===D.me.lng)){
+  // Self (only draw the generic self marker when it is not effectively the same
+  // point as the parent marker — compare by distance, not exact float equality).
+  if(D.me && !(parent && hav(parent.lat,parent.lng,D.me.lat,D.me.lng) < 30)){
     L.circleMarker([D.me.lat,D.me.lng],{radius:7,color:'#fff',weight:2,fillColor:'#2196F3',fillOpacity:1}).addTo(map).bindTooltip('You',{permanent:false});
     bounds.push([D.me.lat,D.me.lng]);
   }
@@ -175,7 +183,7 @@ function buildHtml(members, zones, me, pickMode, pick) {
 </script></body></html>`
 }
 
-export default function FamilyMap({
+const FamilyMap = forwardRef(function FamilyMap({
   members = [],
   zones = [],
   me = null,
@@ -185,11 +193,48 @@ export default function FamilyMap({
   pick = null,
   onPickLocation,
   style,
-}) {
+  zoomTopOffset = 84,
+}, ref) {
+  const c = useTheme()
+  const { mode } = useThemeMode()
+  const systemScheme = useColorScheme()
+  // Mirror ThemeContext.resolveColors so 'system' picks the OS scheme.
+  const isLight = (mode === 'system' ? (systemScheme || 'dark') : mode) === 'light'
+  const styles = useMemo(() => makeStyles(c, isLight), [c, isLight])
+  const webRef = useRef(null)
   const html = useMemo(
-    () => buildHtml(members, zones, me, pickMode, pick),
-    [members, zones, me, pickMode, pick]
+    () => buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset),
+    [members, zones, me, pickMode, pick, isLight, zoomTopOffset]
   )
+
+  // ── Imperative pan/zoom handle ────────────────────────────────────────────
+  // The Leaflet map lives inside the WebView (global `map` var). We drive it by
+  // injecting a `map.setView([...], zoom)` call. MapScreen passes a region like
+  // { latitude, longitude, latitudeDelta }; we derive a zoom from latitudeDelta
+  // when present, otherwise keep the current zoom. No-op-safe until the map and
+  // the WebView are both ready.
+  useImperativeHandle(ref, () => ({
+    animateToRegion(region) {
+      if (!region || region.latitude == null || region.longitude == null) return
+      if (!webRef.current) return
+      const lat = Number(region.latitude)
+      const lng = Number(region.longitude)
+      if (isNaN(lat) || isNaN(lng)) return
+      // Derive a Leaflet zoom from latitudeDelta (smaller delta → higher zoom).
+      // log2(360 / delta) is the standard web-mercator mapping; clamp to 1..20.
+      let zoomExpr = 'map.getZoom()'
+      const delta = Number(region.latitudeDelta)
+      if (!isNaN(delta) && delta > 0) {
+        const z = Math.max(1, Math.min(20, Math.round(Math.log2(360 / delta))))
+        zoomExpr = String(z)
+      }
+      const js =
+        'try{ if(typeof map!=="undefined" && map){ map.flyTo([' +
+        lat + ',' + lng + '], ' + zoomExpr + ', {duration:0.8}); } }catch(e){}; true;'
+      webRef.current.injectJavaScript(js)
+    },
+  }), [])
+
   const handleMessage = (e) => {
     if (!onPickLocation) return
     try {
@@ -202,6 +247,7 @@ export default function FamilyMap({
   return (
     <View style={[styles.wrap, style || { height }]}>
       <WebView
+        ref={webRef}
         originWhitelist={['*']}
         source={{ html, baseUrl: 'https://localhost/' }}
         javaScriptEnabled
@@ -216,9 +262,14 @@ export default function FamilyMap({
       />
     </View>
   )
-}
-
-const styles = StyleSheet.create({
-  wrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, backgroundColor: '#0b0f0d' },
-  web: { flex: 1, backgroundColor: '#0b0f0d' },
 })
+
+export default FamilyMap
+
+const makeStyles = (c, isLight) => {
+  const bg = isLight ? '#eef2f0' : '#0b0f0d'
+  return StyleSheet.create({
+    wrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: c.border, backgroundColor: bg },
+    web: { flex: 1, backgroundColor: bg },
+  })
+}

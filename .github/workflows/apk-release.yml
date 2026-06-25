@@ -1,0 +1,122 @@
+name: APK Release (EAS build → download page)
+
+# Builds a fresh Android APK with EAS and publishes it to the website download
+# page (https://gravitypro.kvlbusinesssolutions.com/downloads/GravityPro.apk),
+# so NEW installs and native changes are picked up.
+#
+# Use this for NATIVE releases. JS/UI-only changes go through the OTA workflow
+# (.github/workflows/ota-update.yml) — no APK rebuild needed.
+#
+# Triggers:
+#   1. Manual run from the Actions tab (workflow_dispatch).
+#   2. A push to `shivam-repo` whose HEAD commit message contains `[apk]`.
+#      (i.e. tag native releases with "[apk]" in the commit subject.)
+#
+# ── Required GitHub secrets (Settings → Secrets and variables → Actions) ──
+#   EXPO_TOKEN  : access token for the *gravitypro* Expo account
+#                 (https://expo.dev/settings/access-tokens). The Expo projectId
+#                 now lives under the gravitypro account (mobile/app.json).
+#   VPS_HOST    : VPS hostname/IP that serves the website (e.g. srv1569796)
+#   VPS_USER    : SSH user on the VPS (e.g. root)
+#   VPS_SSH_KEY : a PRIVATE SSH key (PEM) authorized for VPS_USER@VPS_HOST
+#                 — its matching public key must be in that user's
+#                   ~/.ssh/authorized_keys on the VPS.
+# If the VPS secrets are NOT configured, the APK is still uploaded as a GitHub
+# Actions artifact (see the last step) — download it and copy it to the VPS by
+# hand (see OTA_LIVE_UPDATE.md).
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [shivam-repo]
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    # On push, only run when the commit subject contains "[apk]". The
+    # workflow_dispatch event has no head_commit, so it always passes.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[apk]')
+
+    env:
+      REMOTE_PATH: /var/www/gravitypro/landing-react/downloads/GravityPro.apk
+      PUBLIC_URL: https://gravitypro.kvlbusinesssolutions.com/downloads/GravityPro.apk
+      # Secrets cannot be used in a step `if:` directly — map them to env here so
+      # the scp step can gate on `env.VPS_HOST` (this avoids the parse-time error
+      # that made every run fail at 0s).
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Build Android APK (EAS, profile "preview")
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx --yes eas-cli build \
+            --platform android \
+            --profile preview \
+            --non-interactive \
+            --wait
+
+      - name: Resolve + download the APK artifact
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          BUILD_JSON="$(npx --yes eas-cli build:list \
+            --platform android --profile preview --limit 1 --json --non-interactive)"
+          APK_URL="$(node -e '
+            let raw=""; process.stdin.on("data",d=>raw+=d);
+            process.stdin.on("end",()=>{
+              const a=JSON.parse(raw); const b=Array.isArray(a)?a[0]:a;
+              const u=b&&(b.artifacts&&(b.artifacts.applicationArchiveUrl||b.artifacts.buildUrl)||b.applicationArchiveUrl);
+              if(!u){process.exit(2)} process.stdout.write(u);
+            });' <<<"$BUILD_JSON")"
+          echo "APK_URL=$APK_URL"
+          curl -fL --retry 3 -o "$GITHUB_WORKSPACE/GravityPro.apk" "$APK_URL"
+          ls -lh "$GITHUB_WORKSPACE/GravityPro.apk"
+
+      # Always keep a downloadable copy of the APK on the workflow run, so that
+      # even without VPS secrets you can grab it and copy it to the VPS manually:
+      #   scp GravityPro.apk VPS_USER@VPS_HOST:$REMOTE_PATH
+      - name: Upload APK as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GravityPro-apk
+          path: GravityPro.apk
+          if-no-files-found: error
+
+      # Upload to the VPS download dir via SSH. Skipped automatically when the
+      # VPS_HOST secret is not set (e.g. before secrets are configured).
+      - name: Publish APK to the VPS download page (scp)
+        if: ${{ env.VPS_HOST != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$VPS_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id_deploy "$VPS_USER@$VPS_HOST" "mkdir -p \"$(dirname "$REMOTE_PATH")\""
+          scp -i ~/.ssh/id_deploy "$GITHUB_WORKSPACE/GravityPro.apk" "$VPS_USER@$VPS_HOST:$REMOTE_PATH"
+          echo "Published: $PUBLIC_URL"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "Public download URL: $PUBLIC_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "If the scp step was skipped, download the 'GravityPro-apk' artifact above" >> "$GITHUB_STEP_SUMMARY"
+          echo "and copy it to the VPS: scp GravityPro.apk USER@HOST:$REMOTE_PATH" >> "$GITHUB_STEP_SUMMARY"

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import {
   View, Text, TextInput, StyleSheet, ScrollView, Animated,
   KeyboardAvoidingView, Platform, Pressable, Alert,
@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics'
 import { authAPI } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { PremiumButton } from '../../components/ui/PremiumButton'
-import { Colors, Gradients } from '../../theme/colors'
+import { useTheme } from '../../theme/ThemeContext'
 
 // ─── OTP digit refs helper ────────────────────────────────────────────────────
 const OTP_LENGTH = 6
@@ -18,6 +18,8 @@ const OTP_LENGTH = 6
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
 export default function LoginScreen({ navigation }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   // method: 'email' | 'phone' — Email is the PRIMARY method (free, no SMS cost).
   // Phone (SMS) is an optional fallback.
   const [method, setMethod] = useState('email')
@@ -190,14 +192,14 @@ export default function LoginScreen({ navigation }) {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <LinearGradient colors={Gradients.hero} style={{ flex: 1 }}>
-      <StatusBar style="light" />
+    <LinearGradient colors={c.gradients.hero} style={{ flex: 1 }}>
+      <StatusBar style={c.statusBarStyle} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           {/* Header */}
           <View style={styles.header}>
-            <LinearGradient colors={Gradients.buttonHero} style={styles.logoCircle}>
+            <LinearGradient colors={c.gradients.buttonHero} style={styles.logoCircle}>
               <Ionicons name="location" size={36} color="#fff" />
             </LinearGradient>
             <Text style={styles.brand}>GRAVITY</Text>
@@ -221,13 +223,13 @@ export default function LoginScreen({ navigation }) {
                   <Pressable
                     onPress={() => switchMethod('email')}
                     style={[styles.methodBtn, method === 'email' && styles.methodBtnSelected]}>
-                    <Ionicons name="mail-outline" size={16} color={method === 'email' ? Colors.accent : Colors.textMuted} />
+                    <Ionicons name="mail-outline" size={16} color={method === 'email' ? c.accent : c.textMuted} />
                     <Text style={[styles.methodLabel, method === 'email' && styles.methodLabelSelected]}>Email</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => switchMethod('phone')}
                     style={[styles.methodBtn, method === 'phone' && styles.methodBtnSelected]}>
-                    <Ionicons name="call-outline" size={16} color={method === 'phone' ? Colors.accent : Colors.textMuted} />
+                    <Ionicons name="call-outline" size={16} color={method === 'phone' ? c.accent : c.textMuted} />
                     <Text style={[styles.methodLabel, method === 'phone' && styles.methodLabelSelected]}>Phone</Text>
                   </Pressable>
                 </View>
@@ -236,13 +238,13 @@ export default function LoginScreen({ navigation }) {
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Phone Number</Text>
                     <View style={styles.inputWrap}>
-                      <Ionicons name="call-outline" size={20} color={Colors.accentSoft} style={styles.inputIcon} />
+                      <Ionicons name="call-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
                       <TextInput
                         style={styles.input}
                         value={phone}
                         onChangeText={setPhone}
                         placeholder="+91 98765 43210"
-                        placeholderTextColor={Colors.textMuted}
+                        placeholderTextColor={c.textMuted}
                         keyboardType="phone-pad"
                         autoComplete="tel"
                         returnKeyType="done"
@@ -254,13 +256,13 @@ export default function LoginScreen({ navigation }) {
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Email Address</Text>
                     <View style={styles.inputWrap}>
-                      <Ionicons name="mail-outline" size={20} color={Colors.accentSoft} style={styles.inputIcon} />
+                      <Ionicons name="mail-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
                       <TextInput
                         style={styles.input}
                         value={email}
                         onChangeText={setEmail}
                         placeholder="you@example.com"
-                        placeholderTextColor={Colors.textMuted}
+                        placeholderTextColor={c.textMuted}
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoComplete="email"
@@ -273,7 +275,7 @@ export default function LoginScreen({ navigation }) {
 
                 {!!error && (
                   <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                    <Ionicons name="alert-circle" size={16} color={c.danger} />
                     <Text style={styles.errorText}>{error}</Text>
                   </View>
                 )}
@@ -290,7 +292,7 @@ export default function LoginScreen({ navigation }) {
               <>
                 {/* Identifier recap + back */}
                 <View style={styles.phoneRecap}>
-                  <Ionicons name={method === 'email' ? 'mail-outline' : 'call-outline'} size={16} color={Colors.accentSoft} />
+                  <Ionicons name={method === 'email' ? 'mail-outline' : 'call-outline'} size={16} color={c.accentSoft} />
                   <Text style={styles.phoneRecapText}>{method === 'email' ? email.trim().toLowerCase() : phone.trim()}</Text>
                   <Pressable onPress={() => { setStep('phone'); setError(''); setDevBanner('') }}>
                     <Text style={styles.changeLink}>Change</Text>
@@ -319,7 +321,7 @@ export default function LoginScreen({ navigation }) {
 
                 {!!error && (
                   <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                    <Ionicons name="alert-circle" size={16} color={c.danger} />
                     <Text style={styles.errorText}>{error}</Text>
                     {(error.includes('No account') || error.includes('not found')) && (
                       <Pressable onPress={() => navigation?.navigate('Register')}>
@@ -344,23 +346,9 @@ export default function LoginScreen({ navigation }) {
               </>
             )}
 
-            {/* Divider */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Continue with Google */}
-            <Pressable
-              onPress={handleGoogleSignIn}
-              disabled={googleLoading}
-              style={({ pressed }) => [styles.googleBtn, pressed && { opacity: 0.85 }]}>
-              <Ionicons name="logo-google" size={20} color={Colors.textWhite} />
-              <Text style={styles.googleBtnText}>
-                {googleLoading ? 'Signing in…' : 'Continue with Google'}
-              </Text>
-            </Pressable>
+            {/* Google sign-in hidden until OAuth client IDs are configured.
+                Backend (POST /auth/google via authAPI.google) + signInWithGoogleToken()
+                are ready — re-add the button once Google.useIdTokenAuthRequest is wired. */}
 
             {/* Bottom link */}
             <View style={styles.registerRow}>
@@ -377,17 +365,17 @@ export default function LoginScreen({ navigation }) {
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 80, paddingBottom: 40, gap: 32 },
   header: { alignItems: 'center', gap: 12 },
   logoCircle: {
     width: 80, height: 80, borderRadius: 40,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.accentSoft, shadowOffset: { width: 0, height: 6 },
+    shadowColor: c.accentSoft, shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.5, shadowRadius: 16, elevation: 12,
   },
-  brand: { fontSize: 32, fontWeight: '900', color: Colors.textWhite, letterSpacing: 6 },
-  subtitle: { fontSize: 16, color: Colors.textSecondary, textAlign: 'center' },
+  brand: { fontSize: 32, fontWeight: '900', color: c.textWhite, letterSpacing: 6 },
+  subtitle: { fontSize: 16, color: c.textSecondary, textAlign: 'center' },
   form: { gap: 20 },
   devBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -400,55 +388,55 @@ const styles = StyleSheet.create({
   methodBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     paddingVertical: 12, borderRadius: 14,
-    backgroundColor: Colors.bgCard, borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: c.bgCard, borderWidth: 1.5, borderColor: c.border,
   },
-  methodBtnSelected: { borderColor: Colors.accent, backgroundColor: 'rgba(0,230,118,0.1)' },
-  methodLabel: { fontSize: 15, fontWeight: '700', color: Colors.textMuted },
-  methodLabelSelected: { color: Colors.accent },
-  label: { fontSize: 12, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
+  methodBtnSelected: { borderColor: c.accent, backgroundColor: 'rgba(0,230,118,0.1)' },
+  methodLabel: { fontSize: 15, fontWeight: '700', color: c.textMuted },
+  methodLabelSelected: { color: c.accent },
+  label: { fontSize: 12, fontWeight: '700', color: c.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
   inputWrap: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.bgCard, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: c.bgCard, borderRadius: 16,
+    borderWidth: 1, borderColor: c.border,
     paddingHorizontal: 16, height: 56,
   },
   inputIcon: { marginRight: 12 },
-  input: { flex: 1, color: Colors.textPrimary, fontSize: 16 },
+  input: { flex: 1, color: c.textPrimary, fontSize: 16 },
   phoneRecap: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.bgCard, borderRadius: 12,
+    backgroundColor: c.bgCard, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: 1, borderColor: Colors.border,
+    borderWidth: 1, borderColor: c.border,
   },
-  phoneRecapText: { flex: 1, color: Colors.textPrimary, fontSize: 15, fontWeight: '600' },
-  changeLink: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  phoneRecapText: { flex: 1, color: c.textPrimary, fontSize: 15, fontWeight: '600' },
+  changeLink: { color: c.accent, fontSize: 14, fontWeight: '700' },
   otpRow: { flexDirection: 'row', gap: 10, justifyContent: 'space-between' },
   otpBox: {
     flex: 1, height: 56, borderRadius: 14,
-    backgroundColor: Colors.bgCard, borderWidth: 1.5, borderColor: Colors.border,
-    color: Colors.textPrimary, fontSize: 22, fontWeight: '800',
+    backgroundColor: c.bgCard, borderWidth: 1.5, borderColor: c.border,
+    color: c.textPrimary, fontSize: 22, fontWeight: '800',
   },
-  otpBoxFilled: { borderColor: Colors.accent },
+  otpBoxFilled: { borderColor: c.accent },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(229,57,53,0.12)', borderRadius: 12, padding: 12,
     borderWidth: 1, borderColor: 'rgba(229,57,53,0.3)',
   },
-  errorText: { color: Colors.danger, fontSize: 14, flex: 1 },
-  inlineLink: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  errorText: { color: c.danger, fontSize: 14, flex: 1 },
+  inlineLink: { color: c.accent, fontSize: 14, fontWeight: '700' },
   resendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
-  resendText: { color: Colors.textMuted, fontSize: 14 },
-  resendLink: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  resendText: { color: c.textMuted, fontSize: 14 },
+  resendLink: { color: c.accent, fontSize: 14, fontWeight: '700' },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
-  dividerText: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
+  dividerLine: { flex: 1, height: 1, backgroundColor: c.border },
+  dividerText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
   googleBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    backgroundColor: Colors.bgCard, borderRadius: 16, height: 54,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: c.bgCard, borderRadius: 16, height: 54,
+    borderWidth: 1, borderColor: c.border,
   },
-  googleBtnText: { color: Colors.textWhite, fontSize: 16, fontWeight: '700' },
+  googleBtnText: { color: c.textWhite, fontSize: 16, fontWeight: '700' },
   registerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8 },
-  registerText: { color: Colors.textMuted, fontSize: 15 },
-  registerLink: { color: Colors.accent, fontSize: 15, fontWeight: '700' },
+  registerText: { color: c.textMuted, fontSize: 15 },
+  registerLink: { color: c.accent, fontSize: 15, fontWeight: '700' },
 })

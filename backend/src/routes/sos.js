@@ -2,6 +2,7 @@ const router = require('express').Router()
 const { query } = require('../config/db')
 const { authenticate } = require('../middleware/auth')
 const { sendToCircleMembers } = require('../services/sse')
+const { sendSms } = require('../services/sms')
 
 // POST /api/v1/sos — trigger SOS alert
 router.post('/', authenticate, async (req, res) => {
@@ -26,7 +27,7 @@ router.post('/', authenticate, async (req, res) => {
   // Send push notifications to all circle members
   try {
     const tokens = await query(
-      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2",
+      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2 AND u.notif_sos = TRUE",
       [circles.rows.map(r => r.circle_id), userId]
     )
     if (tokens.rows.length) {
@@ -49,6 +50,58 @@ router.post('/', authenticate, async (req, res) => {
       }
     }
   } catch {}
+  // ── Also notify the raiser's emergency contacts ──────────────────────────────
+  // Emergency contacts are free-form (name/phone/relation) and have no push
+  // tokens of their own. We (a) log each one, (b) send each an SMS via the
+  // pluggable SMS gateway (no-ops if no provider is configured), and (c) if a
+  // contact's phone matches a registered user who has a push token, push them too.
+  try {
+    const contacts = await query(
+      'SELECT name, phone, relation FROM emergency_contacts WHERE owner_user_id = $1',
+      [userId]
+    )
+    if (contacts.rows.length) {
+      console.log(
+        `[SOS] Notifying ${contacts.rows.length} emergency contact(s) for user ${userId}:`,
+        contacts.rows.map(c => `${c.name}${c.phone ? ' <' + c.phone + '>' : ''}`).join(', ')
+      )
+      // Best-effort SMS to each emergency contact with a phone number.
+      const raiserName = sosData.userName || 'Someone'
+      const mapsLink = (latitude && longitude)
+        ? ` Location: https://maps.google.com/?q=${latitude},${longitude}`
+        : ''
+      const smsMsg = `🆘 SOS from ${raiserName}: ${sosData.message}${mapsLink}`
+      await Promise.allSettled(
+        contacts.rows
+          .filter(c => c.phone)
+          .map(c => sendSms(c.phone, smsMsg))
+      )
+      const phones = contacts.rows.map(c => c.phone).filter(Boolean)
+      if (phones.length) {
+        const ecTokens = await query(
+          "SELECT DISTINCT push_token FROM users WHERE phone = ANY($1) AND push_token IS NOT NULL AND id != $2",
+          [phones, userId]
+        )
+        if (ecTokens.rows.length) {
+          const ecMessages = ecTokens.rows.map(t => ({
+            to: t.push_token,
+            title: "🆘 Emergency Contact SOS",
+            body: (sosData.userName || "Someone") + " listed you as an emergency contact and needs help! " + sosData.message,
+            data: { type: "sos", latitude: sosData.latitude, longitude: sosData.longitude },
+            sound: "default",
+            priority: "high",
+          }))
+          fetch("https://exp.host/--/api/v2/push/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify(ecMessages)
+          }).catch(() => {})
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[SOS] emergency-contact notify failed:', e.message)
+  }
   // Log SOS to DB
   for (const row of circles.rows) {
     await query(
@@ -87,7 +140,7 @@ router.post('/safe', authenticate, async (req, res) => {
   }
   try {
     const tokens = await query(
-      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2",
+      "SELECT DISTINCT u.push_token FROM circle_members cm JOIN users u ON u.id = cm.user_id WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2 AND u.notif_sos = TRUE",
       [circles.rows.map(r => r.circle_id), userId]
     )
     if (tokens.rows.length) {

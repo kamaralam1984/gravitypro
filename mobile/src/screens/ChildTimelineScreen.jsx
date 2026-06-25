@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { timelineAPI } from '../services/api'
-import { Colors, Gradients } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 import { formatDistance } from '../components/FamilyMap'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -83,6 +83,8 @@ function buildMonthGrid(viewMonth) {
 // ── Calendar ──────────────────────────────────────────────────────────────────
 
 function Calendar({ viewMonth, selectedKey, markedDays, onPrevMonth, onNextMonth, onSelect }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const weeks = useMemo(() => buildMonthGrid(viewMonth), [viewMonth])
   const todayKey = toDateKey(new Date())
 
@@ -90,13 +92,13 @@ function Calendar({ viewMonth, selectedKey, markedDays, onPrevMonth, onNextMonth
     <View style={styles.calCard}>
       <View style={styles.calHeader}>
         <Pressable hitSlop={12} onPress={onPrevMonth} style={styles.calNavBtn}>
-          <Ionicons name="chevron-back" size={20} color={Colors.textSecondary} />
+          <Ionicons name="chevron-back" size={20} color={c.textSecondary} />
         </Pressable>
         <Text style={styles.calTitle}>
           {MONTHS[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </Text>
         <Pressable hitSlop={12} onPress={onNextMonth} style={styles.calNavBtn}>
-          <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          <Ionicons name="chevron-forward" size={20} color={c.textSecondary} />
         </Pressable>
       </View>
 
@@ -142,9 +144,11 @@ function Calendar({ viewMonth, selectedKey, markedDays, onPrevMonth, onNextMonth
 // ── Summary header ────────────────────────────────────────────────────────────
 
 function SummaryStat({ icon, value, label }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   return (
     <View style={styles.summaryStat}>
-      <Ionicons name={icon} size={18} color={Colors.accent} />
+      <Ionicons name={icon} size={18} color={c.accent} />
       <Text style={styles.summaryValue}>{value}</Text>
       <Text style={styles.summaryLabel}>{label}</Text>
     </View>
@@ -152,9 +156,11 @@ function SummaryStat({ icon, value, label }) {
 }
 
 function DaySummary({ summary }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   if (!summary) return null
   return (
-    <LinearGradient colors={Gradients.card} style={styles.summaryCard}>
+    <LinearGradient colors={c.gradients.card} style={styles.summaryCard}>
       <SummaryStat
         icon="navigate"
         value={formatDistance(summary.totalDistanceMeters || 0)}
@@ -185,6 +191,8 @@ function DaySummary({ summary }) {
 // ── Segments ──────────────────────────────────────────────────────────────────
 
 function StayCard({ seg, isFirst, isLast }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const title = seg.place || (seg.zoneId ? 'Saved place' : 'Stayed here')
   const arrived = formatClock(seg.arrive)
   const left = formatClock(seg.leave)
@@ -198,11 +206,11 @@ function StayCard({ seg, isFirst, isLast }) {
       <View style={styles.rail}>
         <View style={[styles.railLine, isFirst && styles.railLineHidden]} />
         <View style={styles.stayNode}>
-          <Ionicons name="location" size={14} color={Colors.bgDeep} />
+          <Ionicons name="location" size={14} color={c.bgDeep} />
         </View>
         <View style={[styles.railLine, isLast && styles.railLineHidden]} />
       </View>
-      <LinearGradient colors={Gradients.card} style={styles.stayCard}>
+      <LinearGradient colors={c.gradients.card} style={styles.stayCard}>
         <Text style={styles.stayTitle} numberOfLines={1}>📍 {title}</Text>
         <Text style={styles.staySub}>
           {formatDuration(seg.durationSec)}
@@ -214,6 +222,8 @@ function StayCard({ seg, isFirst, isLast }) {
 }
 
 function TripRow({ seg }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const dist = formatDistance(seg.distanceMeters || 0)
   const dur = formatDuration(seg.durationSec)
   return (
@@ -221,7 +231,7 @@ function TripRow({ seg }) {
       <View style={styles.rail}>
         <View style={styles.railLineDashed} />
         <View style={styles.tripNode}>
-          <Ionicons name="walk" size={12} color={Colors.accent} />
+          <Ionicons name="walk" size={12} color={c.accent} />
         </View>
         <View style={styles.railLineDashed} />
       </View>
@@ -238,6 +248,8 @@ function TripRow({ seg }) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ChildTimelineScreen({ route, navigation }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
   const member = route?.params?.member || {}
   const userId = member.id
@@ -315,16 +327,16 @@ export default function ChildTimelineScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       <LinearGradient
-        colors={Gradients.hero}
+        colors={c.gradients.hero}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerRow}>
           <Pressable hitSlop={12} onPress={() => navigation?.goBack?.()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+            <Ionicons name="chevron-back" size={24} color={c.textPrimary} />
           </Pressable>
           <View style={styles.headerTextWrap}>
             <Text style={styles.headerTitle} numberOfLines={1}>
@@ -344,7 +356,7 @@ export default function ChildTimelineScreen({ route, navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={Colors.accent}
+            tintColor={c.accent}
           />
         }>
         <Calendar
@@ -358,12 +370,12 @@ export default function ChildTimelineScreen({ route, navigation }) {
 
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator color={Colors.accent} size="large" />
+            <ActivityIndicator color={c.accent} size="large" />
             <Text style={styles.mutedText}>Loading timeline…</Text>
           </View>
         ) : error ? (
           <View style={styles.center}>
-            <Ionicons name="alert-circle-outline" size={40} color={Colors.textMuted} />
+            <Ionicons name="alert-circle-outline" size={40} color={c.textMuted} />
             <Text style={styles.mutedText}>{error}</Text>
             <Pressable style={styles.retryBtn} onPress={onRefresh}>
               <Text style={styles.retryText}>Retry</Text>
@@ -375,7 +387,7 @@ export default function ChildTimelineScreen({ route, navigation }) {
 
             {segments.length === 0 ? (
               <View style={styles.center}>
-                <Ionicons name="map-outline" size={40} color={Colors.textMuted} />
+                <Ionicons name="map-outline" size={40} color={c.textMuted} />
                 <Text style={styles.mutedText}>No activity recorded for this day</Text>
               </View>
             ) : (
@@ -405,31 +417,31 @@ export default function ChildTimelineScreen({ route, navigation }) {
 
 const NODE = 28
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDeep },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDeep },
 
   // Header
   header: {
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: c.border,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTextWrap: { flex: 1, alignItems: 'center' },
-  headerTitle: { color: Colors.textWhite, fontSize: 18, fontWeight: '700' },
-  headerSub: { color: Colors.textSecondary, fontSize: 12, marginTop: 2 },
+  headerTitle: { color: c.textWhite, fontSize: 18, fontWeight: '700' },
+  headerSub: { color: c.textSecondary, fontSize: 12, marginTop: 2 },
 
   scroll: { flex: 1 },
   scrollContent: { padding: 16 },
 
   // Calendar
   calCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: 12,
     marginBottom: 16,
   },
@@ -442,13 +454,13 @@ const styles = StyleSheet.create({
   calNavBtn: {
     width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.bgGlass,
+    backgroundColor: c.bgGlass,
   },
-  calTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  calTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '700' },
   calWeekRow: { flexDirection: 'row' },
   calWeekday: {
     flex: 1, textAlign: 'center',
-    color: Colors.textMuted, fontSize: 11, fontWeight: '600',
+    color: c.textMuted, fontSize: 11, fontWeight: '600',
     paddingVertical: 6,
   },
   calCell: { flex: 1, alignItems: 'center', paddingVertical: 3 },
@@ -456,13 +468,13 @@ const styles = StyleSheet.create({
     width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',
   },
-  calDaySelected: { backgroundColor: Colors.accent },
-  calDayText: { color: Colors.textPrimary, fontSize: 14, fontWeight: '500' },
-  calDayToday: { color: Colors.accent, fontWeight: '800' },
-  calDayTextSelected: { color: Colors.bgDeep, fontWeight: '800' },
+  calDaySelected: { backgroundColor: c.accent },
+  calDayText: { color: c.textPrimary, fontSize: 14, fontWeight: '500' },
+  calDayToday: { color: c.accent, fontWeight: '800' },
+  calDayTextSelected: { color: c.bgDeep, fontWeight: '800' },
   calDot: {
     width: 5, height: 5, borderRadius: 2.5,
-    backgroundColor: Colors.accent, marginTop: 2,
+    backgroundColor: c.accent, marginTop: 2,
   },
   calDotSpacer: { width: 5, height: 5, marginTop: 2 },
 
@@ -473,36 +485,36 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     paddingVertical: 16,
     paddingHorizontal: 10,
     marginBottom: 18,
   },
   summaryStat: { flex: 1, alignItems: 'center' },
-  summaryValue: { color: Colors.textWhite, fontSize: 15, fontWeight: '700', marginTop: 5 },
-  summaryLabel: { color: Colors.textMuted, fontSize: 11, marginTop: 2 },
-  summaryDivider: { width: 1, height: 36, backgroundColor: Colors.divider },
+  summaryValue: { color: c.textWhite, fontSize: 15, fontWeight: '700', marginTop: 5 },
+  summaryLabel: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+  summaryDivider: { width: 1, height: 36, backgroundColor: c.divider },
 
   // Timeline
   timeline: { marginTop: 2 },
   segRow: { flexDirection: 'row', alignItems: 'stretch' },
   rail: { width: NODE, alignItems: 'center' },
-  railLine: { flex: 1, width: 2, backgroundColor: Colors.borderStrong, minHeight: 10 },
+  railLine: { flex: 1, width: 2, backgroundColor: c.borderStrong, minHeight: 10 },
   railLineHidden: { backgroundColor: 'transparent' },
   railLineDashed: {
     flex: 1, width: 2, minHeight: 8,
-    borderLeftWidth: 2, borderColor: Colors.borderStrong,
+    borderLeftWidth: 2, borderColor: c.borderStrong,
     borderStyle: 'dashed',
   },
   stayNode: {
     width: NODE, height: NODE, borderRadius: NODE / 2,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center', justifyContent: 'center',
   },
   tripNode: {
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: Colors.bgCardLight,
-    borderWidth: 1, borderColor: Colors.borderStrong,
+    backgroundColor: c.bgCardLight,
+    borderWidth: 1, borderColor: c.borderStrong,
     alignItems: 'center', justifyContent: 'center',
   },
 
@@ -512,23 +524,23 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
-  stayTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
-  staySub: { color: Colors.textSecondary, fontSize: 12.5, marginTop: 4 },
+  stayTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '700' },
+  staySub: { color: c.textSecondary, fontSize: 12.5, marginTop: 4 },
 
   tripBody: { flex: 1, marginLeft: 12, justifyContent: 'center', paddingVertical: 8 },
-  tripText: { color: Colors.textMuted, fontSize: 13, fontWeight: '500' },
+  tripText: { color: c.textMuted, fontSize: 13, fontWeight: '500' },
 
   // States
   center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50 },
-  mutedText: { color: Colors.textMuted, fontSize: 14, marginTop: 12, textAlign: 'center' },
+  mutedText: { color: c.textMuted, fontSize: 14, marginTop: 12, textAlign: 'center' },
   retryBtn: {
     marginTop: 16, paddingHorizontal: 22, paddingVertical: 10,
-    borderRadius: 24, backgroundColor: Colors.bgGlassStrong,
-    borderWidth: 1, borderColor: Colors.borderStrong,
+    borderRadius: 24, backgroundColor: c.bgGlassStrong,
+    borderWidth: 1, borderColor: c.borderStrong,
   },
-  retryText: { color: Colors.accent, fontWeight: '700' },
+  retryText: { color: c.accent, fontWeight: '700' },
 })

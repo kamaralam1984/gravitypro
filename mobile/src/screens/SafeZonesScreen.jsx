@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import {
   View, Text, StyleSheet, Pressable, Animated, ScrollView,
   TextInput, Modal, Dimensions, ActivityIndicator, Alert, Platform,
@@ -11,9 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import Slider from '@react-native-community/slider'
 import { circleAPI, geofenceAPI } from '../services/api'
+import { useAuthStore } from '../store/authStore'
+import { ZONE_CATEGORIES, categoryMeta, groupZonesByMember } from '../services/zonesApi'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
-import { Colors, Gradients } from '../theme/colors'
+import { useTheme } from '../theme/ThemeContext'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 import * as Location from 'expo-location'
 
@@ -28,7 +30,9 @@ const formatCoord = (n) => (Math.round(n * 10000) / 10000).toFixed(4)
 
 // ─── Zone Card ────────────────────────────────────────────────────────────────
 
-function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
+function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats, isChild }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const slideAnim = useRef(new Animated.Value(40)).current
   const fadeAnim = useRef(new Animated.Value(0)).current
 
@@ -43,6 +47,10 @@ function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
 
   const located = memberStats || []
   const insideCount = located.filter(s => s.inside).length
+  const cat = categoryMeta(zone.category)
+  const assignLabel = zone.assigned_user_id
+    ? (zone.assigned_user_name || 'Assigned')
+    : 'Shared'
 
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 12 }}>
@@ -52,32 +60,48 @@ function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
             <LinearGradient
               colors={['rgba(0,200,83,0.22)', 'rgba(0,200,83,0.07)']}
               style={styles.zoneIconWrap}>
-              <Ionicons name="shield-checkmark" size={22} color={Colors.accentSoft} />
+              <Ionicons name={cat.icon} size={22} color={c.accentSoft} />
             </LinearGradient>
 
             <View style={styles.zoneTextBlock}>
               <Text style={styles.zoneName}>{zone.name}</Text>
               <Text style={styles.zoneRadius}>{formatRadius(Number(zone.radius_meters))} radius</Text>
-              <Text style={styles.zoneCoords}>
-                {formatCoord(Number(zone.center_lat))}, {formatCoord(Number(zone.center_lng))}
-              </Text>
+              <View style={styles.zoneTagRow}>
+                <View style={styles.zoneTag}>
+                  <Ionicons name={cat.icon} size={10} color={c.accentSoft} />
+                  <Text style={styles.zoneTagText}>{cat.label}</Text>
+                </View>
+                <View style={[styles.zoneTag, zone.assigned_user_id && styles.zoneTagAssigned]}>
+                  <Ionicons
+                    name={zone.assigned_user_id ? 'person' : 'people'}
+                    size={10}
+                    color={zone.assigned_user_id ? c.accent : c.textMuted}
+                  />
+                  <Text style={[styles.zoneTagText, zone.assigned_user_id && styles.zoneTagTextAssigned]} numberOfLines={1}>
+                    {assignLabel}
+                  </Text>
+                </View>
+              </View>
             </View>
           </Pressable>
 
-          <View style={styles.zoneActions}>
-            <Pressable onPress={() => onEdit(zone)} style={styles.editBtn} hitSlop={6}>
-              <Ionicons name="create-outline" size={18} color={Colors.accent} />
-            </Pressable>
-            <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
-              <Ionicons name="trash-outline" size={18} color={Colors.danger} />
-            </Pressable>
-          </View>
+          {/* A child can VIEW zones but not edit/delete them. */}
+          {!isChild && (
+            <View style={styles.zoneActions}>
+              <Pressable onPress={() => onEdit(zone)} style={styles.editBtn} hitSlop={6}>
+                <Ionicons name="create-outline" size={18} color={c.accent} />
+              </Pressable>
+              <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
+                <Ionicons name="trash-outline" size={18} color={c.danger} />
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {located.length > 0 && (
           <View style={styles.zoneMembers}>
             <View style={styles.zoneMembersHeader}>
-              <Ionicons name="people" size={13} color={Colors.accentSoft} />
+              <Ionicons name="people" size={13} color={c.accentSoft} />
               <Text style={styles.zoneMembersSummary}>
                 {insideCount} of {located.length} inside
               </Text>
@@ -87,7 +111,7 @@ function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
                 <View
                   style={[
                     styles.zoneMemberDot,
-                    { backgroundColor: s.inside ? Colors.accent : Colors.textMuted },
+                    { backgroundColor: s.inside ? c.accent : c.textMuted },
                   ]}
                 />
                 <Text style={styles.zoneMemberName} numberOfLines={1}>{s.name}</Text>
@@ -106,15 +130,17 @@ function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
 // ─── Circle Chip ─────────────────────────────────────────────────────────────
 
 function CircleChip({ circle, active, onPress }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   return (
     <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
       {active && (
-        <LinearGradient colors={Gradients.button} style={StyleSheet.absoluteFill} borderRadius={20} />
+        <LinearGradient colors={c.gradients.button} style={StyleSheet.absoluteFill} borderRadius={20} />
       )}
       <Ionicons
         name="people"
         size={13}
-        color={active ? Colors.accent : Colors.textMuted}
+        color={active ? c.accent : c.textMuted}
       />
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{circle.name}</Text>
     </Pressable>
@@ -124,7 +150,11 @@ function CircleChip({ circle, active, onPress }) {
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function SafeZonesScreen() {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
+  // Only a parent can create/edit/delete safe zones; a child can only VIEW them.
+  const isChild = useAuthStore(s => s.user?.account_type) === 'child'
   const [circles, setCircles] = useState([])
   const [activeCircle, setActiveCircle] = useState(null)
   const [safeZones, setSafeZones] = useState([])
@@ -134,6 +164,8 @@ export default function SafeZonesScreen() {
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [zoneName, setZoneName] = useState('')
   const [radius, setRadius] = useState(200)
+  const [assignedUserId, setAssignedUserId] = useState(null) // null = shared (whole circle)
+  const [category, setCategory] = useState('other')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [pickingOnMap, setPickingOnMap] = useState(false)
@@ -238,6 +270,8 @@ export default function SafeZonesScreen() {
     setSelectedLocation(myLocation ? { ...myLocation } : null)
     setZoneName('')
     setRadius(200)
+    setAssignedUserId(null)
+    setCategory('other')
     setError('')
     setPickingOnMap(false)
     Animated.spring(modalAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }).start()
@@ -250,6 +284,8 @@ export default function SafeZonesScreen() {
     setSelectedLocation({ latitude: Number(zone.center_lat), longitude: Number(zone.center_lng) })
     setZoneName(zone.name)
     setRadius(Number(zone.radius_meters))
+    setAssignedUserId(zone.assigned_user_id ?? null)
+    setCategory(zone.category || 'other')
     setError('')
     setPickingOnMap(false)
     Animated.spring(modalAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }).start()
@@ -284,6 +320,8 @@ export default function SafeZonesScreen() {
         center_lat: Number(selectedLocation.latitude),
         center_lng: Number(selectedLocation.longitude),
         radius_meters: Number(radius),
+        assigned_user_id: assignedUserId ?? null, // null = shared with whole circle
+        category,
       }
       if (editingZone) {
         await geofenceAPI.update(editingZone.id, payload)
@@ -338,7 +376,7 @@ export default function SafeZonesScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={c.statusBarStyle} />
 
       {/* Header */}
       <Animated.View style={[styles.header, { paddingTop: insets.top + 10, opacity: headerAnim }]}>
@@ -355,7 +393,7 @@ export default function SafeZonesScreen() {
             </Text>
           </View>
           <View style={styles.headerShieldBadge}>
-            <Ionicons name="shield-checkmark" size={16} color={Colors.accent} />
+            <Ionicons name="shield-checkmark" size={16} color={c.accent} />
             <Text style={styles.headerShieldText}>{safeZones.length}</Text>
           </View>
         </View>
@@ -398,23 +436,25 @@ export default function SafeZonesScreen() {
         {/* Zone count overlay */}
         {safeZones.length > 0 && (
           <View style={styles.mapBadge}>
-            <Ionicons name="shield-checkmark" size={12} color={Colors.accent} />
+            <Ionicons name="shield-checkmark" size={12} color={c.accent} />
             <Text style={styles.mapBadgeText}>{safeZones.length} zones</Text>
           </View>
         )}
 
-        {/* FAB on map */}
-        <Pressable style={styles.fab} onPress={openCreateModal}>
-          <LinearGradient colors={Gradients.buttonHero} style={styles.fabGrad}>
-            <Ionicons name="add" size={26} color="#fff" />
-          </LinearGradient>
-        </Pressable>
+        {/* FAB on map — parent only (children can only view zones) */}
+        {!isChild && (
+          <Pressable style={styles.fab} onPress={openCreateModal}>
+            <LinearGradient colors={c.gradients.buttonHero} style={styles.fabGrad}>
+              <Ionicons name="add" size={26} color="#fff" />
+            </LinearGradient>
+          </Pressable>
+        )}
       </View>
 
       {/* Zone List */}
       {loading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ActivityIndicator size="large" color={c.accent} />
           <Text style={styles.loadingText}>Loading zones…</Text>
         </View>
       ) : (
@@ -426,19 +466,36 @@ export default function SafeZonesScreen() {
           ]}
           showsVerticalScrollIndicator={false}>
           {safeZones.length === 0 ? (
-            <EmptyZones onAddPress={openCreateModal} />
+            <EmptyZones onAddPress={openCreateModal} isChild={isChild} />
           ) : (
-            safeZones.map((zone, index) => (
-              <ZoneCard
-                key={zone.id}
-                zone={zone}
-                index={index}
-                onDelete={handleDeleteZone}
-                onFocus={focusZoneOnMap}
-                onEdit={openEditModal}
-                memberStats={statsForZone(zone)}
-              />
-            ))
+            (() => {
+              let i = 0
+              return groupZonesByMember(safeZones, members).map((group) => (
+                <View key={group.key} style={styles.groupBlock}>
+                  <View style={styles.groupHeader}>
+                    <Ionicons
+                      name={group.userId ? 'person-circle' : 'people-circle'}
+                      size={16}
+                      color={c.accentSoft}
+                    />
+                    <Text style={styles.groupTitle}>{group.name}</Text>
+                    <Text style={styles.groupCount}>{group.zones.length}</Text>
+                  </View>
+                  {group.zones.map((zone) => (
+                    <ZoneCard
+                      key={zone.id}
+                      zone={zone}
+                      index={i++}
+                      onDelete={handleDeleteZone}
+                      onFocus={focusZoneOnMap}
+                      onEdit={openEditModal}
+                      memberStats={statsForZone(zone)}
+                      isChild={isChild}
+                    />
+                  ))}
+                </View>
+              ))
+            })()
           )}
         </Animated.ScrollView>
       )}
@@ -458,15 +515,15 @@ export default function SafeZonesScreen() {
 
               {/* Title row */}
               <View style={styles.modalHeaderRow}>
-                <LinearGradient colors={Gradients.button} style={styles.modalIconBg}>
-                  <Ionicons name="shield-checkmark-outline" size={20} color={Colors.accent} />
+                <LinearGradient colors={c.gradients.button} style={styles.modalIconBg}>
+                  <Ionicons name="shield-checkmark-outline" size={20} color={c.accent} />
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.modalTitle}>{editingZone ? 'Edit Safe Zone' : 'Create Safe Zone'}</Text>
                   <Text style={styles.modalSubtitle}>Tap the map to set the center</Text>
                 </View>
                 <Pressable onPress={closeCreateModal} style={styles.modalCloseBtn} hitSlop={8}>
-                  <Ionicons name="close" size={20} color={Colors.textMuted} />
+                  <Ionicons name="close" size={20} color={c.textMuted} />
                 </Pressable>
               </View>
 
@@ -496,7 +553,7 @@ export default function SafeZonesScreen() {
                     <View style={styles.crosshairVert} />
                     <View style={styles.crosshairHoriz} />
                     <View style={styles.crosshairHint}>
-                      <Ionicons name="finger-print-outline" size={14} color={Colors.accent} />
+                      <Ionicons name="finger-print-outline" size={14} color={c.accent} />
                       <Text style={styles.crosshairHintText}>Tap to place zone center</Text>
                     </View>
                   </View>
@@ -505,7 +562,7 @@ export default function SafeZonesScreen() {
                 {/* Location confirmed badge */}
                 {selectedLocation && (
                   <View style={styles.locationConfirmedBadge}>
-                    <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
+                    <Ionicons name="checkmark-circle" size={14} color={c.success} />
                     <Text style={styles.locationConfirmedText}>
                       {formatCoord(selectedLocation.latitude)}, {formatCoord(selectedLocation.longitude)}
                     </Text>
@@ -517,16 +574,76 @@ export default function SafeZonesScreen() {
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Zone Name</Text>
                 <View style={styles.inputWrap}>
-                  <Ionicons name="shield-outline" size={18} color={Colors.accentSoft} />
+                  <Ionicons name="shield-outline" size={18} color={c.accentSoft} />
                   <TextInput
                     style={styles.textInput}
                     value={zoneName}
                     onChangeText={setZoneName}
                     placeholder="e.g. Home, School, Work"
-                    placeholderTextColor={Colors.textMuted}
+                    placeholderTextColor={c.textMuted}
                     returnKeyType="done"
                   />
                 </View>
+              </View>
+
+              {/* Assign to member */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Assign To</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.pickerRow}>
+                  <Pressable
+                    onPress={() => setAssignedUserId(null)}
+                    style={[styles.pickerChip, assignedUserId == null && styles.pickerChipActive]}>
+                    <Ionicons
+                      name="people"
+                      size={13}
+                      color={assignedUserId == null ? c.accent : c.textMuted}
+                    />
+                    <Text style={[styles.pickerChipText, assignedUserId == null && styles.pickerChipTextActive]}>
+                      Whole family
+                    </Text>
+                  </Pressable>
+                  {(members || []).map((m) => {
+                    const on = assignedUserId === m.id
+                    return (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => setAssignedUserId(m.id)}
+                        style={[styles.pickerChip, on && styles.pickerChipActive]}>
+                        <Ionicons name="person" size={13} color={on ? c.accent : c.textMuted} />
+                        <Text style={[styles.pickerChipText, on && styles.pickerChipTextActive]} numberOfLines={1}>
+                          {m.name || m.email || 'Member'}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Category */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Category</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.pickerRow}>
+                  {ZONE_CATEGORIES.map((cat) => {
+                    const on = category === cat.value
+                    return (
+                      <Pressable
+                        key={cat.value}
+                        onPress={() => setCategory(cat.value)}
+                        style={[styles.pickerChip, on && styles.pickerChipActive]}>
+                        <Ionicons name={cat.icon} size={13} color={on ? c.accent : c.textMuted} />
+                        <Text style={[styles.pickerChipText, on && styles.pickerChipTextActive]}>
+                          {cat.label}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </ScrollView>
               </View>
 
               {/* Radius Slider */}
@@ -544,9 +661,9 @@ export default function SafeZonesScreen() {
                   step={50}
                   value={radius}
                   onValueChange={setRadius}
-                  minimumTrackTintColor={Colors.accentSoft}
-                  maximumTrackTintColor={Colors.bgMid}
-                  thumbTintColor={Colors.accent}
+                  minimumTrackTintColor={c.accentSoft}
+                  maximumTrackTintColor={c.bgMid}
+                  thumbTintColor={c.accent}
                 />
                 <View style={styles.sliderLabels}>
                   <Text style={styles.sliderLabel}>50 m</Text>
@@ -557,7 +674,7 @@ export default function SafeZonesScreen() {
               {/* Error */}
               {error ? (
                 <View style={styles.errorBox}>
-                  <Ionicons name="alert-circle" size={15} color={Colors.danger} />
+                  <Ionicons name="alert-circle" size={15} color={c.danger} />
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               ) : null}
@@ -580,7 +697,9 @@ export default function SafeZonesScreen() {
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
-function EmptyZones({ onAddPress }) {
+function EmptyZones({ onAddPress, isChild }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const floatAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -598,29 +717,33 @@ function EmptyZones({ onAddPress }) {
         <LinearGradient
           colors={['rgba(0,200,83,0.18)', 'rgba(10,92,53,0.08)']}
           style={styles.emptyIconRing}>
-          <LinearGradient colors={Gradients.button} style={styles.emptyIconBg}>
-            <Ionicons name="shield-outline" size={40} color={Colors.accent} />
+          <LinearGradient colors={c.gradients.button} style={styles.emptyIconBg}>
+            <Ionicons name="shield-outline" size={40} color={c.accent} />
           </LinearGradient>
         </LinearGradient>
       </Animated.View>
       <Text style={styles.emptyTitle}>No safe zones yet</Text>
       <Text style={styles.emptyText}>
-        Add your first zone to get alerts{'\n'}when family members arrive or leave.
+        {isChild
+          ? 'Safe zones set up by your family\nwill appear here.'
+          : `Add your first zone to get alerts\nwhen family members arrive or leave.`}
       </Text>
-      <Pressable onPress={onAddPress} style={styles.emptyAddBtn}>
-        <LinearGradient colors={Gradients.buttonHero} style={styles.emptyAddBtnGrad}>
-          <Ionicons name="add" size={18} color="#fff" />
-          <Text style={styles.emptyAddBtnText}>Add First Zone</Text>
-        </LinearGradient>
-      </Pressable>
+      {!isChild && (
+        <Pressable onPress={onAddPress} style={styles.emptyAddBtn}>
+          <LinearGradient colors={c.gradients.buttonHero} style={styles.emptyAddBtnGrad}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.emptyAddBtnText}>Add First Zone</Text>
+          </LinearGradient>
+        </Pressable>
+      )}
     </View>
   )
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgDeep },
+const makeStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bgDeep },
 
   // Header
   header: {
@@ -633,20 +756,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerTitle: { fontSize: 26, fontWeight: '800', color: Colors.textWhite },
-  headerSubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  headerTitle: { fontSize: 26, fontWeight: '800', color: c.textWhite },
+  headerSubtitle: { fontSize: 13, color: c.textMuted, marginTop: 2 },
   headerShieldBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  headerShieldText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
+  headerShieldText: { color: c.accent, fontWeight: '700', fontSize: 14 },
 
   // Circle switcher chips
   chipScroll: { marginTop: 10 },
@@ -659,14 +782,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.bgMid,
+    borderColor: c.border,
+    backgroundColor: c.bgMid,
     overflow: 'hidden',
     position: 'relative',
   },
-  chipActive: { borderColor: Colors.borderStrong },
-  chipText: { fontSize: 13, color: Colors.textMuted, fontWeight: '600' },
-  chipTextActive: { color: Colors.textPrimary },
+  chipActive: { borderColor: c.borderStrong },
+  chipText: { fontSize: 13, color: c.textMuted, fontWeight: '600' },
+  chipTextActive: { color: c.textPrimary },
 
   // Map
   mapContainer: { position: 'relative' },
@@ -690,15 +813,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  mapBadgeText: { color: Colors.accentSoft, fontSize: 12, fontWeight: '700' },
+  mapBadgeText: { color: c.accentSoft, fontSize: 12, fontWeight: '700' },
   fab: {
     position: 'absolute',
     bottom: 16,
     right: 16,
     borderRadius: 28,
-    shadowColor: Colors.accentSoft,
+    shadowColor: c.accentSoft,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.5,
     shadowRadius: 12,
@@ -712,14 +835,14 @@ const styles = StyleSheet.create({
   zoneMarkerGrad: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: Colors.accentSoft,
+    borderWidth: 2, borderColor: c.accentSoft,
   },
 
   // Zone list
   list: { flex: 1 },
   listContent: { padding: 16 },
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 50, gap: 14 },
-  loadingText: { color: Colors.textMuted, fontSize: 14 },
+  loadingText: { color: c.textMuted, fontSize: 14 },
 
   // Zone card
   zoneCard: {
@@ -732,10 +855,65 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   zoneTextBlock: { flex: 1, gap: 2 },
-  zoneName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  zoneRadius: { fontSize: 12, color: Colors.accentSoft, fontWeight: '600' },
-  zoneCoords: { fontSize: 11, color: Colors.textMuted, letterSpacing: 0.3 },
+  zoneName: { fontSize: 16, fontWeight: '700', color: c.textPrimary },
+  zoneRadius: { fontSize: 12, color: c.accentSoft, fontWeight: '600' },
+  zoneCoords: { fontSize: 11, color: c.textMuted, letterSpacing: 0.3 },
+  zoneTagRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' },
+  zoneTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: c.bgMid,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: c.border,
+    maxWidth: 150,
+  },
+  zoneTagAssigned: { borderColor: c.borderStrong, backgroundColor: 'rgba(0,200,83,0.08)' },
+  zoneTagText: { fontSize: 11, color: c.textMuted, fontWeight: '600' },
+  zoneTagTextAssigned: { color: c.accent },
   zoneActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+  // Grouped-by-member sections
+  groupBlock: { marginBottom: 6 },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  groupTitle: { flex: 1, fontSize: 13, fontWeight: '800', color: c.textSecondary, letterSpacing: 0.3 },
+  groupCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: c.accentSoft,
+    backgroundColor: c.bgGlassStrong,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
+
+  // Member / category pickers (modal)
+  pickerRow: { gap: 8, paddingVertical: 2, paddingRight: 8 },
+  pickerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 20,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.bgMid,
+    maxWidth: 170,
+  },
+  pickerChipActive: { borderColor: c.borderStrong, backgroundColor: 'rgba(0,200,83,0.1)' },
+  pickerChipText: { fontSize: 13, color: c.textMuted, fontWeight: '600' },
+  pickerChipTextActive: { color: c.accent, fontWeight: '700' },
   editBtn: {
     padding: 9,
     backgroundColor: 'rgba(0,200,83,0.1)',
@@ -756,16 +934,16 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: c.border,
     gap: 7,
   },
   zoneMembersHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
-  zoneMembersSummary: { fontSize: 12, color: Colors.accentSoft, fontWeight: '700' },
+  zoneMembersSummary: { fontSize: 12, color: c.accentSoft, fontWeight: '700' },
   zoneMemberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   zoneMemberDot: { width: 7, height: 7, borderRadius: 4 },
-  zoneMemberName: { flex: 1, fontSize: 13, color: Colors.textSecondary },
-  zoneMemberDist: { fontSize: 12, color: Colors.textMuted, fontWeight: '600' },
-  zoneMemberDistInside: { color: Colors.accent, fontWeight: '700' },
+  zoneMemberName: { flex: 1, fontSize: 13, color: c.textSecondary },
+  zoneMemberDist: { fontSize: 12, color: c.textMuted, fontWeight: '600' },
+  zoneMemberDistInside: { color: c.accent, fontWeight: '700' },
 
   // Empty state
   emptyBox: {
@@ -782,15 +960,15 @@ const styles = StyleSheet.create({
   emptyIconBg: {
     width: 80, height: 80, borderRadius: 40,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: Colors.borderStrong,
+    borderWidth: 2, borderColor: c.borderStrong,
   },
-  emptyTitle: { fontSize: 20, fontWeight: '800', color: Colors.textSecondary },
-  emptyText: { fontSize: 13, color: Colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontSize: 20, fontWeight: '800', color: c.textSecondary },
+  emptyText: { fontSize: 13, color: c.textMuted, textAlign: 'center', lineHeight: 20 },
   emptyAddBtn: {
     borderRadius: 14,
     overflow: 'hidden',
     marginTop: 6,
-    shadowColor: Colors.accentSoft,
+    shadowColor: c.accentSoft,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
@@ -818,7 +996,7 @@ const styles = StyleSheet.create({
   },
   modalHandle: {
     width: 36, height: 4, borderRadius: 2,
-    backgroundColor: Colors.border,
+    backgroundColor: c.border,
     alignSelf: 'center',
     marginBottom: 4,
   },
@@ -827,11 +1005,11 @@ const styles = StyleSheet.create({
     width: 42, height: 42, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
   },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.textPrimary },
-  modalSubtitle: { fontSize: 12, color: Colors.textMuted, marginTop: 1 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: c.textPrimary },
+  modalSubtitle: { fontSize: 12, color: c.textMuted, marginTop: 1 },
   modalCloseBtn: {
     padding: 6,
-    backgroundColor: Colors.bgMid,
+    backgroundColor: c.bgMid,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -844,7 +1022,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   miniMap: { flex: 1 },
   crosshairOverlay: {
@@ -875,9 +1053,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  crosshairHintText: { color: Colors.accentSoft, fontSize: 12, fontWeight: '600' },
+  crosshairHintText: { color: c.accentSoft, fontSize: 12, fontWeight: '600' },
   locationConfirmedBadge: {
     position: 'absolute',
     bottom: 10,
@@ -891,9 +1069,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  locationConfirmedText: { color: Colors.accentSoft, fontSize: 11, fontWeight: '600', flex: 1 },
+  locationConfirmedText: { color: c.accentSoft, fontSize: 11, fontWeight: '600', flex: 1 },
   previewMarker: { alignItems: 'center' },
   previewMarkerGrad: {
     width: 26, height: 26, borderRadius: 13,
@@ -905,7 +1083,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.textMuted,
+    color: c.textMuted,
     letterSpacing: 0.9,
     textTransform: 'uppercase',
   },
@@ -913,27 +1091,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.bgMid,
+    backgroundColor: c.bgMid,
     borderRadius: 14,
     padding: 13,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  textInput: { flex: 1, color: Colors.textPrimary, fontSize: 15 },
+  textInput: { flex: 1, color: c.textPrimary, fontSize: 15 },
   radiusGroup: { gap: 8 },
   radiusHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   radiusBadge: {
-    backgroundColor: Colors.bgGlassStrong,
+    backgroundColor: c.bgGlassStrong,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
-  radiusBadgeText: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  radiusBadgeText: { color: c.accent, fontSize: 14, fontWeight: '700' },
   slider: { width: '100%', height: 36 },
   sliderLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -4 },
-  sliderLabel: { color: Colors.textMuted, fontSize: 11 },
+  sliderLabel: { color: c.textMuted, fontSize: 11 },
   errorBox: {
     flexDirection: 'row',
     gap: 8,
@@ -944,5 +1122,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(229,57,53,0.2)',
   },
-  errorText: { color: Colors.danger, fontSize: 13, flex: 1 },
+  errorText: { color: c.danger, fontSize: 13, flex: 1 },
 })

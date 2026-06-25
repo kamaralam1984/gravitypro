@@ -35,6 +35,11 @@ export const useAuthStore = create((set, get) => ({
   },
 
   logout: async () => {
+    // Stop tracking this user BEFORE clearing the token, so a logged-out (or
+    // swapped) account is never tracked and the stale push token is removed.
+    try { await require('../services/api').userAPI.clearPushToken() } catch { /* best-effort */ }
+    try { await require('../services/location').stopBackgroundTracking() } catch { /* best-effort */ }
+    try { require('../services/gpsWatch').default.stop() } catch { /* best-effort */ }
     await storage.deleteItem('auth_token')
     await storage.deleteItem('user_data')
     await storage.deleteItem('user_phone')

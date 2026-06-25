@@ -1,10 +1,12 @@
-import React, { useRef } from 'react'
+import React, { useRef, useMemo } from 'react'
 import { Pressable, Text, StyleSheet, Animated, View, Platform } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
-import { Colors, Gradients } from '../../theme/colors'
+import { useTheme } from '../../theme/ThemeContext'
 
 export const PremiumButton = ({ title, onPress, variant = 'primary', loading, disabled, style, icon }) => {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
   const scale = useRef(new Animated.Value(1)).current
   const opacity = useRef(new Animated.Value(1)).current
 
@@ -24,8 +26,8 @@ export const PremiumButton = ({ title, onPress, variant = 'primary', loading, di
   }
 
   const gradients = {
-    primary: Gradients.buttonHero,
-    secondary: [Colors.bgCard, Colors.bgCardLight],
+    primary: c.gradients.buttonHero,
+    secondary: [c.bgCard, c.bgCardLight],
     ghost: ['transparent', 'transparent'],
   }
 
@@ -36,7 +38,7 @@ export const PremiumButton = ({ title, onPress, variant = 'primary', loading, di
         <LinearGradient colors={gradients[variant]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
           style={styles.gradient}>
           {icon && <View style={styles.icon}>{icon}</View>}
-          <Text style={[styles.text, variant === 'secondary' && { color: Colors.textSecondary }]}>
+          <Text style={[styles.text, variant === 'secondary' && { color: c.textSecondary }]}>
             {loading ? 'Please wait...' : title}
           </Text>
         </LinearGradient>
@@ -45,11 +47,11 @@ export const PremiumButton = ({ title, onPress, variant = 'primary', loading, di
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => StyleSheet.create({
   button: {
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: Colors.accentSoft,
+    shadowColor: c.accentSoft,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -64,5 +66,5 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   icon: { alignItems: 'center', justifyContent: 'center' },
-  text: { color: Colors.textWhite, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
+  text: { color: c.textWhite, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
 })
