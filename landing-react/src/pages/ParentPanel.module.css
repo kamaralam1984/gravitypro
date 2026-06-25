@@ -210,15 +210,26 @@
 /* MAIN CONTENT */
 .appContent {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
-  padding-bottom: 80px;
+  /* Generous bottom padding so the last content (e.g. LOCATION OVERVIEW)
+     clears BOTH the website's own bottom nav AND the mobile app's native
+     bottom tab bar overlaid on the WebView. */
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   scrollbar-width: none;
 }
 .appContent::-webkit-scrollbar { display: none; }
+
+/* Extra safety: every tab section gets bottom padding so its last items
+   are always reachable above the app's bottom navigation bar, on every tab
+   (map / family / alerts / geofence / settings). */
+.tabSection {
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
+}
 
 /* TAB SECTIONS */
 .tabSection {

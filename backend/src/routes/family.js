@@ -23,6 +23,7 @@ const toChild = (row) => ({
   id: row.id,
   name: row.name,
   phone: row.phone,
+  email: row.email,
   avatar_url: row.avatar_url,
   account_type: row.account_type,
   dob: row.dob,
@@ -48,6 +49,7 @@ const createChildSchema = z.object({
   dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   avatar_url: z.string().url().optional(),
   phone: z.string().min(3).max(20).optional(),
+  email: z.string().email().optional(),
 })
 
 const updateChildSchema = z.object({
@@ -67,7 +69,7 @@ const createContactSchema = z.object({
 // NOTE: circle_members.role CHECK allows only ('admin','member'); the child is
 // added with role='member' and distinguished by users.account_type='child'.
 router.post('/children', authenticate, validate(createChildSchema), async (req, res) => {
-  const { circle_id, name, dob, avatar_url, phone } = req.body
+  const { circle_id, name, dob, avatar_url, phone, email } = req.body
   const parentId = req.user.id
 
   // Parent must be an admin of the target circle to add a child to it.
@@ -86,10 +88,10 @@ router.post('/children', authenticate, validate(createChildSchema), async (req, 
     // password_hash & phone are nullable (migration 009) so parent-created
     // children need no credentials. account_type='child', created_by=parent.
     const childRes = await client.query(
-      `INSERT INTO users (name, phone, avatar_url, dob, account_type, created_by)
-       VALUES ($1, $2, $3, $4, 'child', $5)
-       RETURNING id, name, phone, avatar_url, account_type, dob, created_by, created_at`,
-      [name, phone || null, avatar_url || null, dob || null, parentId]
+      `INSERT INTO users (name, phone, email, avatar_url, dob, account_type, created_by)
+       VALUES ($1, $2, $3, $4, $5, 'child', $6)
+       RETURNING id, name, phone, email, avatar_url, account_type, dob, created_by, created_at`,
+      [name, phone || null, email || null, avatar_url || null, dob || null, parentId]
     )
     const child = childRes.rows[0]
     await client.query(
@@ -101,7 +103,7 @@ router.post('/children', authenticate, validate(createChildSchema), async (req, 
   } catch (err) {
     await client.query('ROLLBACK')
     // Unique violation on phone (if a real number was reused)
-    if (err.code === '23505') return res.status(409).json({ error: 'Phone already in use' })
+    if (err.code === '23505') return res.status(409).json({ error: 'That email or phone is already in use' })
     console.error('[POST /family/children]', err.message)
     res.status(500).json({ error: 'Failed to create child profile' })
   } finally {

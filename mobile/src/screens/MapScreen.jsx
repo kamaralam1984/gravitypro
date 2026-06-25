@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   Modal,
   ScrollView,
+  Dimensions,
 } from 'react-native'
 import * as Location from 'expo-location'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -90,6 +91,9 @@ export default function MapScreen() {
   const styles = useMemo(() => makeStyles(c), [c])
   const user = useAuthStore((s) => s.user)
   const insets = useSafeAreaInsets()
+  // Cap the member-detail card body so its lower rows stay scrollable and
+  // never hide behind the bottom tab bar / SOS button (~50% of screen height).
+  const cardMaxHeight = Math.round(Dimensions.get('window').height * 0.5)
 
   // ── refs ──────────────────────────────────────────────────────────────────
   const mapRef = useRef(null)
@@ -505,6 +509,7 @@ export default function MapScreen() {
       <FamilyMap
         ref={mapRef}
         style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]}
+        zoomTopOffset={220}
         me={myLocation}
         zones={safeZones}
         members={members
@@ -678,6 +683,14 @@ export default function MapScreen() {
               <Ionicons name="close" size={18} color={c.textMuted} />
             </TouchableOpacity>
 
+            {/* Scrollable body — so long content clears the tab bar / SOS button */}
+            <ScrollView
+              style={{ maxHeight: cardMaxHeight }}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              nestedScrollEnabled>
+
             {/* Avatar + name */}
             <View style={styles.cardTop}>
               <MemberAvatar
@@ -782,6 +795,7 @@ export default function MapScreen() {
                 <Text style={styles.viewOnMapText}>Center on map</Text>
               </TouchableOpacity>
             )}
+            </ScrollView>
           </LinearGradient>
         </Animated.View>
       )}

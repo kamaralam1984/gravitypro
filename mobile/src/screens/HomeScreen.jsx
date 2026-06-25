@@ -22,6 +22,9 @@ import { userAPI, circleAPI, sosAPI, geofenceAPI } from '../services/api'
 import { useTheme } from '../theme/ThemeContext'
 import { getCurrentLocation, speedToMode } from '../services/location'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
+import { Share as RNShare } from 'react-native'
+import CheckInSheet from '../components/CheckInSheet'
+import shareApi from '../services/shareApi'
 
 // ── Greeting helper ───────────────────────────────────────────────────────────
 
@@ -127,6 +130,7 @@ export default function HomeScreen() {
   const [zones, setZones]                   = useState([])
   const [stats, setStats]                   = useState(null)
   const [myLocation, setMyLocation]         = useState(null)
+  const [checkInOpen, setCheckInOpen]       = useState(false)
   const [sosSending, setSosSending]         = useState(false)
   const [sosActive, setSosActive]           = useState(false)
   const [safeSending, setSafeSending]       = useState(false)
@@ -221,6 +225,18 @@ export default function HomeScreen() {
       setMyLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude })
     } catch (e) {
       console.error('Location init error', e)
+    }
+  }
+
+  // ── Share live location (temporary 30-min public link) ──────────────────────
+  const handleShareLive = async () => {
+    try {
+      const res = await shareApi.createShare()
+      const url = res?.url
+      if (url) await RNShare.share({ message: `Track my live location (valid 30 min): ${url}` })
+      else Alert.alert('Share failed', 'Could not create a live-location link.')
+    } catch (e) {
+      Alert.alert('Share failed', 'Could not create a live-location link. Please try again.')
     }
   }
 
@@ -491,6 +507,23 @@ export default function HomeScreen() {
               )}
             </LinearGradient>
           </Pressable>
+
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+            <Pressable
+              onPress={() => setCheckInOpen(true)}
+              style={({ pressed }) => [{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.bgCard, borderRadius: 16, paddingVertical: 14, borderWidth: 1, borderColor: c.border }, pressed && { opacity: 0.8 }]}>
+              <Ionicons name="checkmark-circle" size={20} color={c.accent} />
+              <Text style={{ color: c.textPrimary, fontWeight: '800', fontSize: 14 }}>Check In</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleShareLive}
+              style={({ pressed }) => [{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.bgCard, borderRadius: 16, paddingVertical: 14, borderWidth: 1, borderColor: c.border }, pressed && { opacity: 0.8 }]}>
+              <Ionicons name="share-social" size={20} color={c.accent} />
+              <Text style={{ color: c.textPrimary, fontWeight: '800', fontSize: 14 }}>Share Live</Text>
+            </Pressable>
+          </View>
+
+          <CheckInSheet visible={checkInOpen} onClose={() => setCheckInOpen(false)} circleId={activeCircle?.id} />
 
           {sosActive && (
             <Pressable

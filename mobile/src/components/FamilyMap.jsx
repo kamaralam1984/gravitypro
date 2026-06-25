@@ -40,7 +40,7 @@ export function formatDistance(m) {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10000 ? 2 : 1)} km`
 }
 
-function buildHtml(members, zones, me, pickMode, pick, isLight) {
+function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset) {
   const tileUrl = isLight ? TILE_LIGHT : TILE_DARK
   const bg = isLight ? '#eef2f0' : '#0b0f0d'
   const data = {
@@ -80,7 +80,7 @@ function buildHtml(members, zones, me, pickMode, pick, isLight) {
         padding:1px 7px;font:700 11px system-ui;white-space:nowrap}
   .leaflet-tile{filter:brightness(${isLight ? '1' : '.85'})}
   /* push the +/- zoom control down from the very top */
-  .leaflet-top{top:84px}
+  .leaflet-top{top:${zoomTopOffset}px}
 </style></head><body><div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -192,6 +192,7 @@ const FamilyMap = forwardRef(function FamilyMap({
   pick = null,
   onPickLocation,
   style,
+  zoomTopOffset = 84,
 }, ref) {
   const c = useTheme()
   const { mode } = useThemeMode()
@@ -201,8 +202,8 @@ const FamilyMap = forwardRef(function FamilyMap({
   const styles = useMemo(() => makeStyles(c, isLight), [c, isLight])
   const webRef = useRef(null)
   const html = useMemo(
-    () => buildHtml(members, zones, me, pickMode, pick, isLight),
-    [members, zones, me, pickMode, pick, isLight]
+    () => buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset),
+    [members, zones, me, pickMode, pick, isLight, zoomTopOffset]
   )
 
   // ── Imperative pan/zoom handle ────────────────────────────────────────────

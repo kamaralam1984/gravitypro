@@ -7,6 +7,8 @@ import SafeZonesScreen from '../screens/SafeZonesScreen'
 import AddChildScreen from '../screens/AddChildScreen'
 import EmergencyContactsScreen from '../screens/EmergencyContactsScreen'
 import ReportsScreen from '../screens/ReportsScreen'
+import ChatScreen from '../screens/ChatScreen'
+import PlacesScreen from '../screens/PlacesScreen'
 
 const Stack = createStackNavigator()
 
@@ -22,6 +24,8 @@ export default function MainNavigator() {
       <Stack.Screen name="AddChild" component={AddChildScreen} />
       <Stack.Screen name="EmergencyContacts" component={EmergencyContactsScreen} />
       <Stack.Screen name="Reports" component={ReportsScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="Places" component={PlacesScreen} />
     </Stack.Navigator>
   )
 }

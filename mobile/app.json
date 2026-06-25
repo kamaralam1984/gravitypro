@@ -28,7 +28,7 @@
         "backgroundColor": "#050F08"
       },
       "package": "com.trackalways.gravity",
-      "versionCode": 8,
+      "versionCode": 9,
       "minSdkVersion": 24,
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
@@ -43,6 +43,7 @@
         "VIBRATE",
         "POST_NOTIFICATIONS",
         "CAMERA",
+        "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES"
@@ -58,6 +59,7 @@
         "NSLocationWhenInUseUsageDescription": "Gravity needs your location to show your position on the family map.",
         "NSCameraUsageDescription": "Gravity needs camera access to update your profile photo.",
         "NSPhotoLibraryUsageDescription": "Gravity needs photo library access to select your profile photo.",
+        "NSMicrophoneUsageDescription": "Gravity needs microphone access to record voice notes in family chat.",
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "location",

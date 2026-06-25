@@ -11,6 +11,7 @@ const ACTIONS = [
   { key: 'ChildTimeline', icon: 'map', title: 'Location Timeline', desc: 'Where they went, stays & trips by day' },
   { key: 'SafeZones', icon: 'shield-checkmark', title: 'Safe Zones', desc: 'Home, school & other zones for this child' },
   { key: 'Reports', icon: 'bar-chart', title: 'Weekly Report', desc: 'Distance, time at home/school, daily breakdown' },
+  { key: 'Places', icon: 'location', title: 'Places History', desc: 'Where they spend time — home, school, tuition & more' },
 ]
 
 export default function ChildHubScreen() {

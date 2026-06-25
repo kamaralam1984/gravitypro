@@ -102,6 +102,7 @@ function MemberRow({ member, isAdmin, onRemove }) {
 
 function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
   const c = useTheme()
+  const navigation = useNavigation()
   const styles = useMemo(() => makeStyles(c), [c])
   const slideAnim = useRef(new Animated.Value(40)).current
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -313,6 +314,14 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
             )}
           </View>
         )}
+
+        {/* Chat */}
+        <Pressable
+          onPress={() => navigation.navigate('Chat', { circleId: circle.id, circleName: circle.name })}
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.bgGlass, borderRadius: 12, paddingVertical: 12, marginTop: 12, borderWidth: 1, borderColor: c.border }, pressed && { opacity: 0.75 }]}>
+          <Ionicons name="chatbubbles-outline" size={18} color={c.accent} />
+          <Text style={{ color: c.accent, fontWeight: '700', fontSize: 14 }}>Family Chat</Text>
+        </Pressable>
 
         {/* Footer */}
         <View style={styles.circleFooter}>

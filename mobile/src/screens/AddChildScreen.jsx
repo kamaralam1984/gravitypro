@@ -40,6 +40,7 @@ export default function AddChildScreen() {
   const [month, setMonth] = useState('')
   const [day, setDay] = useState('')
   const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [avatarBase64, setAvatarBase64] = useState(null)
   const [avatarType, setAvatarType] = useState('image/jpeg')
@@ -114,6 +115,7 @@ export default function AddChildScreen() {
       const body = { circle_id: circleId, name: name.trim() }
       if (dob) body.dob = dob
       if (phone.trim()) body.phone = phone.trim()
+      if (email.trim()) body.email = email.trim()
 
       // Resolve the child's avatar_url. If the parent picked a local photo
       // (a file:// URI), upload it via the same presign → PUT → confirm flow
@@ -128,7 +130,15 @@ export default function AddChildScreen() {
       }
 
       await familyAPI.createChild(body)
-      Alert.alert('Added', `${name.trim()} was added to the circle.`)
+      const circle = circles.find((c) => c.id === circleId)
+      const code = circle?.invite_code
+      const loginLine = email.trim()
+        ? `\n\n📲 To connect: install Gravity on ${name.trim()}'s phone and log in with this email (OTP):\n${email.trim()}\nThey'll be connected to your family automatically.`
+        : (phone.trim()
+            ? `\n\n📲 To connect: log in on their phone with this number (OTP): ${phone.trim()}`
+            : '\n\n📲 Add an email or phone so they can log in and connect.')
+      const codeLine = code ? `\n\nOr they can tap "Join Circle" and enter invite code:\n${code}` : ''
+      Alert.alert('Child Added ✅', `${name.trim()} was added to "${circle?.name || 'the circle'}".${loginLine}${codeLine}`)
       navigation.goBack()
     } catch (e) {
       Alert.alert('Error', e?.error || 'Failed to create child profile.')
@@ -175,6 +185,13 @@ export default function AddChildScreen() {
           <TextInput style={[s.input, s.dobCellYear]} value={year} onChangeText={setYear}
             placeholder="YYYY" placeholderTextColor={colors.textSecondary} keyboardType="number-pad" maxLength={4} />
         </View>
+
+        <Text style={s.label}>Email (so they can log in & connect)</Text>
+        <TextInput
+          style={s.input} value={email} onChangeText={setEmail}
+          placeholder="child@example.com" placeholderTextColor={colors.textSecondary}
+          keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
+        />
 
         <Text style={s.label}>Phone (optional)</Text>
         <TextInput
