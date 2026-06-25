@@ -67,8 +67,11 @@ function MemberRow({ member, isAdmin, onRemove }) {
   const lastSeen = member.location_updated_at
   const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 10 * 60 * 1000) : false
   const battery = member.battery_level
-  // Tapping a child opens the child hub (location timeline).
-  const openHub = isParent ? undefined : () => navigation.navigate('ChildHub', { member })
+  // Parental controls (ChildHub) are parent-only. A child viewer never gets to open them,
+  // even on another child's row.
+  const meIsChild = useAuthStore(s => s.user?.account_type) === 'child'
+  // Tapping a child opens the child hub (location timeline) — parents only.
+  const openHub = (isParent || meIsChild) ? undefined : () => navigation.navigate('ChildHub', { member })
 
   return (
     <Pressable onPress={openHub} style={({ pressed }) => [styles.memberRow, pressed && openHub && { opacity: 0.7 }]}>
@@ -92,7 +95,7 @@ function MemberRow({ member, isAdmin, onRemove }) {
             <Ionicons name="person-remove-outline" size={16} color={c.danger} />
           </Pressable>
         )}
-        {!isParent && <Ionicons name="chevron-forward" size={16} color={c.textMuted} />}
+        {openHub && <Ionicons name="chevron-forward" size={16} color={c.textMuted} />}
       </View>
     </Pressable>
   )
