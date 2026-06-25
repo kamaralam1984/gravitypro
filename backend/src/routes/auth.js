@@ -11,6 +11,15 @@ function generateOTP() {
   return String(Math.floor(100000 + Math.random() * 900000))
 }
 
+// Resolve with the promise's result if it settles within `ms`, otherwise resolve
+// `false` and let the original promise finish in the background (its rejection is
+// swallowed). Keeps the OTP endpoint fast so the mobile client never times out.
+function sendWithin(promise, ms) {
+  const safe = Promise.resolve(promise).catch(() => false)
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(false), ms))
+  return Promise.race([safe, timeout])
+}
+
 async function sendSMS(phone, otp) {
   // MSG91 integration — set MSG91_AUTH_KEY + MSG91_TEMPLATE_ID in .env to enable
   if (process.env.MSG91_AUTH_KEY && process.env.MSG91_TEMPLATE_ID) {
@@ -95,13 +104,13 @@ router.post('/send-otp', async (req, res) => {
   }
   const cleanPhone = phone.trim()
 
-  // Rate limit: max 3 OTPs per phone in 10 minutes
+  // Rate limit: max 10 OTPs per phone in 5 minutes
   const recent = await query(
-    `SELECT COUNT(*) FROM phone_otps WHERE phone = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
+    `SELECT COUNT(*) FROM phone_otps WHERE phone = $1 AND created_at > NOW() - INTERVAL '5 minutes'`,
     [cleanPhone]
   )
-  if (parseInt(recent.rows[0].count) >= 3) {
-    return res.status(429).json({ error: 'Too many OTP requests. Wait 10 minutes.' })
+  if (parseInt(recent.rows[0].count) >= 10) {
+    return res.status(429).json({ error: 'Too many OTP requests. Wait 5 minutes.' })
   }
 
   // Invalidate old OTPs
@@ -114,7 +123,9 @@ router.post('/send-otp', async (req, res) => {
     [cleanPhone, otp, expiresAt]
   )
 
-  const smsSent = await sendSMS(cleanPhone, otp)
+  // Don't block the HTTP response on the (possibly slow) SMS provider — that caused
+  // the app to time out and show "Network Error". Wait at most 4s, then respond.
+  const smsSent = await sendWithin(sendSMS(cleanPhone, otp), 4000)
 
   res.json({
     success: true,
@@ -164,13 +175,13 @@ router.post('/send-email-otp', async (req, res) => {
     return res.status(400).json({ error: 'Valid email required' })
   }
 
-  // Rate limit: max 3 OTPs per email in 10 minutes
+  // Rate limit: max 10 OTPs per email in 5 minutes
   const recent = await query(
-    `SELECT COUNT(*) FROM email_otps WHERE email = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
+    `SELECT COUNT(*) FROM email_otps WHERE email = $1 AND created_at > NOW() - INTERVAL '5 minutes'`,
     [cleanEmail]
   )
-  if (parseInt(recent.rows[0].count) >= 3) {
-    return res.status(429).json({ error: 'Too many OTP requests. Wait 10 minutes.' })
+  if (parseInt(recent.rows[0].count) >= 10) {
+    return res.status(429).json({ error: 'Too many OTP requests. Wait 5 minutes.' })
   }
 
   // Invalidate old OTPs
@@ -183,7 +194,9 @@ router.post('/send-email-otp', async (req, res) => {
     [cleanEmail, otp, expiresAt]
   )
 
-  const emailSent = await sendEmailOTP(cleanEmail, otp)
+  // Don't block the HTTP response on the (possibly slow) SMTP send — that caused
+  // the app to time out and show "Network Error". Wait at most 4s, then respond.
+  const emailSent = await sendWithin(sendEmailOTP(cleanEmail, otp), 4000)
   res.json({
     success: true,
     email_sent: emailSent,
