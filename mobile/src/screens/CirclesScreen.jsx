@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import * as Haptics from 'expo-haptics'
 import * as Clipboard from 'expo-clipboard'
-import { circleAPI } from '../services/api'
+import { circleAPI, userAPI } from '../services/api'
 import { useCircleStore } from '../store/circleStore'
 import { useAuthStore } from '../store/authStore'
 import { useTheme } from '../theme/ThemeContext'
@@ -73,6 +73,22 @@ function MemberRow({ member, isAdmin, onRemove }) {
   // Tapping a child opens the child hub (location timeline) — parents only.
   const openHub = (isParent || meIsChild) ? undefined : () => navigation.navigate('ChildHub', { member })
 
+  // Parent can remotely refresh a child's app (pull OTA + reload + come online).
+  const canRefresh = !meIsChild && !isParent
+  const [refreshing, setRefreshing] = useState(false)
+  const handleRefresh = async () => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    setRefreshing(true)
+    try {
+      await userAPI.refreshMember(member.id)
+      Alert.alert('Refresh sent', `${member.name}'s app will update and come online. The first time, they may need to tap the notification.`)
+    } catch (e) {
+      Alert.alert('Could not refresh', e?.error || 'Ask them to open the app once, then try again.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <Pressable onPress={openHub} style={({ pressed }) => [styles.memberRow, pressed && openHub && { opacity: 0.7 }]}>
       <MemberAvatar member={member} size={40} showStatus isOnline={isOnline} />
@@ -90,6 +106,13 @@ function MemberRow({ member, isAdmin, onRemove }) {
         <View style={[styles.roleBadge, { borderColor: roleColor }]}>
           <Text style={[styles.roleText, { color: roleColor }]}>{roleLabel}</Text>
         </View>
+        {canRefresh && (
+          <Pressable onPress={handleRefresh} disabled={refreshing} style={styles.removeBtn} hitSlop={8}>
+            {refreshing
+              ? <ActivityIndicator size="small" color={c.accent} />
+              : <Ionicons name="refresh" size={16} color={c.accent} />}
+          </Pressable>
+        )}
         {isAdmin && !isParent && (
           <Pressable onPress={() => onRemove(member)} style={styles.removeBtn} hitSlop={8}>
             <Ionicons name="person-remove-outline" size={16} color={c.danger} />
