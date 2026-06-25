@@ -65,11 +65,10 @@ const formatLastSeen = (ts) => {
 }
 
 // A connected member counts as "online" if we've heard from them within the
-// last 15 min — a generous window so brief network/doze gaps don't flip a
-// genuinely-connected child to a scary "Offline".
+// last 10 min (consistent with Home/Circles). A missing timestamp is treated as
+// offline — never "always online" — so stale rows don't read as connected.
 const isOnlineMember = (loc) => {
-  if (!loc) return false
-  if (!loc.timestamp) return true
+  if (!loc || !loc.timestamp) return false
   return Date.now() - new Date(loc.timestamp).getTime() < 10 * 60 * 1000
 }
 
@@ -264,27 +263,14 @@ export default function MapScreen() {
           distanceInterval: 10,
         },
         (loc) => {
-          const coord = {
+          // Only update the on-screen "my location" marker. The background
+          // foreground-service (services/location.js) already posts to the server
+          // every few seconds (with speed/mode/battery) — posting here too would
+          // double the network writes and battery use.
+          setMyLocation({
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
-          }
-          setMyLocation(coord)
-
-          // Throttled POST to server (max once per 30 s)
-          const now = Date.now()
-          if (now - lastLocationPost.current > 30_000) {
-            lastLocationPost.current = now
-            getBatteryLevel().then(battery_level => {
-              userAPI
-                .postLocation({
-                  latitude: loc.coords.latitude,
-                  longitude: loc.coords.longitude,
-                  accuracy: loc.coords.accuracy ?? undefined,
-                  battery_level,
-                })
-                .catch(() => {})
-            })
-          }
+          })
         }
       )
 
@@ -447,9 +433,11 @@ export default function MapScreen() {
   }, [activeCircle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── derived ───────────────────────────────────────────────────────────────
+  // Exclude yourself from the count/denominator (markers & list already do).
+  const otherMembers = useMemo(() => members.filter((m) => m.id !== user?.id), [members, user?.id])
   const onlineCount = useMemo(
-    () => members.filter((m) => isOnlineMember(memberLocations[m.id])).length,
-    [members, memberLocations]
+    () => otherMembers.filter((m) => isOnlineMember(memberLocations[m.id])).length,
+    [otherMembers, memberLocations]
   )
   const selectedLoc = selectedMember ? memberLocations[selectedMember.id] : null
 
@@ -586,7 +574,7 @@ export default function MapScreen() {
             <View style={styles.countChip}>
               <View style={styles.countDot} />
               <Text style={styles.countText}>
-                {onlineCount}/{members.length} online
+                {onlineCount}/{otherMembers.length} online
               </Text>
             </View>
             {/* Refresh */}

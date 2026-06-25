@@ -58,22 +58,33 @@ if (Platform.OS !== 'web') {
           timestamp: location.timestamp,
         }
 
-        let online = false
+        // Best-effort Traccar hardware telemetry (optional; NEVER drives online
+        // state). Null/unknown params are omitted so Traccar doesn't reject the
+        // request (Android reports speed/heading as null or -1 when unknown).
         try {
-          const res = await fetchWithTimeout(
-            `${TRACCAR_ENDPOINT}/?id=${encodeURIComponent(deviceId)}&lat=${latitude}&lon=${longitude}&altitude=${altitude}&speed=${speed}&bearing=${heading}&accuracy=${accuracy}&timestamp=${location.timestamp}`
-          )
-          if (res.ok) online = true
+          const params = [
+            `id=${encodeURIComponent(deviceId)}`,
+            `lat=${latitude}`, `lon=${longitude}`,
+            `timestamp=${location.timestamp}`,
+          ]
+          if (accuracy != null) params.push(`accuracy=${accuracy}`)
+          if (speed != null && speed >= 0) params.push(`speed=${speed}`)
+          if (heading != null && heading >= 0) params.push(`bearing=${heading}`)
+          if (altitude != null) params.push(`altitude=${altitude}`)
+          await fetchWithTimeout(`${TRACCAR_ENDPOINT}/?${params.join('&')}`)
         } catch {
-          // No internet or Traccar down
+          // Traccar optional/down — ignore
         }
 
-        // Post location to Gravity API for SSE broadcast
+        // Post location to Gravity API. THIS result (not Traccar) decides whether
+        // we're online: if it succeeds we flush the offline queue, otherwise we
+        // queue this point for later.
+        let online = false
         try {
           const token = await storage.getItem('auth_token')
           if (token) {
             const battery_level = await getBatteryLevel()
-            await fetchWithTimeout(`${API_BASE}/api/v1/users/location`, {
+            const res = await fetchWithTimeout(`${API_BASE}/api/v1/users/location`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -81,9 +92,10 @@ if (Platform.OS !== 'web') {
               },
               body: JSON.stringify({ latitude, longitude, accuracy, battery_level, speed, mode }),
             })
+            if (res.ok) online = true
           }
         } catch (e) {
-          // Ignore — will retry on next update
+          // network down — will queue below
         }
 
         if (online) {
@@ -118,10 +130,12 @@ export const startBackgroundTracking = async () => {
   const isRegistered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false)
   if (!isRegistered) {
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      // Near-real-time tracking: report at least every ~3s and on any movement.
+      // Live tracking while MOVING, but no GPS churn when stationary (the 60s
+      // presence heartbeat keeps a still device "online", so we don't need a fix
+      // every few seconds when it isn't moving — that was a major battery drain).
       accuracy: Location.Accuracy.High,
-      timeInterval: 3000,        // Android: minimum 3s between updates
-      distanceInterval: 0,       // 0 = report on the time interval even when still
+      timeInterval: 5000,        // at most one fix per ~5s
+      distanceInterval: 12,      // only when moved ≥12m → near-zero drain when still
       deferredUpdatesInterval: 0, // do not batch — deliver each fix immediately
       pausesUpdatesAutomatically: false, // iOS: never auto-pause when stationary
       activityType: Location.ActivityType.Other,

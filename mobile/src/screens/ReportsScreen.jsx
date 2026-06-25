@@ -95,8 +95,9 @@ export default function ReportsScreen({ route, navigation }) {
   const onDownloadCsv = useCallback(async () => {
     if (!userId || downloading) return
     setDownloading(true)
-    const url = await getWeeklyCsvUrl(userId)
+    let url
     try {
+      url = await getWeeklyCsvUrl(userId)
       const headers = await getCsvAuthHeaders()
       const res = await fetch(url, { headers })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -108,12 +109,12 @@ export default function ReportsScreen({ route, navigation }) {
       })
       await Share.share({ url: fileUri, title: fileName, message: fileName })
     } catch (e) {
-      // Last resort: open the URL in the system browser.
-      try {
-        await Linking.openURL(url)
-      } catch (_) {
-        Alert.alert('Download failed', e?.message || 'Could not export CSV')
+      // Last resort: open the URL in the system browser (if we got one).
+      if (url) {
+        try { await Linking.openURL(url); return }
+        catch (_) { /* fall through to alert */ }
       }
+      Alert.alert('Download failed', e?.message || 'Could not export CSV')
     } finally {
       setDownloading(false)
     }

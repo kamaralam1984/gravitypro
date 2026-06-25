@@ -19,8 +19,14 @@ api.interceptors.response.use(
   (res) => res.data,
   async (error) => {
     if (error.response?.status === 401) {
-      await storage.deleteItem('auth_token')
-      await storage.deleteItem('user_data')
+      // Expired/invalid session — fully log out (clears in-memory auth + stops
+      // tracking) so the app drops to the login screen instead of looping on a
+      // broken authenticated UI. Lazy require avoids a circular import.
+      try { await require('../store/authStore').useAuthStore.getState().logout() }
+      catch {
+        await storage.deleteItem('auth_token')
+        await storage.deleteItem('user_data')
+      }
     }
     return Promise.reject(error.response?.data || error)
   }

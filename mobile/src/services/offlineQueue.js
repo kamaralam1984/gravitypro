@@ -37,6 +37,7 @@ export const flushOfflineQueue = async (token) => {
   if (Platform.OS === 'web') return 0
   const queue = await readQueue()
   if (!queue.length) return 0
+  const flushedCount = queue.length
 
   const BASE = (process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com') + '/api/v1'
 
@@ -51,9 +52,17 @@ export const flushOfflineQueue = async (token) => {
     })
     clearTimeout(tid)
     if (res.ok) {
-      await FileSystem.deleteAsync(QUEUE_FILE, { idempotent: true })
-      console.log(`[OfflineQueue] synced ${queue.length} points`)
-      return queue.length
+      // Remove ONLY the points we flushed — keep any queued during the request
+      // (deleting the whole file would silently drop them).
+      const current = await readQueue()
+      const remaining = current.slice(flushedCount)
+      if (remaining.length) {
+        await FileSystem.writeAsStringAsync(QUEUE_FILE, JSON.stringify(remaining))
+      } else {
+        await FileSystem.deleteAsync(QUEUE_FILE, { idempotent: true })
+      }
+      console.log(`[OfflineQueue] synced ${flushedCount} points`)
+      return flushedCount
     }
   } catch (e) {
     clearTimeout(tid)

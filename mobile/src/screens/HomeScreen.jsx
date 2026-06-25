@@ -89,8 +89,10 @@ function MemberChip({ member, memberLocations }) {
   const c = useTheme()
   const styles = useMemo(() => makeStyles(c), [c])
   const loc = memberLocations[member.id]
-  const isOnline = loc
-    ? (!loc.timestamp || Date.now() - new Date(loc.timestamp).getTime() < 5 * 60 * 1000)
+  // Online = a real, fresh fix within 10 min (consistent with Map/Circles).
+  // A missing timestamp is treated as offline (not "always online").
+  const isOnline = loc?.timestamp
+    ? Date.now() - new Date(loc.timestamp).getTime() < 10 * 60 * 1000
     : false
   const mode = speedToMode(loc?.speed)
 

@@ -43,9 +43,11 @@ const isGpsEnabled = async () => {
   }
 }
 
+// Returns 'commit' (accepted OR a client error — retrying won't help, so stop
+// re-firing the edge), or 'retry' (network failure / 5xx / not logged in).
 const reportStatus = async (enabled) => {
   const token = await storage.getItem('auth_token')
-  if (!token) return false // not logged in — skip
+  if (!token) return 'retry' // not logged in — try again later
   try {
     const res = await fetchWithTimeout(`${API_BASE}/api/v1/device/gps-status`, {
       method: 'POST',
@@ -55,9 +57,11 @@ const reportStatus = async (enabled) => {
       },
       body: JSON.stringify({ gps_enabled: enabled }),
     })
-    return res.ok
+    if (res.ok) return 'commit'
+    if (res.status >= 400 && res.status < 500) return 'commit' // client error — don't loop
+    return 'retry' // 5xx — transient, retry
   } catch {
-    return false
+    return 'retry' // network error — retry next tick
   }
 }
 
@@ -67,8 +71,8 @@ const tick = async () => {
   try {
     const enabled = await isGpsEnabled()
     if (enabled !== lastReported) {
-      const ok = await reportStatus(enabled)
-      if (ok) lastReported = enabled // only commit the edge once the server accepted it
+      const result = await reportStatus(enabled)
+      if (result === 'commit') lastReported = enabled // stop re-firing this edge
     }
   } catch {
     // swallow — best effort

@@ -61,7 +61,7 @@ function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset) {
         lng: Number(z.center_lng),
         radius: Number(z.radius_meters) || 200,
       })),
-    me: me && me.latitude != null ? { lat: Number(me.latitude), lng: Number(me.longitude) } : null,
+    me: me && me.latitude != null && me.longitude != null ? { lat: Number(me.latitude), lng: Number(me.longitude) } : null,
     pickMode: !!pickMode,
     pick: pick && pick.latitude != null ? { lat: Number(pick.latitude), lng: Number(pick.longitude), radius: Number(pick.radius) || 200 } : null,
   }
@@ -109,8 +109,9 @@ function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset) {
   D.members.forEach(function(m){ if(!parent && m.type==='parent'){ parent={lat:m.lat,lng:m.lng}; parentName=m.name; } });
   if(!parent && D.me){ parent={lat:D.me.lat,lng:D.me.lng}; parentName='You'; }
 
-  // Self (only draw the generic self marker when it is not already the parent marker)
-  if(D.me && !(parent && parent.lat===D.me.lat && parent.lng===D.me.lng)){
+  // Self (only draw the generic self marker when it is not effectively the same
+  // point as the parent marker — compare by distance, not exact float equality).
+  if(D.me && !(parent && hav(parent.lat,parent.lng,D.me.lat,D.me.lng) < 30)){
     L.circleMarker([D.me.lat,D.me.lng],{radius:7,color:'#fff',weight:2,fillColor:'#2196F3',fillOpacity:1}).addTo(map).bindTooltip('You',{permanent:false});
     bounds.push([D.me.lat,D.me.lng]);
   }

@@ -12,7 +12,7 @@ import MainNavigator from '../src/navigation/MainNavigator'
 import UpdateBanner from '../src/components/ui/UpdateBanner'
 import { registerForPushNotifications, setupNotificationListeners } from '../src/services/notifications'
 import { syncOfflineLocations, reportBatteryLevel, startBackgroundTracking, sendHeartbeat } from '../src/services/location'
-import { checkAndApplyOTA } from '../src/services/ota'
+import { checkAndApplyOTA, checkAndFetchOTA } from '../src/services/ota'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext'
 import gpsWatch from '../src/services/gpsWatch'
 import { ensureReliableTracking } from '../src/services/reliability'
@@ -109,7 +109,9 @@ export default function RootLayout() {
         syncOfflineLocations()
         reportBatteryLevel()
         sendHeartbeat()
-        checkAndApplyOTA()   // pick up the latest JS on every foreground — no logout/login needed
+        // Download (but don't force-reload) the latest JS on foreground — it
+        // applies on the next natural restart, so we never reload mid-use.
+        checkAndFetchOTA()
         // Re-register the push token on foreground so remote-refresh works as soon
         // as the child opens the app once (and grants notification permission).
         registerForPushNotifications().catch(() => {})
