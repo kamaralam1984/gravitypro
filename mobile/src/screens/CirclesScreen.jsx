@@ -65,7 +65,7 @@ function MemberRow({ member, isAdmin, onRemove }) {
   const roleLabel = isParent ? 'Parent' : 'Child'
   const roleColor = isParent ? c.accent : c.accentSoft
   const lastSeen = member.location_updated_at
-  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000) : false
+  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 10 * 60 * 1000) : false
   const battery = member.battery_level
   // Tapping a child opens the child hub (location timeline).
   const openHub = isParent ? undefined : () => navigation.navigate('ChildHub', { member })

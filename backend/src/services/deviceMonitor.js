@@ -16,7 +16,7 @@ const { query } = require('../config/db')
 const { sendDeviceAlert } = require('./alerts')
 
 const SCAN_INTERVAL_MS = 60 * 1000        // scan every 60s
-const OFFLINE_AFTER_MS = 5 * 60 * 1000    // offline = no location for 5 min
+const OFFLINE_AFTER_MS = 20 * 60 * 1000   // offline = no location for 20 min (generous: brief network/doze gaps shouldn't flag a phone that's still on)
 
 let intervalHandle = null
 let scanning = false

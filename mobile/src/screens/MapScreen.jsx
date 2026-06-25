@@ -63,10 +63,24 @@ const formatLastSeen = (ts) => {
   return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
+// A connected member counts as "online" if we've heard from them within the
+// last 15 min — a generous window so brief network/doze gaps don't flip a
+// genuinely-connected child to a scary "Offline".
 const isOnlineMember = (loc) => {
   if (!loc) return false
   if (!loc.timestamp) return true
-  return Date.now() - new Date(loc.timestamp).getTime() < 5 * 60 * 1000
+  return Date.now() - new Date(loc.timestamp).getTime() < 10 * 60 * 1000
+}
+
+// Soft "last seen" label so a connected member never shows a bare "Offline".
+const lastSeenAgo = (ts) => {
+  if (!ts) return ''
+  const m = Math.floor((Date.now() - new Date(ts).getTime()) / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m} min ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -687,7 +701,9 @@ export default function MapScreen() {
                     ]}
                   />
                   <Text style={styles.statusText}>
-                    {isOnlineMember(selectedLoc) ? 'Online' : 'Offline'}
+                    {isOnlineMember(selectedLoc)
+                      ? 'Online'
+                      : (selectedLoc?.timestamp ? `Last seen ${lastSeenAgo(selectedLoc.timestamp)}` : 'Connecting…')}
                   </Text>
                 </View>
               </View>

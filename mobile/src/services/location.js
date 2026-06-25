@@ -130,6 +130,10 @@ export const startBackgroundTracking = async () => {
         notificationTitle: 'Gravity is active',
         notificationBody: 'Sharing your live location with your family.',
         notificationColor: '#0A5C35',
+        // Keep the location foreground-service ALIVE even after the user swipes
+        // the app away from recents / closes it. As long as the phone is ON,
+        // location keeps flowing so the child shows ONLINE to the parent.
+        killServiceOnDestroy: false,
       },
     })
   }
