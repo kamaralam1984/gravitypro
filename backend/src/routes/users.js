@@ -181,6 +181,61 @@ router.patch('/location', authenticate, validate(batterySchema), async (req, res
 })
 
 /**
+ * POST /users/heartbeat
+ * No body. Keeps the user "online" while their phone is ON even when the device
+ * is stationary and Android throttles / stops background GPS updates (the usual
+ * reason a child showed OFFLINE despite the phone being on). Bumps the freshness
+ * timestamp on the last-known location and re-broadcasts presence to circles so
+ * parent panels flip the child back to ONLINE immediately.
+ */
+router.post('/heartbeat', authenticate, async (req, res) => {
+  const userId = req.user.id
+  try {
+    // Only bump freshness if we already have a last-known location for this user.
+    const upd = await query(
+      `UPDATE user_latest_locations
+         SET updated_at = NOW()
+       WHERE user_id = $1
+       RETURNING ST_Y(geom) AS latitude, ST_X(geom) AS longitude, battery_level`,
+      [userId]
+    )
+    // Keep device_status fresh too so the offline-monitor doesn't false-alert.
+    await query(
+      `UPDATE device_status
+         SET last_location_at = NOW(), offline_alerted = false, updated_at = NOW()
+       WHERE user_id = $1`,
+      [userId]
+    ).catch(() => {})
+
+    const row = upd.rows[0]
+    if (row && row.latitude != null && row.longitude != null) {
+      try {
+        const circlesResult = await query(
+          'SELECT DISTINCT circle_id FROM circle_members WHERE user_id = $1',
+          [userId]
+        )
+        for (const c of circlesResult.rows) {
+          await sendToCircleMembers(c.circle_id, 'location_update', {
+            userId,
+            latitude: row.latitude,
+            longitude: row.longitude,
+            battery_level: row.battery_level,
+            timestamp: new Date().toISOString(),
+            heartbeat: true,
+          })
+        }
+      } catch (sseErr) {
+        console.error('[users/heartbeat] SSE error:', sseErr.message)
+      }
+    }
+    res.json({ success: true, hadLocation: !!row })
+  } catch (err) {
+    console.error('[POST /users/heartbeat]', err.message)
+    res.status(500).json({ error: 'Failed to heartbeat' })
+  }
+})
+
+/**
  * GET /users/me/stats
  * Returns today's activity summary for the authenticated user.
  * Response: { today: { distance: number, safeZones: number, checkins: number } }

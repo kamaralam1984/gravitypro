@@ -14,7 +14,15 @@ interface Member {
   avatar: string
   role: string
   lastSeen: string
+  lastSeenAt: number | null
 }
+
+// A member is ONLINE if their location/heartbeat is fresh within this window.
+// Matches the mobile app + the 60s presence heartbeat (which keeps a stationary
+// phone-on child fresh well inside the window).
+const ONLINE_WINDOW_MS = 10 * 60 * 1000
+const freshStatus = (lastSeenAt: number | null): 'active' | 'offline' =>
+  lastSeenAt != null && Date.now() - lastSeenAt < ONLINE_WINDOW_MS ? 'active' : 'offline'
 
 interface AlertItem {
   id: string
@@ -226,6 +234,26 @@ export default function ParentPanel() {
     const handler = () => setIsFullscreen(!!document.fullscreenElement)
     document.addEventListener('fullscreenchange', handler)
     return () => document.removeEventListener('fullscreenchange', handler)
+  }, [])
+
+  // ── PRESENCE TICK ── re-derive online/offline from freshness every 30s so a
+  // member whose heartbeat stops (phone off / no internet) flips to Offline,
+  // and one that resumes flips back to Online. SOS state is never overridden.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMembers(prev => {
+        let changed = false
+        const next = prev.map(m => {
+          if (m.status === 'sos') return m
+          const s = freshStatus(m.lastSeenAt)
+          if (s === m.status) return m
+          changed = true
+          return { ...m, status: s }
+        })
+        return changed ? next : prev
+      })
+    }, 30_000)
+    return () => clearInterval(id)
   }, [])
 
   // ── CLEANUP ON UNMOUNT ──
@@ -446,12 +474,13 @@ export default function ParentPanel() {
       name: m.name as string,
       lat: m.latitude ? parseFloat(m.latitude as string) : null,
       lng: m.longitude ? parseFloat(m.longitude as string) : null,
-      status: m.location_updated_at ? 'active' : 'offline',
+      status: freshStatus(m.location_updated_at ? new Date(m.location_updated_at as string).getTime() : null),
       battery: m.battery_level != null ? Math.round(m.battery_level as number) : 50,
       color: colors[i % colors.length],
       avatar: (m.avatar_url as string) || 'https://picsum.photos/seed/' + encodeURIComponent(m.name as string) + '/56/56',
       role: (m.role as string) || 'Member',
       lastSeen: m.location_updated_at ? new Date(m.location_updated_at as string).toLocaleTimeString() : 'Unknown',
+      lastSeenAt: m.location_updated_at ? new Date(m.location_updated_at as string).getTime() : null,
     }))
     setMembers(loaded)
     const active = loaded.filter((m) => m.status === 'active').length
@@ -627,7 +656,7 @@ export default function ParentPanel() {
       setMembers((prev) =>
         prev.map((m) =>
           m.id === d.userId
-            ? { ...m, lat: d.latitude, lng: d.longitude, battery: d.battery_level != null ? Math.round(d.battery_level) : m.battery, lastSeen: new Date().toLocaleTimeString(), status: 'active' as const }
+            ? { ...m, lat: d.latitude, lng: d.longitude, battery: d.battery_level != null ? Math.round(d.battery_level) : m.battery, lastSeen: new Date().toLocaleTimeString(), lastSeenAt: Date.now(), status: 'active' as const }
             : m
         )
       )

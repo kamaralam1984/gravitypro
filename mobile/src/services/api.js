@@ -48,6 +48,7 @@ export const userAPI = {
   getStats: () => api.get('/users/me/stats'),
   postLocation: (data) => api.post('/users/location', data),       // backend: POST /users/location
   updateBattery: (data) => api.patch('/users/location', data),     // backend: PATCH /users/location
+  heartbeat: () => api.post('/users/heartbeat', {}),               // keep "online" while phone is on (stationary)
   getLocationHistory: () => api.get('/users/me/location-history'),
   clearPushToken: () => api.delete('/users/me/push-token'),
   // Backend reads `req.body.token` (POST /users/me/push-token) — send as { token }.

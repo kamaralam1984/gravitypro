@@ -188,6 +188,18 @@ export const reportBatteryLevel = async () => {
   }
 }
 
+// Presence heartbeat — keeps the device ONLINE to the family even when it is
+// stationary and Android stops delivering background GPS fixes. Best-effort.
+export const sendHeartbeat = async () => {
+  if (Platform.OS === 'web') return
+  try {
+    const { userAPI } = require('./api')
+    await userAPI.heartbeat()
+  } catch (e) {
+    // best-effort; ignore (offline, etc.)
+  }
+}
+
 // Manually trigger a queue flush (call on app foreground / login)
 export const syncOfflineLocations = async () => {
   if (Platform.OS === 'web') return 0

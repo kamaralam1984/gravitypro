@@ -12,7 +12,7 @@ import AuthNavigator from '../src/navigation/AuthNavigator'
 import MainNavigator from '../src/navigation/MainNavigator'
 import UpdateBanner from '../src/components/ui/UpdateBanner'
 import { registerForPushNotifications } from '../src/services/notifications'
-import { syncOfflineLocations, reportBatteryLevel, startBackgroundTracking } from '../src/services/location'
+import { syncOfflineLocations, reportBatteryLevel, startBackgroundTracking, sendHeartbeat } from '../src/services/location'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext'
 import gpsWatch from '../src/services/gpsWatch'
 import { ensureReliableTracking } from '../src/services/reliability'
@@ -99,10 +99,21 @@ export default function RootLayout() {
       if (appState.current.match(/inactive|background/) && nextState === 'active') {
         syncOfflineLocations()
         reportBatteryLevel()
+        sendHeartbeat()
       }
       appState.current = nextState
     })
     return () => sub.remove()
+  }, [isAuthenticated])
+
+  // Presence heartbeat — bump "online" every 60s while the app is running, so a
+  // child whose phone is ON stays ONLINE to the parent even when stationary
+  // (Android throttles/stops background GPS when the device isn't moving).
+  useEffect(() => {
+    if (!isAuthenticated) return
+    sendHeartbeat()
+    const id = setInterval(() => { sendHeartbeat() }, 60_000)
+    return () => clearInterval(id)
   }, [isAuthenticated])
 
   // Hide splash once animation is done AND auth init is done
