@@ -28,6 +28,8 @@ pm2 logs gravity-api --lines 20
 - **#3 Google sign-in** — removed the dead "Coming soon" button (backend `/auth/google` stays ready; needs Google OAuth client IDs to re-enable).
 - **#4 Speeding alert** — server sends a `speeding` device-alert when GPS speed > `speed_alert_kmh` (default 80), with hysteresis.
 
+- **Remote app-refresh** — parent panel me har member card par **Refresh** button. `POST /users/:id/refresh` (parent-only, same circle) child ko push bhejta hai → child app OTA pull + reload + heartbeat (online). Mobile: foreground par bhi auto-OTA check (ab login/logout zaroori nahi). No migration. (backend restart + website build se live.)
+
 ## Mobile (automatic on push)
 - `ota-update.yml` publishes the Expo OTA (LoginScreen change). Installed apps live-update on next launch.
 - Note: the child privacy toggles live in the **web** child panel; the mobile app's existing tracking toggle (ProfileScreen) is unchanged.

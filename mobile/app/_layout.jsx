@@ -4,15 +4,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { NavigationContainer } from '@react-navigation/native'
 import { StatusBar } from 'expo-status-bar'
-import * as Updates from 'expo-updates'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from '../src/store/authStore'
 import SplashScreen from '../src/screens/auth/SplashScreen'
 import AuthNavigator from '../src/navigation/AuthNavigator'
 import MainNavigator from '../src/navigation/MainNavigator'
 import UpdateBanner from '../src/components/ui/UpdateBanner'
-import { registerForPushNotifications } from '../src/services/notifications'
+import { registerForPushNotifications, setupNotificationListeners } from '../src/services/notifications'
 import { syncOfflineLocations, reportBatteryLevel, startBackgroundTracking, sendHeartbeat } from '../src/services/location'
+import { checkAndApplyOTA } from '../src/services/ota'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext'
 import gpsWatch from '../src/services/gpsWatch'
 import { ensureReliableTracking } from '../src/services/reliability'
@@ -47,19 +47,28 @@ export default function RootLayout() {
   // Over-the-air JS updates — fetch & apply silently on launch (no reinstall needed).
   // No-op in dev / Expo Go (Updates.isEnabled is false there).
   useEffect(() => {
-    if (__DEV__ || !Updates.isEnabled) return
-    ;(async () => {
-      try {
-        const res = await Updates.checkForUpdateAsync()
-        if (res.isAvailable) {
-          await Updates.fetchUpdateAsync()
-          await Updates.reloadAsync()
-        }
-      } catch {
-        // offline or no update available — ignore
-      }
-    })()
+    checkAndApplyOTA()
   }, [])
+
+  // Remote app-command handler: the parent can trigger a "refresh" from their
+  // panel → a push lands here → the child app pulls the latest OTA + reloads and
+  // sends a heartbeat so it comes back ONLINE — no manual logout/login needed.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const handle = async (data) => {
+      if (data?.type !== 'app_command') return
+      if (data.command === 'refresh') {
+        sendHeartbeat()                 // come online immediately
+        const applied = await checkAndApplyOTA()  // reloads if an update exists
+        if (!applied) sendHeartbeat()   // no update → at least confirm presence
+      }
+    }
+    const cleanup = setupNotificationListeners({
+      onReceived: (n) => handle(n?.request?.content?.data),
+      onResponse: (r) => handle(r?.notification?.request?.content?.data),
+    })
+    return cleanup
+  }, [isAuthenticated])
 
   // Register push notifications once authenticated
   useEffect(() => {
@@ -100,6 +109,7 @@ export default function RootLayout() {
         syncOfflineLocations()
         reportBatteryLevel()
         sendHeartbeat()
+        checkAndApplyOTA()   // pick up the latest JS on every foreground — no logout/login needed
       }
       appState.current = nextState
     })

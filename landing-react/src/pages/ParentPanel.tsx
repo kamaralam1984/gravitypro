@@ -697,6 +697,16 @@ export default function ParentPanel() {
 
   function callMember(name: string) { showToast('📞 Calling ' + name + '...', 'call') }
   function msgMember(name: string) { showToast('💬 Message sent to ' + name, 'msg') }
+  async function refreshMember(id: string, name: string) {
+    showToast('🔄 Refreshing ' + name + "'s app…", 'msg')
+    try {
+      const res = await apiPost('/users/' + id + '/refresh', {})
+      if (res?.error) showToast(res.error, 'error')
+      else showToast('✓ Refresh sent to ' + name, 'success')
+    } catch {
+      showToast('Could not reach ' + name, 'error')
+    }
+  }
 
   // ── ALERT DISMISS ──
   function dismissAlert(id: string) {
@@ -1294,6 +1304,12 @@ export default function ParentPanel() {
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                           </svg>
                           Message
+                        </button>
+                        <button className={`${styles.memberBtn} ${styles.memberBtnMsg}`} onClick={(e) => { e.stopPropagation(); refreshMember(m.id, m.name) }} title="Refresh & update their app, bring online">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                          </svg>
+                          Refresh
                         </button>
                       </div>
                     </div>

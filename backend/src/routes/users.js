@@ -5,7 +5,7 @@ const { authenticate } = require('../middleware/auth')
 const { validate } = require('../middleware/validate')
 const { checkGeofenceStatus } = require('../services/geofence')
 const { sendToCircleMembers } = require('../services/sse')
-const { sendDeviceAlert } = require('../services/alerts')
+const { sendDeviceAlert, sendPushNotifications } = require('../services/alerts')
 
 // Send a "speeding" alert to the user's circles when their GPS speed crosses the
 // configured threshold, with hysteresis (device_status.speeding_alerted) so it
@@ -207,6 +207,35 @@ router.patch('/me/settings', authenticate, validate(settingsSchema), async (req,
     console.error('[PATCH /me/settings]', err.message)
     res.status(500).json({ error: 'Failed to update settings' })
   }
+})
+
+// POST /users/:userId/refresh — a parent remotely refreshes a member's app:
+// pushes an "app_command:refresh" so the child app pulls the latest OTA, reloads,
+// and heartbeats back ONLINE without the member having to logout/login.
+router.post('/:userId/refresh', authenticate, async (req, res) => {
+  const targetId = req.params.userId
+  if (req.user.account_type === 'child') {
+    return res.status(403).json({ error: 'Only a parent can refresh a member' })
+  }
+  // Caller and target must share at least one circle.
+  const shared = await query(
+    `SELECT 1 FROM circle_members a
+       JOIN circle_members b ON a.circle_id = b.circle_id
+      WHERE a.user_id = $1 AND b.user_id = $2 LIMIT 1`,
+    [req.user.id, targetId]
+  )
+  if (!shared.rows.length) return res.status(403).json({ error: 'Member is not in your circle' })
+
+  const tk = await query('SELECT push_token FROM users WHERE id = $1', [targetId])
+  const token = tk.rows[0]?.push_token
+  if (!token) return res.status(409).json({ error: 'Member device has no push token yet (ask them to open the app once)' })
+
+  await sendPushNotifications([token], {
+    title: 'Gravity',
+    body: 'Refreshing & updating your app…',
+    data: { type: 'app_command', command: 'refresh' },
+  })
+  res.json({ success: true })
 })
 
 router.get('/search', authenticate, async (req, res) => {
