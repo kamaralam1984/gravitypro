@@ -153,8 +153,15 @@ export default function ChildPanel() {
     if (!gravityToken) {
       localStorage.setItem('gravity_redirect', '/child/panel')
       navigate('/login?redirect=/child/panel')
+      return
     }
-  }, [gravityToken, navigate])
+    // Role guard: only children may use the child panel.
+    if (!gravityUser || !gravityUser.account_type) {
+      navigate('/login')
+    } else if (gravityUser.account_type !== 'child') {
+      navigate('/parent/panel')
+    }
+  }, [gravityToken, gravityUser, navigate])
 
   // Show toast
   const showToast = useCallback((message: string, type = 'success') => {

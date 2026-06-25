@@ -425,22 +425,24 @@ export default function ProfileScreen() {
             />
           </GradientCard>
 
-          {/* ── Family ── */}
-          <GradientCard style={styles.section}>
-            <Text style={styles.sectionTitle}>Family</Text>
-            <SettingRow
-              icon="person-add-outline"
-              label="Add Child"
-              chevron
-              onPress={() => navigation.navigate('AddChild')}
-            />
-            <SettingRow
-              icon="alert-circle-outline"
-              label="Emergency Contacts"
-              chevron
-              onPress={() => navigation.navigate('EmergencyContacts')}
-            />
-          </GradientCard>
+          {/* ── Family (parent only — Add Child / Emergency Contacts) ── */}
+          {accountType === 'Parent' && (
+            <GradientCard style={styles.section}>
+              <Text style={styles.sectionTitle}>Family</Text>
+              <SettingRow
+                icon="person-add-outline"
+                label="Add Child"
+                chevron
+                onPress={() => navigation.navigate('AddChild')}
+              />
+              <SettingRow
+                icon="alert-circle-outline"
+                label="Emergency Contacts"
+                chevron
+                onPress={() => navigation.navigate('EmergencyContacts')}
+              />
+            </GradientCard>
+          )}
 
           {/* ── Check for Update ── */}
           <Pressable style={styles.updateBtn} onPress={promptAndUpdate}>

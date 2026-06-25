@@ -90,7 +90,7 @@ function groupZones(zones: Zone[], members: Member[]) {
 const API_BASE = window.location.origin + '/api/v1'
 
 function getToken(): string | null { return localStorage.getItem('gravity_token') }
-function getUser(): { name?: string; email?: string; avatar_url?: string } | null {
+function getUser(): { name?: string; email?: string; avatar_url?: string; account_type?: string } | null {
   try { return JSON.parse(localStorage.getItem('gravity_user') || 'null') } catch { return null }
 }
 
@@ -241,6 +241,14 @@ export default function ParentPanel() {
     if (!getToken()) {
       localStorage.setItem('gravity_redirect', '/parent/panel')
       navigate('/login')
+      return
+    }
+    // Role guard: only parents may use the parent panel.
+    const u = getUser()
+    if (!u || !u.account_type) {
+      navigate('/login')
+    } else if (u.account_type !== 'parent') {
+      navigate('/child/panel')
     }
   }, [navigate])
 
@@ -663,13 +671,28 @@ export default function ParentPanel() {
 
   // ── ALERT DISMISS ──
   function dismissAlert(id: string) {
+    const alert = alerts.find((a) => a.id === id)
+    // SOS alerts must be persisted as resolved on the backend; geofence/battery
+    // alerts are local-only dismissals. Best-effort: still remove locally on failure.
+    if (alert?.type === 'sos') {
+      apiPatch('/sos/' + id + '/resolve', {}).catch((err) => {
+        console.error('Failed to resolve SOS alert', id, err)
+      })
+    }
     setAlerts((prev) => prev.filter((a) => a.id !== id))
     setNotifCount((c) => Math.max(0, c - 1))
   }
 
   // ── GEOFENCE ACTIONS ──
   function toggleZone(id: string, checked: boolean) {
+    // Optimistic local update.
     setZones((prev) => prev.map((z) => (z.id === id ? { ...z, active: checked } : z)))
+    // TODO(backend): persist active state. PATCH /geofences/:id (updateZoneSchema)
+    // does NOT currently accept an `active` field and the safe_zones UPDATE query
+    // ignores it, so calling it would be a no-op / drop the toggle. Add `active` to
+    // updateZoneSchema + the UPDATE in backend/src/routes/geofences.js, then wire:
+    //   apiPatch('/geofences/' + id, { active: checked })
+    // Until then this toggle is local-only and resets on reload.
   }
 
   function openZoneModal() {

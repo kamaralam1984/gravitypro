@@ -74,7 +74,7 @@ function safeTimeAgo(dateStr) {
 
 // ── SOS Card ─────────────────────────────────────────────────────────────────
 
-function SosCard({ item, index, onResolve }) {
+function SosCard({ item, index, onResolve, isParent }) {
   const c = useTheme()
   const styles = useMemo(() => makeStyles(c), [c])
   const slideAnim = useRef(new Animated.Value(24)).current
@@ -157,7 +157,8 @@ function SosCard({ item, index, onResolve }) {
                 <Ionicons name="checkmark-circle" size={14} color={c.success} />
                 <Text style={styles.resolvedBadgeText}>Resolved</Text>
               </View>
-            ) : (
+            ) : isParent ? (
+              // Only a parent can mark an SOS resolved.
               <Pressable
                 onPress={handleResolve}
                 disabled={resolving}
@@ -173,7 +174,7 @@ function SosCard({ item, index, onResolve }) {
                   )}
                 </LinearGradient>
               </Pressable>
-            )}
+            ) : null}
           </View>
         </View>
       </View>
@@ -358,6 +359,8 @@ export default function AlertsScreen() {
   const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
   const user = useAuthStore(s => s.user)
+  // Only a parent can resolve an SOS; a child can view alerts but not "Mark Resolved".
+  const isParent = user?.account_type !== 'child'
 
   const [activeCircle, setActiveCircle] = useState(null)
   const [sendingSafe, setSendingSafe] = useState(false)
@@ -672,7 +675,7 @@ export default function AlertsScreen() {
           ListEmptyComponent={<EmptyState tab={activeTab} />}
           renderItem={({ item, index }) =>
             item._type === 'sos' ? (
-              <SosCard item={item} index={index} onResolve={handleResolve} />
+              <SosCard item={item} index={index} onResolve={handleResolve} isParent={isParent} />
             ) : item._type === 'device' ? (
               <DeviceCard item={item} index={index} />
             ) : (

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useRef, useImperativeHandle, forwardRef } from 'react'
 import { View, StyleSheet, useColorScheme } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { useTheme, useThemeMode } from '../theme/ThemeContext'
@@ -182,7 +182,7 @@ function buildHtml(members, zones, me, pickMode, pick, isLight) {
 </script></body></html>`
 }
 
-export default function FamilyMap({
+const FamilyMap = forwardRef(function FamilyMap({
   members = [],
   zones = [],
   me = null,
@@ -192,17 +192,47 @@ export default function FamilyMap({
   pick = null,
   onPickLocation,
   style,
-}) {
+}, ref) {
   const c = useTheme()
   const { mode } = useThemeMode()
   const systemScheme = useColorScheme()
   // Mirror ThemeContext.resolveColors so 'system' picks the OS scheme.
   const isLight = (mode === 'system' ? (systemScheme || 'dark') : mode) === 'light'
   const styles = useMemo(() => makeStyles(c, isLight), [c, isLight])
+  const webRef = useRef(null)
   const html = useMemo(
     () => buildHtml(members, zones, me, pickMode, pick, isLight),
     [members, zones, me, pickMode, pick, isLight]
   )
+
+  // ── Imperative pan/zoom handle ────────────────────────────────────────────
+  // The Leaflet map lives inside the WebView (global `map` var). We drive it by
+  // injecting a `map.setView([...], zoom)` call. MapScreen passes a region like
+  // { latitude, longitude, latitudeDelta }; we derive a zoom from latitudeDelta
+  // when present, otherwise keep the current zoom. No-op-safe until the map and
+  // the WebView are both ready.
+  useImperativeHandle(ref, () => ({
+    animateToRegion(region) {
+      if (!region || region.latitude == null || region.longitude == null) return
+      if (!webRef.current) return
+      const lat = Number(region.latitude)
+      const lng = Number(region.longitude)
+      if (isNaN(lat) || isNaN(lng)) return
+      // Derive a Leaflet zoom from latitudeDelta (smaller delta → higher zoom).
+      // log2(360 / delta) is the standard web-mercator mapping; clamp to 1..20.
+      let zoomExpr = 'map.getZoom()'
+      const delta = Number(region.latitudeDelta)
+      if (!isNaN(delta) && delta > 0) {
+        const z = Math.max(1, Math.min(20, Math.round(Math.log2(360 / delta))))
+        zoomExpr = String(z)
+      }
+      const js =
+        'try{ if(typeof map!=="undefined" && map){ map.flyTo([' +
+        lat + ',' + lng + '], ' + zoomExpr + ', {duration:0.8}); } }catch(e){}; true;'
+      webRef.current.injectJavaScript(js)
+    },
+  }), [])
+
   const handleMessage = (e) => {
     if (!onPickLocation) return
     try {
@@ -215,6 +245,7 @@ export default function FamilyMap({
   return (
     <View style={[styles.wrap, style || { height }]}>
       <WebView
+        ref={webRef}
         originWhitelist={['*']}
         source={{ html, baseUrl: 'https://localhost/' }}
         javaScriptEnabled
@@ -229,7 +260,9 @@ export default function FamilyMap({
       />
     </View>
   )
-}
+})
+
+export default FamilyMap
 
 const makeStyles = (c, isLight) => {
   const bg = isLight ? '#eef2f0' : '#0b0f0d'

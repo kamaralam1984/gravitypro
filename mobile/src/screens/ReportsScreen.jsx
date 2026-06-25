@@ -126,7 +126,7 @@ export default function ReportsScreen({ route, navigation }) {
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
-      <LinearGradient colors={c.gradients?.header || ['#1e293b', '#0f172a']} style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <LinearGradient colors={c.gradients?.hero || ['#042918', '#0A5C35']} style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable hitSlop={12} onPress={() => navigation?.goBack?.()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </Pressable>
@@ -145,12 +145,12 @@ export default function ReportsScreen({ route, navigation }) {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={c.colors?.primary || '#6366f1'} />
+          <ActivityIndicator size="large" color={c.accent || '#00E676'} />
           <Text style={styles.mutedText}>Loading report…</Text>
         </View>
       ) : error ? (
         <View style={styles.center}>
-          <Ionicons name="alert-circle-outline" size={40} color={c.colors?.danger || '#ef4444'} />
+          <Ionicons name="alert-circle-outline" size={40} color={c.danger || '#E53935'} />
           <Text style={styles.mutedText}>{error}</Text>
           <Pressable style={styles.retryBtn} onPress={load}>
             <Text style={styles.retryText}>Retry</Text>
@@ -164,7 +164,7 @@ export default function ReportsScreen({ route, navigation }) {
           {/* Totals */}
           <View style={styles.totalsRow}>
             <View style={styles.totalCard}>
-              <Ionicons name="walk-outline" size={20} color={c.colors?.primary || '#6366f1'} />
+              <Ionicons name="walk-outline" size={20} color={c.accent || '#00E676'} />
               <Text style={styles.totalValue}>{fmtDistance(totals?.totalDistanceMeters)}</Text>
               <Text style={styles.totalLabel}>Distance</Text>
             </View>
@@ -229,7 +229,7 @@ export default function ReportsScreen({ route, navigation }) {
 
 const makeStyles = (c) =>
   StyleSheet.create({
-    root: { flex: 1, backgroundColor: c.colors?.background || '#0f172a' },
+    root: { flex: 1, backgroundColor: c.bgDeep || '#020C05' },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -241,13 +241,13 @@ const makeStyles = (c) =>
     headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
     headerSub: { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    mutedText: { color: c.colors?.textMuted || '#94a3b8', marginTop: 10, textAlign: 'center' },
+    mutedText: { color: c.textMuted || '#5E8B6E', marginTop: 10, textAlign: 'center' },
     retryBtn: {
       marginTop: 14,
       paddingVertical: 8,
       paddingHorizontal: 20,
       borderRadius: 8,
-      backgroundColor: c.colors?.primary || '#6366f1',
+      backgroundColor: c.accent || '#00E676',
     },
     retryText: { color: '#fff', fontWeight: '600' },
     totalsRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
@@ -256,12 +256,12 @@ const makeStyles = (c) =>
       alignItems: 'center',
       paddingVertical: 14,
       borderRadius: 14,
-      backgroundColor: c.colors?.card || '#1e293b',
+      backgroundColor: c.bgCard || '#0F2518',
     },
-    totalValue: { color: c.colors?.text || '#fff', fontSize: 16, fontWeight: '700', marginTop: 6 },
-    totalLabel: { color: c.colors?.textMuted || '#94a3b8', fontSize: 12, marginTop: 2 },
+    totalValue: { color: c.textPrimary || '#E8F5E9', fontSize: 16, fontWeight: '700', marginTop: 6 },
+    totalLabel: { color: c.textMuted || '#5E8B6E', fontSize: 12, marginTop: 2 },
     sectionTitle: {
-      color: c.colors?.text || '#fff',
+      color: c.textPrimary || '#E8F5E9',
       fontSize: 15,
       fontWeight: '700',
       marginTop: 20,
@@ -272,22 +272,22 @@ const makeStyles = (c) =>
       alignItems: 'flex-end',
       justifyContent: 'space-between',
       height: 160,
-      backgroundColor: c.colors?.card || '#1e293b',
+      backgroundColor: c.bgCard || '#0F2518',
       borderRadius: 14,
       padding: 12,
     },
     barCol: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
     barTrack: { width: 14, flex: 1, justifyContent: 'flex-end', borderRadius: 7, overflow: 'hidden' },
-    barFill: { width: '100%', backgroundColor: c.colors?.primary || '#6366f1', borderRadius: 7 },
-    barLabel: { color: c.colors?.textMuted || '#94a3b8', fontSize: 11, marginTop: 6 },
-    barValue: { color: c.colors?.text || '#fff', fontSize: 9, marginTop: 2 },
+    barFill: { width: '100%', backgroundColor: c.accent || '#00E676', borderRadius: 7 },
+    barLabel: { color: c.textMuted || '#5E8B6E', fontSize: 11, marginTop: 6 },
+    barValue: { color: c.textPrimary || '#E8F5E9', fontSize: 9, marginTop: 2 },
     dayRow: {
       paddingVertical: 10,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: c.colors?.border || 'rgba(255,255,255,0.1)',
+      borderBottomColor: c.border || 'rgba(0,230,118,0.15)',
     },
-    dayRowDate: { color: c.colors?.text || '#fff', fontWeight: '600', fontSize: 14 },
-    dayRowMeta: { color: c.colors?.textMuted || '#94a3b8', fontSize: 12, marginTop: 3 },
+    dayRowDate: { color: c.textPrimary || '#E8F5E9', fontWeight: '600', fontSize: 14 },
+    dayRowMeta: { color: c.textMuted || '#5E8B6E', fontSize: 12, marginTop: 3 },
     downloadBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -296,7 +296,7 @@ const makeStyles = (c) =>
       marginTop: 24,
       paddingVertical: 14,
       borderRadius: 12,
-      backgroundColor: c.colors?.primary || '#6366f1',
+      backgroundColor: c.accent || '#00E676',
     },
     downloadText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   })

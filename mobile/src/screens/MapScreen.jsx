@@ -489,6 +489,7 @@ export default function MapScreen() {
 
       {/* ── Full-screen map (free Leaflet/OSM via FamilyMap) ──────────────── */}
       <FamilyMap
+        ref={mapRef}
         style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]}
         me={myLocation}
         zones={safeZones}

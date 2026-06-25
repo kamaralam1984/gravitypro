@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import Slider from '@react-native-community/slider'
 import { circleAPI, geofenceAPI } from '../services/api'
+import { useAuthStore } from '../store/authStore'
 import { ZONE_CATEGORIES, categoryMeta, groupZonesByMember } from '../services/zonesApi'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
@@ -29,7 +30,7 @@ const formatCoord = (n) => (Math.round(n * 10000) / 10000).toFixed(4)
 
 // ─── Zone Card ────────────────────────────────────────────────────────────────
 
-function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
+function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats, isChild }) {
   const c = useTheme()
   const styles = useMemo(() => makeStyles(c), [c])
   const slideAnim = useRef(new Animated.Value(40)).current
@@ -84,14 +85,17 @@ function ZoneCard({ zone, index, onDelete, onFocus, onEdit, memberStats }) {
             </View>
           </Pressable>
 
-          <View style={styles.zoneActions}>
-            <Pressable onPress={() => onEdit(zone)} style={styles.editBtn} hitSlop={6}>
-              <Ionicons name="create-outline" size={18} color={c.accent} />
-            </Pressable>
-            <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
-              <Ionicons name="trash-outline" size={18} color={c.danger} />
-            </Pressable>
-          </View>
+          {/* A child can VIEW zones but not edit/delete them. */}
+          {!isChild && (
+            <View style={styles.zoneActions}>
+              <Pressable onPress={() => onEdit(zone)} style={styles.editBtn} hitSlop={6}>
+                <Ionicons name="create-outline" size={18} color={c.accent} />
+              </Pressable>
+              <Pressable onPress={() => onDelete(zone)} style={styles.deleteBtn} hitSlop={6}>
+                <Ionicons name="trash-outline" size={18} color={c.danger} />
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {located.length > 0 && (
@@ -149,6 +153,8 @@ export default function SafeZonesScreen() {
   const c = useTheme()
   const styles = useMemo(() => makeStyles(c), [c])
   const insets = useSafeAreaInsets()
+  // Only a parent can create/edit/delete safe zones; a child can only VIEW them.
+  const isChild = useAuthStore(s => s.user?.account_type) === 'child'
   const [circles, setCircles] = useState([])
   const [activeCircle, setActiveCircle] = useState(null)
   const [safeZones, setSafeZones] = useState([])
@@ -435,12 +441,14 @@ export default function SafeZonesScreen() {
           </View>
         )}
 
-        {/* FAB on map */}
-        <Pressable style={styles.fab} onPress={openCreateModal}>
-          <LinearGradient colors={c.gradients.buttonHero} style={styles.fabGrad}>
-            <Ionicons name="add" size={26} color="#fff" />
-          </LinearGradient>
-        </Pressable>
+        {/* FAB on map — parent only (children can only view zones) */}
+        {!isChild && (
+          <Pressable style={styles.fab} onPress={openCreateModal}>
+            <LinearGradient colors={c.gradients.buttonHero} style={styles.fabGrad}>
+              <Ionicons name="add" size={26} color="#fff" />
+            </LinearGradient>
+          </Pressable>
+        )}
       </View>
 
       {/* Zone List */}
@@ -458,7 +466,7 @@ export default function SafeZonesScreen() {
           ]}
           showsVerticalScrollIndicator={false}>
           {safeZones.length === 0 ? (
-            <EmptyZones onAddPress={openCreateModal} />
+            <EmptyZones onAddPress={openCreateModal} isChild={isChild} />
           ) : (
             (() => {
               let i = 0
@@ -482,6 +490,7 @@ export default function SafeZonesScreen() {
                       onFocus={focusZoneOnMap}
                       onEdit={openEditModal}
                       memberStats={statsForZone(zone)}
+                      isChild={isChild}
                     />
                   ))}
                 </View>
@@ -688,7 +697,7 @@ export default function SafeZonesScreen() {
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
-function EmptyZones({ onAddPress }) {
+function EmptyZones({ onAddPress, isChild }) {
   const c = useTheme()
   const styles = useMemo(() => makeStyles(c), [c])
   const floatAnim = useRef(new Animated.Value(0)).current
@@ -715,14 +724,18 @@ function EmptyZones({ onAddPress }) {
       </Animated.View>
       <Text style={styles.emptyTitle}>No safe zones yet</Text>
       <Text style={styles.emptyText}>
-        Add your first zone to get alerts{'\n'}when family members arrive or leave.
+        {isChild
+          ? 'Safe zones set up by your family\nwill appear here.'
+          : `Add your first zone to get alerts\nwhen family members arrive or leave.`}
       </Text>
-      <Pressable onPress={onAddPress} style={styles.emptyAddBtn}>
-        <LinearGradient colors={c.gradients.buttonHero} style={styles.emptyAddBtnGrad}>
-          <Ionicons name="add" size={18} color="#fff" />
-          <Text style={styles.emptyAddBtnText}>Add First Zone</Text>
-        </LinearGradient>
-      </Pressable>
+      {!isChild && (
+        <Pressable onPress={onAddPress} style={styles.emptyAddBtn}>
+          <LinearGradient colors={c.gradients.buttonHero} style={styles.emptyAddBtnGrad}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.emptyAddBtnText}>Add First Zone</Text>
+          </LinearGradient>
+        </Pressable>
+      )}
     </View>
   )
 }

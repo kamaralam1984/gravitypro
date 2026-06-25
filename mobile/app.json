@@ -28,7 +28,7 @@
         "backgroundColor": "#050F08"
       },
       "package": "com.trackalways.gravity",
-      "versionCode": 7,
+      "versionCode": 8,
       "minSdkVersion": 24,
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
