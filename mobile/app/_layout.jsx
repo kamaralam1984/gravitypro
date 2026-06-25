@@ -110,6 +110,9 @@ export default function RootLayout() {
         reportBatteryLevel()
         sendHeartbeat()
         checkAndApplyOTA()   // pick up the latest JS on every foreground — no logout/login needed
+        // Re-register the push token on foreground so remote-refresh works as soon
+        // as the child opens the app once (and grants notification permission).
+        registerForPushNotifications().catch(() => {})
       }
       appState.current = nextState
     })
