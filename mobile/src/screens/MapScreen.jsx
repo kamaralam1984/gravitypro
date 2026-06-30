@@ -186,9 +186,9 @@ export default function MapScreen() {
       es.addEventListener('geofence_event', (e) => {
         try {
           const data = JSON.parse(e.data)
-          const { name, eventType, zoneName } = data
-          const verb = eventType === 'enter' ? 'entered' : 'left'
-          showToast(`${name || 'Someone'} ${verb} ${zoneName || 'a zone'}`, Colors.info)
+          const displayName = data.userName || data.name || 'Someone'
+          const verb = data.eventType === 'entry' ? 'entered' : 'left'
+          showToast(`${displayName} ${verb} ${data.zoneName || 'a zone'}`, Colors.info)
         } catch (_) {}
       })
 

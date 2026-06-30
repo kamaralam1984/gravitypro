@@ -47,17 +47,50 @@ if (Platform.OS !== 'web') {
         try {
           const token = await storage.getItem('auth_token')
           if (token) {
+            let battery_level = null
+            let is_charging = false
+            try {
+              const Battery = require('expo-battery')
+              const lvl = await Battery.getBatteryLevelAsync()
+              if (lvl != null && lvl >= 0) battery_level = Math.round(lvl * 100)
+              const state = await Battery.getBatteryStateAsync()
+              is_charging = state === Battery.BatteryState.CHARGING || state === Battery.BatteryState.FULL
+            } catch {}
             await fetchWithTimeout(`${API_BASE}/api/v1/users/location`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + token,
               },
-              body: JSON.stringify({ latitude, longitude, accuracy, battery_level: null }),
+              body: JSON.stringify({ latitude, longitude, accuracy, battery_level, is_charging }),
             })
           }
         } catch (e) {
           // Ignore — will retry on next update
+        }
+
+        // Speed alert: notify parents if child is driving fast (>60 km/h)
+        if (speed != null && speed > 16.7) { // 16.7 m/s ≈ 60 km/h
+          const speed_kmh = speed * 3.6
+          try {
+            const token = await storage.getItem('auth_token')
+            // Only alert once per 5 minutes to avoid notification spam
+            const lastAlertKey = 'last_speed_alert_ts'
+            const lastAlert = await storage.getItem(lastAlertKey)
+            const now = Date.now()
+            if (!lastAlert || now - parseInt(lastAlert) > 5 * 60 * 1000) {
+              if (token) {
+                await fetchWithTimeout(`${API_BASE}/api/v1/users/speed-alert`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                  body: JSON.stringify({ speed_kmh, latitude, longitude }),
+                })
+                await storage.setItem(lastAlertKey, String(now))
+              }
+            }
+          } catch {
+            // Best-effort — ignore failures
+          }
         }
 
         if (online) {
@@ -92,10 +125,9 @@ export const startBackgroundTracking = async () => {
   const isRegistered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false)
   if (!isRegistered) {
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      useSignificantChanges: true,
       accuracy: Location.Accuracy.Balanced,
+      timeInterval: 5 * 60 * 1000,
       distanceInterval: 50,
-      deferredUpdatesInterval: 60000,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'Gravity is active',
@@ -145,11 +177,16 @@ export const reportBatteryLevel = async () => {
     let Battery
     try { Battery = require('expo-battery') } catch { return }
     if (!Battery?.getBatteryLevelAsync) return
-    const level = await Battery.getBatteryLevelAsync() // 0..1, -1 if unknown
+    const level = await Battery.getBatteryLevelAsync()
     if (level == null || level < 0) return
     const battery_level = Math.round(level * 100)
+    let is_charging = false
+    try {
+      const state = await Battery.getBatteryStateAsync()
+      is_charging = state === Battery.BatteryState.CHARGING || state === Battery.BatteryState.FULL
+    } catch {}
     const { userAPI } = require('./api')
-    await userAPI.updateBattery({ battery_level })
+    await userAPI.updateBattery({ battery_level, is_charging })
   } catch (e) {
     // best-effort; ignore failures
   }

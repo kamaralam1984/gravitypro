@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Animated,
   Switch, Image, Alert, Platform, TextInput, ActivityIndicator,
-  Modal, FlatList,
+  Modal, FlatList, Share,
 } from 'react-native'
+import * as FileSystem from 'expo-file-system'
 import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -13,8 +14,10 @@ import * as ImagePicker from 'expo-image-picker'
 import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../store/authStore'
 import { mediaAPI, userAPI } from '../services/api'
-import { stopBackgroundTracking } from '../services/location'
+import { stopBackgroundTracking, startBackgroundTracking } from '../services/location'
 import { promptAndUpdate } from '../services/appUpdates'
+import { registerForPushNotifications } from '../services/notifications'
+import Constants from 'expo-constants'
 import { GradientCard } from '../components/ui/GradientCard'
 import { Colors, Gradients } from '../theme/colors'
 
@@ -54,6 +57,47 @@ export default function ProfileScreen() {
       setHistoryError('Could not load location history. Please try again.')
     } finally {
       setHistoryLoading(false)
+    }
+  }
+
+  const handleExportHistory = async () => {
+    if (!historyPoints.length) {
+      Alert.alert('Nothing to export', 'Load your location history first.')
+      return
+    }
+    try {
+      const header = 'Date,Time,Latitude,Longitude,Accuracy(m)\n'
+      const rows = historyPoints.map(p => {
+        const ts = p.recorded_at || p.created_at || p.timestamp
+        const d = ts ? new Date(ts) : null
+        const lat = p.latitude ?? p.lat ?? ''
+        const lng = p.longitude ?? p.lng ?? ''
+        const acc = p.accuracy ?? p.accuracy_meters ?? ''
+        return `${d ? d.toLocaleDateString() : ''},${d ? d.toLocaleTimeString() : ''},${lat},${lng},${acc}`
+      }).join('\n')
+      const csv = header + rows
+
+      if (Platform.OS === 'web') {
+        // Web: trigger browser download via a data URI
+        const dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv)
+        const link = document.createElement('a')
+        link.href = dataUri
+        link.download = 'gravity_location_history.csv'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        return
+      }
+
+      // Native: write to cache then share via the system share sheet
+      const fileUri = FileSystem.cacheDirectory + 'gravity_location_history.csv'
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 })
+      await Share.share(
+        { url: fileUri, title: 'Location History' },
+        { dialogTitle: 'Export Location History' }
+      )
+    } catch (e) {
+      Alert.alert('Export failed', 'Could not export location history.')
     }
   }
 
@@ -306,7 +350,11 @@ export default function ProfileScreen() {
               value={trackingEnabled}
               onToggle={async (v) => {
                 setTrackingEnabled(v)
-                if (!v) await stopBackgroundTracking()
+                if (v) {
+                  startBackgroundTracking().catch(() => {})
+                } else {
+                  await stopBackgroundTracking()
+                }
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
               }}
               toggle
@@ -315,8 +363,11 @@ export default function ProfileScreen() {
               icon="notifications"
               label="Push Notifications"
               value={notificationsEnabled}
-              onToggle={(v) => {
+              onToggle={async (v) => {
                 setNotificationsEnabled(v)
+                if (v) {
+                  registerForPushNotifications().catch(() => {})
+                }
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
               }}
               toggle
@@ -355,7 +406,7 @@ export default function ProfileScreen() {
             <Text style={styles.deleteText}>Delete Account</Text>
           </Pressable>
 
-          <Text style={styles.version}>Gravity v1.0.0 by Trackalways</Text>
+          <Text style={styles.version}>Gravity v{Constants.expoConfig?.version || '1.0.3'} by Trackalways</Text>
         </Animated.View>
       </ScrollView>
 
@@ -374,6 +425,9 @@ export default function ProfileScreen() {
                 <Text style={styles.historyTitle}>Location History</Text>
                 <Text style={styles.historySubtitle}>Your recent recorded positions</Text>
               </View>
+              <Pressable onPress={handleExportHistory} style={styles.historyExportBtn} hitSlop={8}>
+                <Ionicons name="download-outline" size={20} color={Colors.accent} />
+              </Pressable>
               <Pressable onPress={() => setHistoryVisible(false)} style={styles.historyCloseBtn} hitSlop={8}>
                 <Ionicons name="close" size={20} color={Colors.textMuted} />
               </Pressable>
@@ -529,6 +583,7 @@ const styles = StyleSheet.create({
   historyTitleBlock: { flex: 1 },
   historyTitle: { fontSize: 19, fontWeight: '800', color: Colors.textPrimary },
   historySubtitle: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  historyExportBtn: { padding: 4, marginRight: 8 },
   historyCloseBtn: { padding: 6, backgroundColor: Colors.bgMid, borderRadius: 10 },
   historyCenter: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, gap: 12 },
   historyMutedText: { color: Colors.textMuted, fontSize: 14, textAlign: 'center' },

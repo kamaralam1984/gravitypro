@@ -68,7 +68,7 @@ router.get('/:circleId/members', authenticate, async (req, res) => {
     `SELECT u.id, u.name, u.phone, u.avatar_url, u.account_type, cm.role, cm.joined_at,
       ull.updated_at as location_updated_at,
       ST_X(ull.geom) as longitude, ST_Y(ull.geom) as latitude,
-      ull.battery_level
+      ull.battery_level, ull.is_charging
      FROM circle_members cm
      JOIN users u ON u.id = cm.user_id
      LEFT JOIN user_latest_locations ull ON ull.user_id = u.id
@@ -115,6 +115,49 @@ router.delete('/:circleId/members/:userId', authenticate, async (req, res) => {
   if (target.rows[0].role === 'admin') return res.status(400).json({ error: 'Cannot remove another admin' })
   await query('DELETE FROM circle_members WHERE circle_id=$1 AND user_id=$2', [circleId, userId])
   res.json({ success: true, message: 'Member removed' })
+})
+
+// POST /api/v1/circles/:circleId/members/:userId/ping — ask member device to send location
+router.post('/:circleId/members/:userId/ping', authenticate, async (req, res) => {
+  const { circleId, userId } = req.params
+  const mem = await query('SELECT role FROM circle_members WHERE circle_id=$1 AND user_id=$2', [circleId, req.user.id])
+  if (!mem.rows.length) return res.status(403).json({ error: 'Not a member of this circle' })
+
+  const targetRes = await query(
+    `SELECT u.id, u.name, u.push_token, u.account_type,
+      ull.updated_at as location_updated_at,
+      ST_X(ull.geom) as longitude, ST_Y(ull.geom) as latitude,
+      ull.battery_level
+     FROM users u
+     JOIN circle_members cm ON cm.user_id = u.id AND cm.circle_id = $1
+     LEFT JOIN user_latest_locations ull ON ull.user_id = u.id
+     WHERE u.id = $2`,
+    [circleId, userId]
+  )
+  if (!targetRes.rows.length) return res.status(404).json({ error: 'Member not found in this circle' })
+  const target = targetRes.rows[0]
+
+  if (!target.push_token) {
+    return res.json({ success: false, reason: 'no_push_token', member: target })
+  }
+
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: target.push_token,
+        title: 'Location request',
+        body: 'A family member wants to see your location',
+        data: { type: 'location_request' },
+        priority: 'high',
+      }),
+    })
+  } catch (e) {
+    // Push delivery failure is non-fatal — still return member data
+  }
+
+  res.json({ success: true, member: target })
 })
 
 // DELETE /api/v1/circles/:circleId — delete circle (admin only)

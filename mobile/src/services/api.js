@@ -65,6 +65,7 @@ export const circleAPI = {
   remove: (circleId) => api.delete(`/circles/${circleId}`),
   // Admin-only: remove a member from the circle (backend: DELETE /circles/:id/members/:userId).
   removeMember: (circleId, userId) => api.delete(`/circles/${circleId}/members/${userId}`),
+  pingMember: (circleId, userId) => api.post(`/circles/${circleId}/members/${userId}/ping`),
 }
 
 // ── SOS ───────────────────────────────────────────────────────────────────────
@@ -119,6 +120,12 @@ export const parentalAPI = {
   setBlockedApps: (childId, apps) => api.put(`/parental/blocked-apps/${childId}`, { apps }),
   getMyBlockedApps: () => api.get('/parental/blocked-apps'),
   reportAppUsage: (date, apps) => api.post('/parental/app-usage', { date, apps }),
+}
+
+// ── Chat / Messaging ──────────────────────────────────────────────────────────
+export const chatAPI = {
+  getMessages: (circleId) => api.get(`/chat/circle/${circleId}`),
+  sendMessage: (circleId, text) => api.post(`/chat/circle/${circleId}`, { text }),
 }
 
 export default api

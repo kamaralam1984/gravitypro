@@ -11,6 +11,7 @@ import AlertsScreen from '../screens/AlertsScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import WebPanelScreen from '../screens/WebPanelScreen'
 import { Colors } from '../theme/colors'
+import { useAuthStore } from '../store/authStore'
 
 const Tab = createBottomTabNavigator()
 
@@ -39,6 +40,8 @@ const TAB_ICONS = {
 
 export default function TabNavigator({ unresolvedSosCount = 0 }) {
   const insets = useSafeAreaInsets()
+  const user = useAuthStore(s => s.user)
+  const isParent = user?.account_type === 'parent' || user?.role === 'parent'
 
   return (
     <Tab.Navigator
@@ -87,11 +90,13 @@ export default function TabNavigator({ unresolvedSosCount = 0 }) {
         component={MapScreen}
         options={{ tabBarLabel: 'Map' }}
       />
-      <Tab.Screen
-        name="Circles"
-        component={CirclesScreen}
-        options={{ tabBarLabel: 'Circles' }}
-      />
+      {isParent && (
+        <Tab.Screen
+          name="Circles"
+          component={CirclesScreen}
+          options={{ tabBarLabel: 'Circles' }}
+        />
+      )}
       <Tab.Screen
         name="Alerts"
         component={AlertsScreen}
@@ -106,11 +111,13 @@ export default function TabNavigator({ unresolvedSosCount = 0 }) {
           },
         }}
       />
-      <Tab.Screen
-        name="Panel"
-        component={WebPanelScreen}
-        options={{ tabBarLabel: 'Dashboard' }}
-      />
+      {isParent && (
+        <Tab.Screen
+          name="Panel"
+          component={WebPanelScreen}
+          options={{ tabBarLabel: 'Dashboard' }}
+        />
+      )}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}

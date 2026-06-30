@@ -19,10 +19,12 @@ const locationSchema = z.object({
   longitude: z.number(),
   accuracy: z.number().optional(),
   battery_level: z.number().min(0).max(100).optional(),
+  is_charging: z.boolean().optional(),
 })
 
 const batterySchema = z.object({
   battery_level: z.number().min(0).max(100),
+  is_charging: z.boolean().optional(),
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -32,29 +34,28 @@ const batterySchema = z.object({
  * Mirrors locations.js saveLocation but also accepts battery_level and uses
  * latitude/longitude field names (as sent by ChildPanel).
  */
-const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery_level }) => {
+const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery_level, is_charging }) => {
   if (latitude == null || longitude == null || isNaN(latitude) || isNaN(longitude)) return
   const locationWKT = `POINT(${parseFloat(longitude)} ${parseFloat(latitude)})`
   const recordedAt = new Date()
 
-  // Insert into device_locations (battery_level column exists per schema)
   await query(
-    `INSERT INTO device_locations (user_id, geom, accuracy, battery_level, recorded_at)
-     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5)`,
-    [userId, locationWKT, accuracy ?? null, battery_level ?? null, recordedAt]
+    `INSERT INTO device_locations (user_id, geom, accuracy, battery_level, is_charging, recorded_at)
+     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6)`,
+    [userId, locationWKT, accuracy ?? null, battery_level ?? null, is_charging ?? false, recordedAt]
   )
 
-  // Upsert into user_latest_locations — only update if newer
   await query(
-    `INSERT INTO user_latest_locations (user_id, geom, accuracy, battery_level, updated_at)
-     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5)
+    `INSERT INTO user_latest_locations (user_id, geom, accuracy, battery_level, is_charging, updated_at)
+     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6)
      ON CONFLICT (user_id) DO UPDATE
-       SET geom         = EXCLUDED.geom,
-           accuracy     = EXCLUDED.accuracy,
+       SET geom          = EXCLUDED.geom,
+           accuracy      = EXCLUDED.accuracy,
            battery_level = EXCLUDED.battery_level,
-           updated_at   = EXCLUDED.updated_at
+           is_charging   = EXCLUDED.is_charging,
+           updated_at    = EXCLUDED.updated_at
        WHERE user_latest_locations.updated_at < EXCLUDED.updated_at`,
-    [userId, locationWKT, accuracy ?? null, battery_level ?? null, recordedAt]
+    [userId, locationWKT, accuracy ?? null, battery_level ?? null, is_charging ?? false, recordedAt]
   )
 
   // Send SSE update to every circle this user belongs to
@@ -70,6 +71,7 @@ const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery
         longitude,
         accuracy,
         battery_level,
+        is_charging,
         timestamp: recordedAt.toISOString(),
       })
     }
@@ -143,9 +145,9 @@ router.get('/search', authenticate, async (req, res) => {
  * Called by ChildPanel when the app is in the foreground.
  */
 router.post('/location', authenticate, validate(locationSchema), async (req, res) => {
-  const { latitude, longitude, accuracy, battery_level } = req.body
+  const { latitude, longitude, accuracy, battery_level, is_charging } = req.body
   try {
-    await saveUserLocation(req.user.id, { latitude, longitude, accuracy, battery_level })
+    await saveUserLocation(req.user.id, { latitude, longitude, accuracy, battery_level, is_charging })
     res.json({ success: true })
   } catch (err) {
     console.error('[POST /users/location]', err.message)
@@ -159,13 +161,13 @@ router.post('/location', authenticate, validate(locationSchema), async (req, res
  * Lightweight update — only refreshes battery level without a new GPS point.
  */
 router.patch('/location', authenticate, validate(batterySchema), async (req, res) => {
-  const { battery_level } = req.body
+  const { battery_level, is_charging } = req.body
   try {
     await query(
       `UPDATE user_latest_locations
-         SET battery_level = $1, updated_at = NOW()
-       WHERE user_id = $2`,
-      [battery_level, req.user.id]
+         SET battery_level = $1, is_charging = COALESCE($2, is_charging), updated_at = NOW()
+       WHERE user_id = $3`,
+      [battery_level, is_charging ?? null, req.user.id]
     )
     res.json({ success: true })
   } catch (err) {
@@ -292,6 +294,51 @@ router.delete('/me', authenticate, async (req, res) => {
     await query('DELETE FROM users WHERE id = $1', [req.user.id])
     res.json({ success: true, message: 'Account deleted. All data removed.' })
   } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+/**
+ * POST /users/speed-alert
+ * Body: { speed_kmh, latitude, longitude }
+ * Called by the mobile background task when the device is moving faster than
+ * 60 km/h.  Sends a high-priority push notification to all parents in every
+ * circle this user belongs to.
+ */
+router.post('/speed-alert', authenticate, async (req, res) => {
+  const { speed_kmh, latitude, longitude } = req.body
+  const userId = req.user.id
+  try {
+    // Get all circles this user belongs to
+    const circles = await query('SELECT circle_id FROM circle_members WHERE user_id = $1', [userId])
+    if (!circles.rows.length) return res.json({ ok: true })
+
+    // Collect push tokens from all parents in those circles (excluding the sender)
+    const tokens = await query(
+      `SELECT DISTINCT u.push_token FROM circle_members cm
+       JOIN users u ON u.id = cm.user_id
+       WHERE cm.circle_id = ANY($1) AND u.push_token IS NOT NULL AND u.id != $2 AND u.role = 'parent'`,
+      [circles.rows.map(r => r.circle_id), userId]
+    )
+
+    if (tokens.rows.length) {
+      const messages = tokens.rows.map(t => ({
+        to: t.push_token,
+        title: '🚗 Speed Alert',
+        body: `${req.user.name} is driving at ${Math.round(speed_kmh)} km/h`,
+        data: { type: 'speed_alert', latitude, longitude, speed_kmh },
+        sound: 'default',
+        priority: 'high',
+      }))
+      fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messages),
+      }).catch(() => {})
+    }
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('[POST /users/speed-alert]', e.message)
+    res.status(500).json({ error: e.message })
+  }
 })
 
 module.exports = router

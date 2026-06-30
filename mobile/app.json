@@ -9,7 +9,7 @@
     "backgroundColor": "#050F08",
     "runtimeVersion": { "policy": "appVersion" },
     "updates": {
-      "url": "https://u.expo.dev/aacddc46-fdbb-45a7-9f01-2dd951ffcaa5",
+      "url": "https://u.expo.dev/7b9ad9d0-b6d8-43f1-b80c-288ad4597c3e",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -96,9 +96,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "aacddc46-fdbb-45a7-9f01-2dd951ffcaa5"
+        "projectId": "7b9ad9d0-b6d8-43f1-b80c-288ad4597c3e"
       }
     },
-    "owner": "gravitynew"
+    "owner": "gravitypro"
   }
 }

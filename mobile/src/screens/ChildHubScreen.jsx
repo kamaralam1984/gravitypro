@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { Colors, Gradients } from '../theme/colors'
+import { useAuthStore } from '../store/authStore'
 
 const ACTIONS = [
   { key: 'ChildTimeline',   icon: 'map',            title: 'Location Timeline', desc: 'Where they went, stays & trips by day' },
@@ -19,6 +20,14 @@ export default function ChildHubScreen() {
   const route = useRoute()
   const member = route.params?.member || {}
   const name = member.name || 'Child'
+  const loggedInUser = useAuthStore(s => s.user)
+  const isParent = loggedInUser?.account_type === 'parent' || loggedInUser?.role === 'parent'
+
+  useEffect(() => {
+    if (!isParent) navigation.goBack()
+  }, [isParent])
+
+  if (!isParent) return null
 
   return (
     <View style={styles.container}>

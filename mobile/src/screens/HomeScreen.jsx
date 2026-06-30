@@ -81,7 +81,7 @@ function StatCard({ icon, label, value, loading }) {
 function MemberChip({ member, memberLocations }) {
   const loc = memberLocations[member.id]
   const isOnline = loc
-    ? (!loc.timestamp || Date.now() - new Date(loc.timestamp).getTime() < 5 * 60 * 1000)
+    ? (!loc.timestamp || Date.now() - new Date(loc.timestamp).getTime() < 10 * 60 * 1000)
     : false
 
   return (
@@ -90,8 +90,8 @@ function MemberChip({ member, memberLocations }) {
       <Text style={styles.memberChipName} numberOfLines={1}>
         {member.name?.split(' ')[0] || '?'}
       </Text>
-      {loc?.battery != null && (
-        <BatteryIndicator level={loc.battery} showText size="sm" />
+      {isOnline && loc?.battery != null && (
+        <BatteryIndicator level={loc.battery} charging={loc.charging === true} showText size="sm" />
       )}
     </View>
   )
@@ -147,9 +147,33 @@ export default function HomeScreen() {
       const res = await circleAPI.getAll()
       const circles = res.circles || []
       if (!circles.length) return
-      const circle = circles[0]
-      setActiveCircle(circle)
-      await Promise.all([loadMembers(circle.id), loadZones(circle.id)])
+      // Use the circle with most members as the primary circle for map/zones
+      const primary = circles.reduce((best, c) => (c.member_count > (best.member_count || 0) ? c : best), circles[0])
+      setActiveCircle(primary)
+      // Load zones from primary circle, but aggregate members from ALL circles
+      const [, ...memberResults] = await Promise.all([
+        loadZones(primary.id),
+        ...circles.map(c => circleAPI.getMembers(c.id).then(r => r.members || []).catch(() => [])),
+      ])
+      // Deduplicate members by id, keeping freshest location
+      const seen = new Map()
+      for (const list of memberResults) {
+        for (const m of list) {
+          const existing = seen.get(m.id)
+          if (!existing || (m.location_updated_at && (!existing.location_updated_at || m.location_updated_at > existing.location_updated_at))) {
+            seen.set(m.id, m)
+          }
+        }
+      }
+      const mems = Array.from(seen.values())
+      setMembers(mems)
+      const locs = {}
+      for (const m of mems) {
+        if (m.latitude && m.longitude) {
+          locs[m.id] = { latitude: m.latitude, longitude: m.longitude, battery: m.battery_level, charging: m.is_charging === true, timestamp: m.location_updated_at || m.updated_at }
+        }
+      }
+      setMemberLocations(locs)
     } catch (e) {
       console.error('Load circle error', e)
     }
@@ -176,6 +200,7 @@ export default function HomeScreen() {
             latitude: m.latitude,
             longitude: m.longitude,
             battery: m.battery_level,
+            charging: m.is_charging === true,
             timestamp: m.location_updated_at || m.updated_at,
           }
         }

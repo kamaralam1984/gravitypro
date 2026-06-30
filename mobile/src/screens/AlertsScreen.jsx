@@ -332,10 +332,11 @@ export default function AlertsScreen() {
     es.addEventListener('sos_alert', (e) => {
       try {
         const data = JSON.parse(e.data)
+        const displayName = data.userName || data.name || 'Family member'
         const newItem = {
-          id: data.sosId || String(Date.now()),
+          id: String(Date.now()),
           user_id: data.userId,
-          user_name: data.name,
+          user_name: displayName,
           message: data.message,
           latitude: data.latitude,
           longitude: data.longitude,
@@ -347,7 +348,7 @@ export default function AlertsScreen() {
         setBanner({
           key: bannerKey.current,
           type: 'sos',
-          title: `SOS from ${data.name}`,
+          title: `SOS from ${displayName}`,
           body: data.message || 'Emergency alert triggered',
         })
       } catch (err) {
@@ -358,12 +359,13 @@ export default function AlertsScreen() {
     es.addEventListener('geofence_event', (e) => {
       try {
         const data = JSON.parse(e.data)
+        const displayName = data.userName || data.name || 'Family member'
         const newItem = {
           id: String(Date.now()),
           user_id: data.userId,
-          user_name: data.name,
+          user_name: displayName,
           event_type: data.eventType,
-          safe_zone_id: data.zoneId,
+          safe_zone_id: data.zoneId || null,
           zone_name: data.zoneName,
           created_at: new Date().toISOString(),
         }
@@ -373,7 +375,7 @@ export default function AlertsScreen() {
           key: bannerKey.current,
           type: 'geofence',
           eventType: data.eventType,
-          title: data.eventType === 'exit' ? `${data.name} left ${data.zoneName}` : `${data.name} arrived at ${data.zoneName}`,
+          title: data.eventType === 'exit' ? `${displayName} left ${data.zoneName}` : `${displayName} arrived at ${data.zoneName}`,
           body: data.eventType === 'exit' ? 'Geofence exit event' : 'Geofence entry event',
         })
       } catch (err) {

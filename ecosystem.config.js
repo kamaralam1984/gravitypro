@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'gravity-api',
       script: 'src/app.js',
-      cwd: '/media/server/linux-part/Gravity/backend',
+      cwd: '/media/server/linux-part/Gravitypro/gravitypro/backend',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -18,7 +18,7 @@ module.exports = {
     },
     {
       name: 'gravity-traccar',
-      script: '/tmp/start-traccar.sh',
+      script: '/home/server/traccar/start-traccar.sh',
       cwd: '/home/server/traccar',
       instances: 1,
       autorestart: true,
@@ -32,7 +32,7 @@ module.exports = {
     {
       name: 'gravity-web',
       script: 'server.cjs',
-      cwd: '/media/server/linux-part/Gravity/landing-react',
+      cwd: '/media/server/linux-part/Gravitypro/gravitypro/landing-react',
       instances: 1,
       autorestart: true,
       watch: false,

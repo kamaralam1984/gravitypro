@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics'
 import * as Clipboard from 'expo-clipboard'
 import { circleAPI } from '../services/api'
 import { useCircleStore } from '../store/circleStore'
+import { useAuthStore } from '../store/authStore'
 import { Colors, Gradients } from '../theme/colors'
 import { GradientCard } from '../components/ui/GradientCard'
 import { PremiumButton } from '../components/ui/PremiumButton'
@@ -53,17 +54,35 @@ function relativeTime(ts) {
   return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
-function MemberRow({ member, isAdmin, onRemove }) {
+function MemberRow({ member: initialMember, isAdmin, onRemove, onPing }) {
   const navigation = useNavigation()
-  // Badge reflects the USER's account type (Parent/Child), not the circle role.
+  const loggedInUser = useAuthStore(s => s.user)
+  const viewerIsParent = loggedInUser?.account_type === 'parent' || loggedInUser?.role === 'parent'
+  const [member, setMember] = useState(initialMember)
+  const [pinging, setPinging] = useState(false)
   const isParent = (member.account_type || (member.role === 'admin' ? 'parent' : 'child')) === 'parent'
   const roleLabel = isParent ? 'Parent' : 'Child'
   const roleColor = isParent ? Colors.accent : Colors.accentSoft
   const lastSeen = member.location_updated_at
-  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000) : false
+  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 10 * 60 * 1000) : false
   const battery = member.battery_level
-  // Tapping a child opens the parental-controls hub (timeline / screen-time / blocking).
-  const openHub = isParent ? undefined : () => navigation.navigate('ChildHub', { member })
+  const isCharging = member.is_charging === true
+  // Only parents can open the parental controls hub for child members
+  const openHub = (viewerIsParent && !isParent) ? () => navigation.navigate('ChildHub', { member }) : undefined
+
+  const handlePing = async (e) => {
+    e.stopPropagation?.()
+    if (pinging) return
+    setPinging(true)
+    try {
+      const res = await onPing(member.id)
+      if (res?.member) setMember(prev => ({ ...prev, ...res.member }))
+    } finally {
+      setPinging(false)
+    }
+  }
+
+  useEffect(() => { setMember(initialMember) }, [initialMember.id])
 
   return (
     <Pressable onPress={openHub} style={({ pressed }) => [styles.memberRow, pressed && openHub && { opacity: 0.7 }]}>
@@ -74,7 +93,7 @@ function MemberRow({ member, isAdmin, onRemove }) {
           <View style={[styles.statusDot, { backgroundColor: isOnline ? Colors.accent : Colors.textMuted }]} />
           <Text style={styles.memberMeta} numberOfLines={1}>
             {isOnline ? 'Online' : (lastSeen ? `Last seen ${relativeTime(lastSeen)}` : 'No location yet')}
-            {battery != null ? `  ·  🔋 ${battery}%` : ''}
+            {isOnline && battery != null ? `  ·  ${isCharging ? '⚡' : '🔋'} ${battery}%` : ''}
           </Text>
         </View>
       </View>
@@ -82,6 +101,13 @@ function MemberRow({ member, isAdmin, onRemove }) {
         <View style={[styles.roleBadge, { borderColor: roleColor }]}>
           <Text style={[styles.roleText, { color: roleColor }]}>{roleLabel}</Text>
         </View>
+        {!isParent && (
+          <Pressable onPress={handlePing} style={styles.pingBtn} hitSlop={8} disabled={pinging}>
+            {pinging
+              ? <ActivityIndicator size={14} color={Colors.accentSoft} />
+              : <Ionicons name="refresh-outline" size={16} color={Colors.accentSoft} />}
+          </Pressable>
+        )}
         {isAdmin && !isParent && (
           <Pressable onPress={() => onRemove(member)} style={styles.removeBtn} hitSlop={8}>
             <Ionicons name="person-remove-outline" size={16} color={Colors.danger} />
@@ -96,6 +122,9 @@ function MemberRow({ member, isAdmin, onRemove }) {
 // ─── Circle Card ─────────────────────────────────────────────────────────────
 
 function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
+  const navigation = useNavigation()
+  const loggedInUser = useAuthStore(s => s.user)
+  const viewerIsParent = loggedInUser?.account_type === 'parent' || loggedInUser?.role === 'parent'
   const slideAnim = useRef(new Animated.Value(40)).current
   const fadeAnim = useRef(new Animated.Value(0)).current
   const expandAnim = useRef(new Animated.Value(0)).current
@@ -153,6 +182,21 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
       } finally {
         setLoadingMembers(false)
       }
+    }
+  }
+
+  const handlePingMember = async (userId) => {
+    try {
+      const res = await circleAPI.pingMember(circle.id, userId)
+      if (!res.success && res.reason === 'no_push_token') {
+        onToast('Ask them to open the app once to enable location sharing')
+      } else {
+        onToast('Location request sent')
+      }
+      return res
+    } catch (e) {
+      onToast('Could not refresh — try again')
+      return null
     }
   }
 
@@ -295,14 +339,17 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
             ) : members.length === 0 ? (
               <Text style={styles.noMembersText}>No members found</Text>
             ) : (
-              members.map(m => (
-                <MemberRow
-                  key={m.id}
-                  member={m}
-                  isAdmin={isAdminOfCircle}
-                  onRemove={handleRemoveMember}
-                />
-              ))
+              members
+                .filter(m => viewerIsParent || m.id === loggedInUser?.id || (m.account_type || (m.role === 'admin' ? 'parent' : 'child')) === 'parent')
+                .map(m => (
+                  <MemberRow
+                    key={m.id}
+                    member={m}
+                    isAdmin={isAdminOfCircle}
+                    onRemove={handleRemoveMember}
+                    onPing={handlePingMember}
+                  />
+                ))
             )}
           </View>
         )}
@@ -311,6 +358,13 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
         <View style={styles.circleFooter}>
           <Ionicons name="shield-checkmark" size={13} color={Colors.accentSoft} />
           <Text style={styles.circleStatus}>Active · Location sharing on</Text>
+          <Pressable
+            onPress={() => navigation.navigate('Chat', { circleId: circle.id, circleName: circle.name })}
+            style={styles.chatBtn}
+            hitSlop={8}>
+            <Ionicons name="chatbubbles-outline" size={14} color={Colors.accent} />
+            <Text style={styles.chatBtnText}>Chat</Text>
+          </Pressable>
           <Pressable onPress={handleLeave} style={styles.leaveBtn} hitSlop={8}>
             <Ionicons name="exit-outline" size={14} color={Colors.danger} />
             <Text style={styles.leaveBtnText}>Leave circle</Text>
@@ -844,6 +898,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   roleText: { fontSize: 11, fontWeight: '700' },
+  pingBtn: {
+    padding: 6,
+    backgroundColor: 'rgba(76,175,80,0.1)',
+    borderRadius: 8,
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   removeBtn: {
     padding: 6,
     backgroundColor: 'rgba(229,57,53,0.1)',
@@ -861,6 +923,18 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.divider,
   },
   circleStatus: { fontSize: 12, color: Colors.textMuted, flex: 1 },
+  chatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Colors.bgGlass,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.borderStrong,
+  },
+  chatBtnText: { color: Colors.accent, fontSize: 12, fontWeight: '700' },
   leaveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
