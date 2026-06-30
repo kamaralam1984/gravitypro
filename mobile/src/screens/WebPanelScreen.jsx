@@ -3,6 +3,7 @@ import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'rea
 import { WebView } from 'react-native-webview'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { storage } from '../utils/storage'
+import { useAuthStore } from '../store/authStore'
 import { Colors } from '../theme/colors'
 
 const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
@@ -17,6 +18,7 @@ const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesss
  */
 export default function WebPanelScreen({ path }) {
   const insets = useSafeAreaInsets()
+  const storeUser = useAuthStore(s => s.user)
   const webRef = useRef(null)
   const [inject, setInject] = useState(null)
   const [uri, setUri] = useState(null)
@@ -31,11 +33,10 @@ export default function WebPanelScreen({ path }) {
       const userRaw = await storage.getItem('user_data')
       let resolvedPath = path
       if (!resolvedPath) {
-        let isChild = false
-        try {
-          const u = JSON.parse(userRaw || '{}')
-          isChild = u.account_type === 'child' || u.role === 'child'
-        } catch {}
+        // Prefer live store value; fall back to storage for SSO injection
+        const isChild = storeUser
+          ? (storeUser.account_type === 'child' || storeUser.role === 'child')
+          : (() => { try { const u = JSON.parse(userRaw || '{}'); return u.account_type === 'child' || u.role === 'child' } catch { return false } })()
         resolvedPath = isChild ? '/child/panel' : '/parent/panel'
       }
       // Seed the web app's auth so the panel is already logged in (SSO).
@@ -48,7 +49,7 @@ export default function WebPanelScreen({ path }) {
       setUri(BASE + resolvedPath)
     })()
     return () => { alive = false }
-  }, [path, reloadKey])
+  }, [path, reloadKey, storeUser?.account_type, storeUser?.role])
 
   const retry = () => { setError(false); setLoading(true); setReloadKey(k => k + 1) }
 

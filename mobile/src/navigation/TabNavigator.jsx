@@ -41,10 +41,14 @@ const TAB_ICONS = {
 export default function TabNavigator({ unresolvedSosCount = 0 }) {
   const insets = useSafeAreaInsets()
   const user = useAuthStore(s => s.user)
-  const isParent = user?.account_type === 'parent' || user?.role === 'parent'
+  // Explicit child check: child if account_type OR role says child.
+  // Default to child (false isParent) when user not yet loaded — safer than defaulting to parent.
+  const isParent = user != null && (user.account_type === 'parent' || user.role === 'parent')
 
   return (
     <Tab.Navigator
+      // Force full remount when role changes so React Navigation rebuilds tabs from scratch
+      key={isParent ? 'parent-tabs' : 'child-tabs'}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarShowLabel: true,
