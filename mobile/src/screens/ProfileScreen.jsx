@@ -190,6 +190,34 @@ export default function ProfileScreen() {
     ])
   }
 
+  // Join circle (child only)
+  const isChild = user?.role === 'child' || user?.account_type === 'child'
+  const [joinModalVisible, setJoinModalVisible] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
+  const [joining, setJoining] = useState(false)
+  const [joinError, setJoinError] = useState('')
+  const [joinSuccess, setJoinSuccess] = useState('')
+
+  const handleJoinCircle = async () => {
+    const code = joinCode.trim().toUpperCase()
+    if (!code) { setJoinError('Please enter an invite code'); return }
+    setJoining(true)
+    setJoinError('')
+    setJoinSuccess('')
+    try {
+      const { circleAPI } = await import('../services/api')
+      await circleAPI.join(code)
+      setJoinSuccess('Successfully joined the family circle!')
+      setJoinCode('')
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      setTimeout(() => { setJoinModalVisible(false); setJoinSuccess('') }, 1800)
+    } catch (e) {
+      setJoinError(e?.error || e?.message || 'Invalid invite code. Please check and try again.')
+    } finally {
+      setJoining(false)
+    }
+  }
+
   const [deletingAccount, setDeletingAccount] = useState(false)
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -341,6 +369,22 @@ export default function ProfileScreen() {
             </View>
           </GradientCard>
 
+          {/* ── Join Family Circle (child only) ── */}
+          {isChild && (
+            <Pressable onPress={() => { setJoinError(''); setJoinCode(''); setJoinModalVisible(true) }} style={styles.joinCircleBtn}>
+              <LinearGradient colors={['rgba(0,200,83,0.15)', 'rgba(10,92,53,0.1)']} style={styles.joinCircleGrad}>
+                <View style={styles.joinCircleIcon}>
+                  <Ionicons name="people" size={22} color={Colors.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.joinCircleTitle}>Join Family Circle</Text>
+                  <Text style={styles.joinCircleDesc}>Enter invite code from your parent</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
+              </LinearGradient>
+            </Pressable>
+          )}
+
           {/* ── Settings toggles ── */}
           <GradientCard style={styles.section}>
             <Text style={styles.sectionTitle}>Settings</Text>
@@ -407,6 +451,66 @@ export default function ProfileScreen() {
           </Pressable>
 
           <Text style={styles.version}>Gravity v{Constants.expoConfig?.version || '1.0.3'} by Trackalways</Text>
+
+        {/* ── Join Circle Modal (child only) ── */}
+        <Modal visible={joinModalVisible} transparent animationType="slide" onRequestClose={() => setJoinModalVisible(false)}>
+          <BlurView intensity={30} style={StyleSheet.absoluteFill} />
+          <View style={styles.modalOverlay}>
+            <GradientCard style={styles.joinModal}>
+              <View style={styles.joinModalHandle} />
+              <View style={styles.joinModalHeader}>
+                <LinearGradient colors={Gradients.button} style={styles.joinModalIcon}>
+                  <Ionicons name="people" size={22} color={Colors.accent} />
+                </LinearGradient>
+                <View>
+                  <Text style={styles.joinModalTitle}>Join Family Circle</Text>
+                  <Text style={styles.joinModalSub}>Get the code from your parent</Text>
+                </View>
+              </View>
+
+              <View style={styles.joinInputRow}>
+                <Ionicons name="key-outline" size={20} color={Colors.accentSoft} />
+                <TextInput
+                  style={styles.joinInput}
+                  value={joinCode}
+                  onChangeText={t => { setJoinCode(t.toUpperCase()); setJoinError('') }}
+                  placeholder="Enter invite code"
+                  placeholderTextColor={Colors.textMuted}
+                  autoCapitalize="characters"
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleJoinCircle}
+                  maxLength={20}
+                />
+              </View>
+
+              {joinError ? (
+                <View style={styles.joinErrorBox}>
+                  <Ionicons name="alert-circle-outline" size={15} color={Colors.danger} />
+                  <Text style={styles.joinErrorText}>{joinError}</Text>
+                </View>
+              ) : null}
+
+              {joinSuccess ? (
+                <View style={styles.joinSuccessBox}>
+                  <Ionicons name="checkmark-circle" size={15} color={Colors.accent} />
+                  <Text style={styles.joinSuccessText}>{joinSuccess}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.joinActions}>
+                <Pressable style={styles.joinCancelBtn} onPress={() => setJoinModalVisible(false)}>
+                  <Text style={styles.joinCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={styles.joinSubmitBtn} onPress={handleJoinCircle} disabled={joining}>
+                  {joining
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={styles.joinSubmitText}>Join Circle</Text>}
+                </Pressable>
+              </View>
+            </GradientCard>
+          </View>
+        </Modal>
         </Animated.View>
       </ScrollView>
 
@@ -594,4 +698,31 @@ const styles = StyleSheet.create({
   historyRowContent: { flex: 1, gap: 2 },
   historyCoords: { fontSize: 14, color: Colors.textPrimary, fontWeight: '700', fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }) },
   historyMeta: { fontSize: 12, color: Colors.textMuted },
+
+  // Join circle (child)
+  joinCircleBtn: { borderRadius: 18, overflow: 'hidden', marginBottom: 14, borderWidth: 1, borderColor: Colors.borderStrong },
+  joinCircleGrad: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
+  joinCircleIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bgGlass, borderWidth: 1, borderColor: Colors.border },
+  joinCircleTitle: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  joinCircleDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+
+  // Join circle modal
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 16, paddingBottom: 20 },
+  joinModal: { padding: 24, gap: 16, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  joinModalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: 'center', marginBottom: 4 },
+  joinModalHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  joinModalIcon: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  joinModalTitle: { fontSize: 19, fontWeight: '800', color: Colors.textPrimary },
+  joinModalSub: { fontSize: 13, color: Colors.textMuted, marginTop: 1 },
+  joinInputRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.bgMid, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border },
+  joinInput: { flex: 1, color: Colors.textPrimary, fontSize: 16, fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace', default: 'monospace' }), letterSpacing: 2 },
+  joinErrorBox: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: 'rgba(229,57,53,0.1)', borderRadius: 12, padding: 12 },
+  joinErrorText: { color: Colors.danger, fontSize: 13, flex: 1 },
+  joinSuccessBox: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: 'rgba(0,200,83,0.1)', borderRadius: 12, padding: 12 },
+  joinSuccessText: { color: Colors.accent, fontSize: 13, flex: 1 },
+  joinActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  joinCancelBtn: { paddingHorizontal: 16, paddingVertical: 16 },
+  joinCancelText: { color: Colors.textMuted, fontSize: 15, fontWeight: '600' },
+  joinSubmitBtn: { flex: 1, backgroundColor: Colors.accent, borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center' },
+  joinSubmitText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 })

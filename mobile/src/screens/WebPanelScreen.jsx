@@ -31,9 +31,12 @@ export default function WebPanelScreen({ path }) {
       const userRaw = await storage.getItem('user_data')
       let resolvedPath = path
       if (!resolvedPath) {
-        let accountType = 'parent'
-        try { accountType = (JSON.parse(userRaw || '{}').account_type) || 'parent' } catch {}
-        resolvedPath = accountType === 'child' ? '/child/panel' : '/parent/panel'
+        let isChild = false
+        try {
+          const u = JSON.parse(userRaw || '{}')
+          isChild = u.account_type === 'child' || u.role === 'child'
+        } catch {}
+        resolvedPath = isChild ? '/child/panel' : '/parent/panel'
       }
       // Seed the web app's auth so the panel is already logged in (SSO).
       const js = `(function(){try{
