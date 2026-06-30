@@ -35,6 +35,13 @@
       "ios": {
         "buildConfiguration": "Release"
       }
+    },
+    "production-apk": {
+      "channel": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {
