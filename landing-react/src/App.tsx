@@ -9,6 +9,9 @@ import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import Share from './pages/Share'
 import LiveShare from './pages/LiveShare'
+import Timeline from './pages/Timeline'
+import SmartPlaces from './pages/SmartPlaces'
+import SmartPlaceDetail from './pages/SmartPlaceDetail'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -23,6 +26,9 @@ function App() {
         <Route path="/live/:token" element={<LiveShare />} />
         <Route path="/parent" element={<Navigate to="/parent/panel" replace />} />
         <Route path="/parent/panel" element={<ParentPanel />} />
+        <Route path="/parent/timeline" element={<Timeline />} />
+        <Route path="/parent/smart-places" element={<SmartPlaces />} />
+        <Route path="/parent/smart-places/:placeId" element={<SmartPlaceDetail />} />
         <Route path="/child" element={<Navigate to="/child/panel" replace />} />
         <Route path="/child/panel" element={<ChildPanel />} />
         <Route path="/parent-panel" element={<Navigate to="/parent/panel" replace />} />

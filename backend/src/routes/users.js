@@ -6,6 +6,7 @@ const { validate } = require('../middleware/validate')
 const { checkGeofenceStatus } = require('../services/geofence')
 const { sendToCircleMembers } = require('../services/sse')
 const { sendDeviceAlert, sendPushNotifications } = require('../services/alerts')
+const { trackStopForLocation } = require('../services/timelineStops')
 
 // Send a "speeding" alert to the user's circles when their GPS speed crosses the
 // configured threshold, with hysteresis (device_status.speeding_alerted) so it
@@ -51,6 +52,8 @@ const locationSchema = z.object({
   battery_level: z.number().min(0).max(100).optional(),
   speed: z.number().nullable().optional(),   // m/s from GPS; used for speeding alerts
   mode: z.string().optional(),
+  bearing: z.number().nullable().optional(), // heading in degrees; Travel Timeline route direction arrows
+  altitude: z.number().nullable().optional(),
 })
 
 const batterySchema = z.object({
@@ -72,30 +75,40 @@ const settingsSchema = z.object({
  * Mirrors locations.js saveLocation but also accepts battery_level and uses
  * latitude/longitude field names (as sent by ChildPanel).
  */
-const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery_level, speed }, user = null) => {
+const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery_level, speed, bearing, altitude }, user = null) => {
   if (latitude == null || longitude == null || isNaN(latitude) || isNaN(longitude)) return
   const locationWKT = `POINT(${parseFloat(longitude)} ${parseFloat(latitude)})`
   const recordedAt = new Date()
 
-  // Insert into device_locations (battery_level column exists per schema)
+  // Insert into device_locations (battery_level/speed/bearing/altitude columns exist per schema)
   await query(
-    `INSERT INTO device_locations (user_id, geom, accuracy, battery_level, recorded_at)
-     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5)`,
-    [userId, locationWKT, accuracy ?? null, battery_level ?? null, recordedAt]
+    `INSERT INTO device_locations (user_id, geom, accuracy, speed, bearing, altitude, battery_level, recorded_at)
+     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6, $7, $8)`,
+    [userId, locationWKT, accuracy ?? null, speed ?? null, bearing ?? null, altitude ?? null, battery_level ?? null, recordedAt]
   )
 
   // Upsert into user_latest_locations — only update if newer
   await query(
-    `INSERT INTO user_latest_locations (user_id, geom, accuracy, battery_level, updated_at)
-     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5)
+    `INSERT INTO user_latest_locations (user_id, geom, accuracy, speed, bearing, battery_level, updated_at)
+     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6, $7)
      ON CONFLICT (user_id) DO UPDATE
        SET geom         = EXCLUDED.geom,
            accuracy     = EXCLUDED.accuracy,
+           speed        = EXCLUDED.speed,
+           bearing      = EXCLUDED.bearing,
            battery_level = EXCLUDED.battery_level,
            updated_at   = EXCLUDED.updated_at
        WHERE user_latest_locations.updated_at < EXCLUDED.updated_at`,
-    [userId, locationWKT, accuracy ?? null, battery_level ?? null, recordedAt]
+    [userId, locationWKT, accuracy ?? null, speed ?? null, bearing ?? null, battery_level ?? null, recordedAt]
   )
+
+  // Incremental Smart Timeline stop detection (see services/timelineStops.js)
+  // — a single fast indexed query, non-fatal so it never blocks the response.
+  try {
+    await trackStopForLocation(userId, latitude, longitude, recordedAt)
+  } catch (stopErr) {
+    console.error('[users/location] stop-detection error:', stopErr.message)
+  }
 
   // Send SSE update to every circle this user belongs to
   try {
@@ -261,12 +274,12 @@ router.get('/search', authenticate, async (req, res) => {
  * Called by ChildPanel when the app is in the foreground.
  */
 router.post('/location', authenticate, validate(locationSchema), async (req, res) => {
-  const { latitude, longitude, accuracy, battery_level, speed } = req.body
+  const { latitude, longitude, accuracy, battery_level, speed, bearing, altitude } = req.body
   try {
     // Privacy: if the user turned OFF "Share my location", do not store or
     // broadcast their position. Respond OK so the client doesn't error/retry.
     if (req.user.share_location === false) return res.json({ success: true, shared: false })
-    await saveUserLocation(req.user.id, { latitude, longitude, accuracy, battery_level, speed }, req.user)
+    await saveUserLocation(req.user.id, { latitude, longitude, accuracy, battery_level, speed, bearing, altitude }, req.user)
     res.json({ success: true })
   } catch (err) {
     console.error('[POST /users/location]', err.message)

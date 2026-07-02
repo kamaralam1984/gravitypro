@@ -68,15 +68,33 @@ router.get('/:circleId/members', authenticate, async (req, res) => {
     `SELECT u.id, u.name, u.phone, u.avatar_url, u.account_type, cm.role, cm.joined_at,
       ull.updated_at as location_updated_at,
       ST_X(ull.geom) as longitude, ST_Y(ull.geom) as latitude,
-      ull.battery_level
+      ull.battery_level, ull.speed, ull.bearing,
+      zone.name as safe_zone_name,
+      gc.resolved_name as geocoded_name, gc.resolved_type as geocoded_type
      FROM circle_members cm
      JOIN users u ON u.id = cm.user_id
      LEFT JOIN user_latest_locations ull ON ull.user_id = u.id
+     -- Live Map "current place name" (Travel Timeline) — safe zone always wins
+     -- (never overridden by a road/area name); LIMIT 1 via LATERAL guards
+     -- against row fan-out if zones ever overlap. Cache-only geocode lookup
+     -- (no live API call here) keeps this hot polling path free of any
+     -- reverse-geocoding cost — see services/geocoding.js.
+     LEFT JOIN LATERAL (
+       SELECT sz.name FROM safe_zones sz
+       WHERE sz.circle_id = cm.circle_id AND ull.geom IS NOT NULL AND ST_Contains(sz.geom, ull.geom)
+       LIMIT 1
+     ) zone ON true
+     LEFT JOIN geocode_cache gc ON ull.geom IS NOT NULL AND gc.geohash7 = ST_GeoHash(ull.geom, 7)
      WHERE cm.circle_id = $1
      ORDER BY u.name`,
     [req.params.circleId]
   )
-  res.json({ members: result.rows })
+  const members = result.rows.map((r) => ({
+    ...r,
+    place_name: r.safe_zone_name || r.geocoded_name || null,
+    place_type: r.safe_zone_name ? 'safe_zone' : (r.geocoded_type || null),
+  }))
+  res.json({ members })
 })
 
 // DELETE /api/v1/circles/:circleId/members/:userId — remove member (admin only)

@@ -7,6 +7,13 @@
     <title>Gravity — Keep Your Family Safe & Connected</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Marker clustering for the Travel Timeline's wide-range route/stop
+         markers — same CDN-script convention as base Leaflet above (no
+         bundler/npm dependency), exposed as the window.L.markerClusterGroup
+         plugin once loaded. -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   </head>
   <body>
     <div id="root"></div>

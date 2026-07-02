@@ -1,0 +1,119 @@
+.pageWrap {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.appFrame {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 30px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.backBtn { font-size: 13px; font-weight: 700; color: var(--accent); }
+.headerTitle { font-size: 15px; font-weight: 800; color: var(--text); }
+
+.memberSwitcher { display: flex; gap: 6px; padding: 0 16px; overflow-x: auto; }
+.memberPill {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.memberPillActive { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+
+.searchRow { padding: 0 16px; }
+.searchInput {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 11px 14px;
+}
+.searchInput::placeholder { color: var(--muted); }
+
+.filterToggleRow { padding: 0 16px; }
+.filterToggle {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.filterRow { padding: 0 16px; }
+
+.analyticsRow { display: flex; gap: 8px; padding: 0 16px; }
+.analyticsTile {
+  flex: 1;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
+}
+.analyticsValue { font-size: 18px; font-weight: 800; color: var(--accent); }
+.analyticsLabel { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+.section { padding: 0 16px; display: flex; flex-direction: column; gap: 10px; }
+.sectionTitle { font-size: 13px; font-weight: 800; color: var(--text); }
+.emptyState { font-size: 12px; color: var(--muted); text-align: center; padding: 30px 10px; line-height: 1.6; }
+
+.placeGrid { display: flex; flex-direction: column; gap: 10px; }
+.placeCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.placeCard:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+.placeIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.placeBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.placeName { font-size: 14px; font-weight: 800; color: var(--text); }
+.placeCategory { font-size: 10px; color: var(--muted); text-transform: capitalize; }
+.placeStatsRow { display: flex; gap: 12px; font-size: 12px; font-weight: 700; color: var(--accent); margin-top: 2px; }
+.placeLastVisit { font-size: 11px; color: var(--text2); }

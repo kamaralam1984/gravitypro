@@ -3,10 +3,12 @@
 const router = require('express').Router()
 const { query } = require('../config/db')
 const { authenticate } = require('../middleware/auth')
+const { classifyRoute } = require('../services/speedClassifier')
 
 // ---- Tunable clustering params ----
 const STAY_RADIUS_M = 150 // points within this distance are part of same stay cluster
 const MIN_STAY_MS = 5 * 60 * 1000 // a cluster must span >= 5 min to count as a STAY
+const MAX_RANGE_DAYS = 31 // Travel Timeline route endpoint — bounds raw-point payload size
 
 // ---- Geo helpers ----
 const R = 6371000 // earth radius (m)
@@ -278,6 +280,190 @@ router.get('/:userId', authenticate, async (req, res) => {
   }
   const result = await computeDay(userId, date)
   res.json(result)
+})
+
+// GET /:userId/stops?from=&to=&limit=&cursor=
+// Paginated Smart Timeline stop cards, read directly from the persisted
+// timeline_stops table (see services/timelineStops.js) — no raw-point
+// clustering happens on this path, so it stays fast at any history size.
+router.get('/:userId/stops', authenticate, async (req, res) => {
+  const { userId } = req.params
+  const from = String(req.query.from || '')
+  const to = String(req.query.to || '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' })
+  }
+  if (!(await canView(req.user.id, userId))) {
+    return res.status(403).json({ error: 'Not allowed to view this user' })
+  }
+
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200)
+  const cursor = req.query.cursor ? new Date(String(req.query.cursor)) : null
+
+  const result = await query(
+    `SELECT id, ST_Y(center_geom) as lat, ST_X(center_geom) as lng,
+            arrived_at, departed_at, point_count, place_name, place_type,
+            address, safe_zone_id, safe_zone_name, photo_ids
+       FROM timeline_stops
+      WHERE user_id = $1
+        AND arrived_at >= $2::date
+        AND arrived_at < ($3::date + INTERVAL '1 day')
+        AND ($4::timestamptz IS NULL OR arrived_at < $4)
+      ORDER BY arrived_at DESC
+      LIMIT $5`,
+    [userId, from, to, cursor, limit]
+  )
+
+  const stops = result.rows.map((r) => {
+    const departedAt = r.departed_at || new Date()
+    const durationSec = Math.max(0, Math.round((new Date(departedAt) - new Date(r.arrived_at)) / 1000))
+    return {
+      id: r.id,
+      lat: Number(r.lat),
+      lng: Number(r.lng),
+      placeName: r.place_name || r.safe_zone_name || 'Resolving…',
+      placeType: r.place_type || 'unknown',
+      address: r.address,
+      arrivedAt: r.arrived_at,
+      departedAt: r.departed_at,
+      current: r.departed_at === null,
+      durationSec,
+      pointCount: r.point_count,
+      safeZoneId: r.safe_zone_id,
+      photoCount: Array.isArray(r.photo_ids) ? r.photo_ids.length : 0,
+      videoCount: 0,
+    }
+  })
+
+  const nextCursor = stops.length === limit ? stops[stops.length - 1].arrivedAt : null
+  res.json({ stops, nextCursor })
+})
+
+// GET /:userId/route?from=&to=&simplify=&limit=&cursor=
+// Bounded polyline + point-detail delivery, built for both the wide-range
+// map overview (simplify mode) and single-day Route Replay/detail (raw mode).
+router.get('/:userId/route', authenticate, async (req, res) => {
+  const { userId } = req.params
+  const from = String(req.query.from || '')
+  const to = String(req.query.to || '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' })
+  }
+  const spanDays = (new Date(to) - new Date(from)) / 86400000
+  if (spanDays < 0 || spanDays > MAX_RANGE_DAYS) {
+    return res.status(400).json({ error: `date range must be between 0 and ${MAX_RANGE_DAYS} days` })
+  }
+  if (!(await canView(req.user.id, userId))) {
+    return res.status(403).json({ error: 'Not allowed to view this user' })
+  }
+
+  const simplifyMeters = req.query.simplify ? parseFloat(String(req.query.simplify)) : null
+
+  if (simplifyMeters && simplifyMeters > 0) {
+    const result = await query(
+      `SELECT ST_AsGeoJSON(ST_Simplify(ST_MakeLine(geom ORDER BY recorded_at), $4)) as line
+         FROM device_locations
+        WHERE user_id = $1 AND recorded_at >= $2::date AND recorded_at < ($3::date + INTERVAL '1 day')`,
+      [userId, from, to, simplifyMeters / 111320]
+    )
+    const lineJson = result.rows[0]?.line
+    const coords = lineJson ? (JSON.parse(lineJson).coordinates || []) : []
+    const points = coords.map(([lng, lat]) => ({ lat, lng }))
+    return res.json({
+      from, to, simplified: true,
+      points,
+      start: points[0] || null,
+      end: points[points.length - 1] || null,
+      segments: [],
+    })
+  }
+
+  const limit = Math.min(parseInt(req.query.limit, 10) || 5000, 20000)
+  const cursor = req.query.cursor ? new Date(String(req.query.cursor)) : null
+
+  const result = await query(
+    `SELECT ST_Y(geom) as lat, ST_X(geom) as lng, accuracy, speed, bearing, altitude, recorded_at,
+            EXTRACT(EPOCH FROM recorded_at) * 1000 as ts
+       FROM device_locations
+      WHERE user_id = $1
+        AND recorded_at >= $2::date
+        AND recorded_at < ($3::date + INTERVAL '1 day')
+        AND ($4::timestamptz IS NULL OR recorded_at > $4)
+      ORDER BY recorded_at ASC
+      LIMIT $5`,
+    [userId, from, to, cursor, limit]
+  )
+
+  const points = result.rows.map((r) => ({
+    lat: Number(r.lat), lng: Number(r.lng),
+    accuracy: r.accuracy, speed: r.speed, bearing: r.bearing, altitude: r.altitude,
+    ts: Number(r.ts), recordedAt: r.recorded_at,
+  }))
+  const segments = classifyRoute(points)
+  const nextCursor = points.length === limit ? points[points.length - 1].recordedAt : null
+
+  res.json({
+    from, to, simplified: false,
+    points: points.map((p) => ({
+      lat: p.lat, lng: p.lng, ts: p.recordedAt,
+      speed: p.speed, bearing: p.bearing, altitude: p.altitude, accuracy: p.accuracy,
+    })),
+    start: points[0] ? { lat: points[0].lat, lng: points[0].lng, ts: points[0].recordedAt } : null,
+    end: points[points.length - 1] ? { lat: points[points.length - 1].lat, lng: points[points.length - 1].lng, ts: points[points.length - 1].recordedAt } : null,
+    segments,
+    nextCursor,
+  })
+})
+
+// GET /:userId/summary?date=YYYY-MM-DD
+// Daily Summary card data: total distance, travel time, stopped time,
+// number of stops, and the ordered list of places visited.
+router.get('/:userId/summary', authenticate, async (req, res) => {
+  const { userId } = req.params
+  const date = String(req.query.date || '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' })
+  }
+  if (!(await canView(req.user.id, userId))) {
+    return res.status(403).json({ error: 'Not allowed to view this user' })
+  }
+
+  const stopsResult = await query(
+    `SELECT place_name, safe_zone_name, arrived_at, departed_at
+       FROM timeline_stops
+      WHERE user_id = $1 AND arrived_at >= $2::date AND arrived_at < ($2::date + INTERVAL '1 day')
+      ORDER BY arrived_at ASC`,
+    [userId, date]
+  )
+  let stoppedSec = 0
+  const placesVisited = stopsResult.rows.map((r) => {
+    const departedAt = r.departed_at || new Date()
+    stoppedSec += Math.max(0, Math.round((new Date(departedAt) - new Date(r.arrived_at)) / 1000))
+    return { name: r.place_name || r.safe_zone_name || 'Unknown', arrivedAt: r.arrived_at, departedAt: r.departed_at }
+  })
+
+  const distanceResult = await query(
+    `SELECT COALESCE(ST_Length(ST_MakeLine(geom ORDER BY recorded_at)::geography), 0) as distance_m,
+            MIN(recorded_at) as first_ts, MAX(recorded_at) as last_ts
+       FROM device_locations
+      WHERE user_id = $1 AND recorded_at >= $2::date AND recorded_at < ($2::date + INTERVAL '1 day')`,
+    [userId, date]
+  )
+  const row = distanceResult.rows[0]
+  const totalDistanceMeters = Math.round(parseFloat(row.distance_m) || 0)
+  const spanSec = row.first_ts && row.last_ts
+    ? Math.round((new Date(row.last_ts) - new Date(row.first_ts)) / 1000)
+    : 0
+  const travelSec = Math.max(0, spanSec - stoppedSec)
+
+  res.json({
+    date,
+    totalDistanceMeters,
+    travelSec,
+    stoppedSec,
+    stopsCount: placesVisited.length,
+    placesVisited,
+  })
 })
 
 module.exports = router

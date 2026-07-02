@@ -1094,6 +1094,12 @@ export default function ParentPanel() {
                 <button className={styles.historyBtn} onClick={() => showHistory ? setShowHistory(false) : loadHistory('me')}>
                   {showHistory ? 'Live' : 'History'}
                 </button>
+                <Link className={styles.historyBtn} to={`/parent/timeline${members[0] ? '?userId=' + members[0].id : ''}`}>
+                  Timeline
+                </Link>
+                <Link className={styles.historyBtn} to={`/parent/smart-places${members[0] ? '?userId=' + members[0].id : ''}`}>
+                  Smart Places
+                </Link>
               </div>
 
               {/* Custom zoom controls */}

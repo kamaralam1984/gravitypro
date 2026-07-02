@@ -16,7 +16,7 @@ const initBullMQ = () => {
     geofenceCleanupQueue = new Queue('geofence-cleanup', { connection })
 
     new Worker('location-cleanup', async () => {
-      const result = await query("DELETE FROM device_locations WHERE recorded_at < NOW() - INTERVAL '7 days'")
+      const result = await query("DELETE FROM device_locations WHERE recorded_at < NOW() - INTERVAL '35 days'")
       console.log(`[bullmq] Cleaned ${result.rowCount} old location records`)
     }, { connection })
 
@@ -43,7 +43,7 @@ const startJobs = () => {
       console.log('[cron] Location cleanup enqueued to BullMQ')
     } else {
       try {
-        const result = await query("DELETE FROM device_locations WHERE recorded_at < NOW() - INTERVAL '7 days'")
+        const result = await query("DELETE FROM device_locations WHERE recorded_at < NOW() - INTERVAL '35 days'")
         console.log(`[cron] Cleaned ${result.rowCount} old location records`)
       } catch (err) {
         console.error('[cron] Location cleanup error:', err.message)
@@ -62,6 +62,19 @@ const startJobs = () => {
       } catch (err) {
         console.error('[cron] Geofence cleanup error:', err.message)
       }
+    }
+  }, { timezone: 'UTC' })
+
+  // Stale-open-stop sweep (Travel Timeline) — closes any timeline_stop left
+  // "open" because location updates simply stopped arriving (device offline/
+  // killed). Runs every 15 min, independent of BullMQ.
+  cron.schedule('*/15 * * * *', async () => {
+    try {
+      const { closeStaleStops } = require('../services/timelineStops')
+      const closedCount = await closeStaleStops()
+      if (closedCount) console.log(`[cron] Closed ${closedCount} stale open timeline stops`)
+    } catch (err) {
+      console.error('[cron] Stale-stop sweep error:', err.message)
     }
   }, { timezone: 'UTC' })
 

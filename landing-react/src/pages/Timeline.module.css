@@ -1,0 +1,113 @@
+.pageWrap {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.appFrame {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 30px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.backBtn { font-size: 13px; font-weight: 700; color: var(--accent); }
+.headerTitle { font-size: 15px; font-weight: 800; color: var(--text); }
+
+.memberSwitcher {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px;
+  overflow-x: auto;
+}
+.memberPill {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.memberPillActive { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+
+.filterRow { padding: 0 16px; }
+
+.mapWrap {
+  position: relative;
+  height: 280px;
+  margin: 0 16px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.map { width: 100%; height: 100%; background: var(--bg2); }
+.mapControls { position: absolute; top: 10px; right: 10px; z-index: 500; }
+.mapCtrlBtn {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(13,32,24,0.85);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.mapLoading {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(13,32,24,0.85);
+  padding: 4px 10px;
+  border-radius: 8px;
+  z-index: 500;
+}
+
+.section { padding: 0 16px; display: flex; flex-direction: column; gap: 10px; }
+.sectionTitle { font-size: 13px; font-weight: 800; color: var(--text); }
+
+.detailCard {
+  margin: 0 16px;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  padding: 14px;
+}
+.detailHeader { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 800; color: var(--accent); margin-bottom: 10px; }
+.detailClose { background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.detailGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.detailGrid > div { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text); }
+.detailLabel { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.summaryGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.summaryTile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+}
+.summaryLabel { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.summaryValue { font-size: 18px; font-weight: 800; color: var(--accent); }
+.placesVisited { display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px; color: var(--text2); }
+.placeChip { white-space: nowrap; }
+
+.emptyState { font-size: 12px; color: var(--muted); text-align: center; padding: 24px; }
+.stopList { display: flex; flex-direction: column; gap: 10px; }

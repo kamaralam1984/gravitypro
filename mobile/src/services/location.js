@@ -90,7 +90,7 @@ if (Platform.OS !== 'web') {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + token,
               },
-              body: JSON.stringify({ latitude, longitude, accuracy, battery_level, speed, mode }),
+              body: JSON.stringify({ latitude, longitude, accuracy, battery_level, speed, mode, bearing: heading, altitude }),
             })
             if (res.ok) online = true
           }
