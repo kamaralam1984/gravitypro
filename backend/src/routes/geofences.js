@@ -75,6 +75,7 @@ router.post('/', authenticate, validate(createZoneSchema), async (req, res) => {
     [circle_id, req.user.id]
   )
   if (!membership.rows.length) return res.status(403).json({ error: 'Access denied' })
+  if (membership.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only circle admins can create safe zones' })
 
   // If a member is assigned, they must belong to this circle.
   if (assigned_user_id) {
@@ -123,6 +124,7 @@ router.patch('/:id', authenticate, validate(updateZoneSchema), async (req, res) 
     [req.params.id, req.user.id]
   )
   if (!zone.rows.length) return res.status(403).json({ error: 'Access denied' })
+  if (zone.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only circle admins can edit safe zones' })
 
   const current = zone.rows[0]
   const name = req.body.name ?? current.name
@@ -171,6 +173,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     [req.params.id, req.user.id]
   )
   if (!zone.rows.length) return res.status(403).json({ error: 'Access denied' })
+  if (zone.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only circle admins can delete safe zones' })
   await query('DELETE FROM safe_zones WHERE id = $1', [req.params.id])
   res.json({ success: true })
 })
