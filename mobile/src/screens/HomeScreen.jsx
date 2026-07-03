@@ -83,6 +83,21 @@ function StatCard({ icon, label, value, loading, onPress }) {
   )
 }
 
+// ── My Activity Card (child's own Timeline/Route/Places/Reports) ──────────────
+
+function ActivityCard({ icon, label, onPress }) {
+  const c = useTheme()
+  const styles = useMemo(() => makeStyles(c), [c])
+  return (
+    <Pressable style={styles.activityCard} onPress={onPress}>
+      <LinearGradient colors={c.gradients.card} style={styles.activityGrad}>
+        <Text style={styles.activityIcon}>{icon}</Text>
+        <Text style={styles.activityLabel} numberOfLines={2}>{label}</Text>
+      </LinearGradient>
+    </Pressable>
+  )
+}
+
 // ── Member Chip ───────────────────────────────────────────────────────────────
 
 function MemberChip({ member, memberLocations }) {
@@ -406,6 +421,23 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* ── My Activity (child accounts only — view own Timeline/Route/
+             Places/Reports; a child can never view another member's data,
+             enforced server-side regardless of what this UI shows) ── */}
+        {user?.account_type === 'child' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Activity</Text>
+            <View style={styles.activityGrid}>
+              <ActivityCard icon="📍" label="My Timeline" onPress={() => navigation.navigate('ChildTimeline', { member: { id: user.id, name: user.name } })} />
+              <ActivityCard icon="🗺" label="My Route History" onPress={() => navigation.navigate('MyRouteHistory')} />
+              <ActivityCard icon="📌" label="My Places" onPress={() => navigation.navigate('Places', { member: { id: user.id, name: user.name } })} />
+              <ActivityCard icon="📊" label="My Weekly Report" onPress={() => navigation.navigate('Reports', { member: { id: user.id, name: user.name } })} />
+              <ActivityCard icon="📅" label="My Daily Summary" onPress={() => navigation.navigate('MyDailySummary')} />
+              <ActivityCard icon="🚶" label="My Travel Summary" onPress={() => navigation.navigate('MyTravelSummary')} />
+            </View>
+          </View>
+        )}
+
         {/* ── Family Map (Leaflet/OSM — same map system as the Dashboard) ── */}
         <View style={styles.section}>
           <View style={styles.mapHeaderRow}>
@@ -599,6 +631,13 @@ const makeStyles = (c) => StyleSheet.create({
   statIcon:  { fontSize: 22 },
   statValue: { fontSize: 18, fontWeight: '800', color: c.textWhite },
   statLabel: { fontSize: 11, fontWeight: '600', color: c.textMuted, textAlign: 'center' },
+
+  // My Activity (child) cards — 2-column grid
+  activityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  activityCard: { width: '47%', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
+  activityGrad: { alignItems: 'center', paddingVertical: 20, paddingHorizontal: 8, gap: 6 },
+  activityIcon: { fontSize: 26 },
+  activityLabel: { fontSize: 12, fontWeight: '700', color: c.textWhite, textAlign: 'center' },
 
   // Mini Map
   mapContainer: {

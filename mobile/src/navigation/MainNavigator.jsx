@@ -9,6 +9,9 @@ import EmergencyContactsScreen from '../screens/EmergencyContactsScreen'
 import ReportsScreen from '../screens/ReportsScreen'
 import ChatScreen from '../screens/ChatScreen'
 import PlacesScreen from '../screens/PlacesScreen'
+import MyRouteHistoryScreen from '../screens/MyRouteHistoryScreen'
+import MyDailySummaryScreen from '../screens/MyDailySummaryScreen'
+import MyTravelSummaryScreen from '../screens/MyTravelSummaryScreen'
 
 const Stack = createStackNavigator()
 
@@ -26,6 +29,9 @@ export default function MainNavigator() {
       <Stack.Screen name="Reports" component={ReportsScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="Places" component={PlacesScreen} />
+      <Stack.Screen name="MyRouteHistory" component={MyRouteHistoryScreen} />
+      <Stack.Screen name="MyDailySummary" component={MyDailySummaryScreen} />
+      <Stack.Screen name="MyTravelSummary" component={MyTravelSummaryScreen} />
     </Stack.Navigator>
   )
 }

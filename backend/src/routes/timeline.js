@@ -23,9 +23,22 @@ function haversine(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
 }
 
-// Authorization: requester is the same user OR shares a circle with :userId
+// Authorization: a user can always view their own data. Viewing someone
+// ELSE's data additionally requires the requester to be a parent account —
+// this is directional, not symmetric: a parent may view any child sharing a
+// circle with them, but a child may never view a parent's or sibling's data,
+// even though they share the same circle. (Previously this only checked
+// "do we share a circle," which let any co-member view any other co-member's
+// Timeline/Places/Reports — including a child viewing a parent or sibling.)
+// Shared by routes/places.js and routes/reports.js (they require() this
+// function) and routes/smartPlaces.js — every Timeline/Places/Reports/Smart
+// Places endpoint gets this fix from one place.
 async function canView(requesterId, targetId) {
   if (requesterId === targetId) return true
+
+  const requester = await query('SELECT account_type FROM users WHERE id = $1', [requesterId])
+  if (requester.rows[0]?.account_type !== 'parent') return false
+
   const r = await query(
     `SELECT 1
        FROM circle_members a

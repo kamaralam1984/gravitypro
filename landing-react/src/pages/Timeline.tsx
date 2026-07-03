@@ -19,6 +19,16 @@ const API_BASE = window.location.origin + '/api/v1'
 
 function getToken(): string | null { return localStorage.getItem('gravity_token') }
 
+// Child accounts must only ever see their own timeline — this is defense in
+// depth (the real enforcement is server-side canView() in routes/timeline.js).
+// We never fetch/store other family members' ids for a child viewer at all.
+function getCurrentUser(): { id: string; account_type?: string } | null {
+  try {
+    const raw = localStorage.getItem('gravity_user')
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
 async function apiGet(path: string) {
   const token = getToken()
   if (!token) return null
@@ -82,8 +92,13 @@ export default function Timeline() {
   const clusterGroupRef = useRef<LeafletClusterGroup | null>(null)
   const currentMarkerRef = useRef<InstanceType<typeof L.Marker> | null>(null)
 
+  const currentUser = getCurrentUser()
+  const isChildViewer = currentUser?.account_type === 'child'
+
   const [members, setMembers] = useState<Member[]>([])
-  const [userId, setUserId] = useState<string>(searchParams.get('userId') || '')
+  const [userId, setUserId] = useState<string>(
+    isChildViewer && currentUser?.id ? currentUser.id : (searchParams.get('userId') || '')
+  )
   // Supports deep-linking a specific day (e.g. from a Smart Place's Visit
   // Timeline "View travel route" link) via ?date=YYYY-MM-DD.
   const [range, setRange] = useState<DateRange>(() => {
@@ -103,6 +118,12 @@ export default function Timeline() {
   const isSingleDay = range.from === range.to
 
   useEffect(() => {
+    // Child viewers never fetch the circle member list — there is nothing to
+    // switch to, and it avoids exposing other family members' ids/names.
+    if (isChildViewer) {
+      if (currentUser?.id) setUserId(currentUser.id)
+      return
+    }
     (async () => {
       const data = await apiGet('/circles')
       if (!data?.circles?.length) return
@@ -263,7 +284,7 @@ export default function Timeline() {
           <div style={{ width: 50 }} />
         </div>
 
-        {members.length > 1 && (
+        {!isChildViewer && members.length > 1 && (
           <div className={styles.memberSwitcher}>
             {members.map((m) => (
               <button

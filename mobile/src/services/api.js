@@ -136,6 +136,8 @@ export const subscriptionAPI = {
 export const timelineAPI = {
   getDays: (userId, month) => api.get(`/timeline/${userId}/days?month=${encodeURIComponent(month)}`),
   getDay: (userId, date) => api.get(`/timeline/${userId}?date=${encodeURIComponent(date)}`),
+  // Daily Summary: { date, totalDistanceMeters, travelSec, stoppedSec, stopsCount, placesVisited }
+  getSummary: (userId, date) => api.get(`/timeline/${userId}/summary?date=${encodeURIComponent(date)}`),
 }
 
 export default api

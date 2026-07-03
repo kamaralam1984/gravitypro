@@ -3,21 +3,12 @@
 const router = require('express').Router()
 const { query } = require('../config/db')
 const { authenticate } = require('../middleware/auth')
-
-// Authorization: requester is the same user OR shares a circle with :userId
-// (same pattern as routes/timeline.js).
-async function canView(requesterId, targetId) {
-  if (requesterId === targetId) return true
-  const r = await query(
-    `SELECT 1
-       FROM circle_members a
-       JOIN circle_members b ON a.circle_id = b.circle_id
-      WHERE a.user_id = $1 AND b.user_id = $2
-      LIMIT 1`,
-    [requesterId, targetId]
-  )
-  return r.rows.length > 0
-}
+// Shared directional authorization (self always allowed; viewing someone
+// else requires the requester to be a parent) — see routes/timeline.js for
+// the canonical implementation and rationale. Was previously a duplicated,
+// looser (symmetric, "share a circle") copy here — importing keeps this
+// endpoint's access control in lockstep with Timeline/Places/Reports.
+const { canView } = require('./timeline')
 
 const CATEGORY_ICONS = {
   home: '🏠', school: '🏫', office: '🏢', gym: '🏋', cafe: '☕',
