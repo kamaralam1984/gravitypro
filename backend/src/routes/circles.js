@@ -58,6 +58,25 @@ router.post('/join', authenticate, async (req, res) => {
   const existing = await query('SELECT id FROM circle_members WHERE circle_id = $1 AND user_id = $2', [circle.id, req.user.id])
   if (existing.rows.length) return res.status(409).json({ error: 'Already a member' })
   await query('INSERT INTO circle_members (circle_id, user_id, role) VALUES ($1, $2, $3)', [circle.id, req.user.id, 'member'])
+
+  // Registration leaves account_type at its 'parent' default unless the user
+  // explicitly picks "Child" (see mobile RegisterScreen) — easy to miss, and
+  // joining a circle by invite code never used to correct it, so a child who
+  // just registered-and-joined could be permanently mislabeled "Parent" in
+  // their own profile. A user joining someone else's circle as a plain member,
+  // who has never created/administered a circle of their own, is — in this
+  // app's real usage — a child joining their family via a parent's invite
+  // code. Auto-correct here rather than leave that stuck wrong.
+  if (req.user.account_type !== 'child') {
+    const everAdmin = await query(
+      "SELECT 1 FROM circle_members WHERE user_id = $1 AND role = 'admin' LIMIT 1",
+      [req.user.id]
+    )
+    if (!everAdmin.rows.length) {
+      await query("UPDATE users SET account_type = 'child' WHERE id = $1", [req.user.id])
+    }
+  }
+
   res.json({ circle, message: 'Joined successfully' })
 })
 
