@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { storage } from '../utils/storage'
 import { useAuthStore } from '../store/authStore'
+import { userAPI } from '../services/api'
 import { Colors } from '../theme/colors'
 
 const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
@@ -24,30 +24,39 @@ export default function WebPanelScreen({ path }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const token = useAuthStore(s => s.token)
+  const user = useAuthStore(s => s.user)
+  const updateUser = useAuthStore(s => s.updateUser)
   // Read live from the reactive store (not a one-time AsyncStorage snapshot)
   // so this screen re-resolves parent-vs-child immediately if account_type
   // changes while it's already mounted (e.g. a child joins a circle on
   // another tab — see CirclesScreen.jsx handleJoinCircle) instead of staying
   // stuck on whichever panel was cached at the time this screen first mounted.
-  const accountType = useAuthStore(s => s.user?.account_type)
+  const accountType = user?.account_type
+
+  // The cached user (from login, or a previous session) can be stale if
+  // account_type changed server-side since — and this screen's whole job is
+  // routing on that value. Re-fetch it fresh every time this screen opens
+  // instead of trusting a possibly-stale snapshot until the user separately
+  // happens to open the Profile tab.
+  useEffect(() => {
+    userAPI.getMe().then((res) => { if (res?.user) updateUser(res.user) }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey])
 
   useEffect(() => {
-    let alive = true
-    ;(async () => {
-      const token = await storage.getItem('auth_token')
-      const userRaw = await storage.getItem('user_data')
-      const resolvedPath = path || (accountType === 'child' ? '/child/panel' : '/parent/panel')
-      // Seed the web app's auth so the panel is already logged in (SSO).
-      const js = `(function(){try{
-        ${token ? `localStorage.setItem('gravity_token', ${JSON.stringify(token)});` : ''}
-        ${userRaw ? `localStorage.setItem('gravity_user', ${JSON.stringify(userRaw)});` : ''}
-      }catch(e){}})(); true;`
-      if (!alive) return
-      setInject(js)
-      setUri(BASE + resolvedPath)
-    })()
-    return () => { alive = false }
-  }, [path, reloadKey, accountType])
+    if (!user) return
+    const resolvedPath = path || (accountType === 'child' ? '/child/panel' : '/parent/panel')
+    // Seed the web app's auth so the panel is already logged in (SSO). Both
+    // the routing decision above and this injected snapshot now read from the
+    // SAME live store value — no second, independently-stale source.
+    const js = `(function(){try{
+      ${token ? `localStorage.setItem('gravity_token', ${JSON.stringify(token)});` : ''}
+      localStorage.setItem('gravity_user', ${JSON.stringify(JSON.stringify(user))});
+    }catch(e){}})(); true;`
+    setInject(js)
+    setUri(BASE + resolvedPath)
+  }, [path, accountType, token, user])
 
   const retry = () => { setError(false); setLoading(true); setReloadKey(k => k + 1) }
 

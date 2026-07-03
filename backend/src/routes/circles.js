@@ -68,11 +68,23 @@ router.post('/join', authenticate, async (req, res) => {
   // app's real usage — a child joining their family via a parent's invite
   // code. Auto-correct here rather than leave that stuck wrong.
   if (req.user.account_type !== 'child') {
-    const everAdmin = await query(
-      "SELECT 1 FROM circle_members WHERE user_id = $1 AND role = 'admin' LIMIT 1",
+    // "Ever admin anywhere" isn't enough on its own: tapping "Create Circle"
+    // by mistake before joining the real family circle makes someone admin of
+    // a throwaway, empty circle, which would then permanently block this
+    // auto-correction. Only an admin of a circle with at least one OTHER
+    // member — i.e. one they've actually invited someone into — counts as
+    // running a real family circle; being admin of a solo/empty circle does not.
+    const realAdmin = await query(
+      `SELECT 1 FROM circle_members cm1
+        WHERE cm1.user_id = $1 AND cm1.role = 'admin'
+          AND EXISTS (
+            SELECT 1 FROM circle_members cm2
+             WHERE cm2.circle_id = cm1.circle_id AND cm2.user_id != $1
+          )
+        LIMIT 1`,
       [req.user.id]
     )
-    if (!everAdmin.rows.length) {
+    if (!realAdmin.rows.length) {
       await query("UPDATE users SET account_type = 'child' WHERE id = $1", [req.user.id])
     }
   }
