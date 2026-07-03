@@ -3,6 +3,7 @@ import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'rea
 import { WebView } from 'react-native-webview'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { storage } from '../utils/storage'
+import { useAuthStore } from '../store/authStore'
 import { Colors } from '../theme/colors'
 
 const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
@@ -23,18 +24,19 @@ export default function WebPanelScreen({ path }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  // Read live from the reactive store (not a one-time AsyncStorage snapshot)
+  // so this screen re-resolves parent-vs-child immediately if account_type
+  // changes while it's already mounted (e.g. a child joins a circle on
+  // another tab — see CirclesScreen.jsx handleJoinCircle) instead of staying
+  // stuck on whichever panel was cached at the time this screen first mounted.
+  const accountType = useAuthStore(s => s.user?.account_type)
 
   useEffect(() => {
     let alive = true
     ;(async () => {
       const token = await storage.getItem('auth_token')
       const userRaw = await storage.getItem('user_data')
-      let resolvedPath = path
-      if (!resolvedPath) {
-        let accountType = 'parent'
-        try { accountType = (JSON.parse(userRaw || '{}').account_type) || 'parent' } catch {}
-        resolvedPath = accountType === 'child' ? '/child/panel' : '/parent/panel'
-      }
+      const resolvedPath = path || (accountType === 'child' ? '/child/panel' : '/parent/panel')
       // Seed the web app's auth so the panel is already logged in (SSO).
       const js = `(function(){try{
         ${token ? `localStorage.setItem('gravity_token', ${JSON.stringify(token)});` : ''}
@@ -45,7 +47,7 @@ export default function WebPanelScreen({ path }) {
       setUri(BASE + resolvedPath)
     })()
     return () => { alive = false }
-  }, [path, reloadKey])
+  }, [path, reloadKey, accountType])
 
   const retry = () => { setError(false); setLoading(true); setReloadKey(k => k + 1) }
 

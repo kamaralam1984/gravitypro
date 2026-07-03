@@ -373,6 +373,7 @@ export default function CirclesScreen() {
   const setStoreCircles = useCircleStore(s => s.setCircles)
   // Only a parent can CREATE/manage a circle; a child can only JOIN one.
   const isChild = useAuthStore(s => s.user?.account_type) === 'child'
+  const updateUser = useAuthStore(s => s.updateUser)
   const [circles, setCircles] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -497,6 +498,17 @@ export default function CirclesScreen() {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       showToast('Joined circle!')
       await loadCircles()
+      // Joining a circle can flip account_type parent->child server-side (see
+      // backend routes/circles.js POST /join) — refresh the cached profile now
+      // instead of leaving every account_type-gated screen (incl. the
+      // parent/child WebView routing) stale until the user separately opens
+      // the Profile tab.
+      try {
+        const res = await userAPI.getMe()
+        if (res?.user) updateUser(res.user)
+      } catch (e) {
+        // best-effort — Profile tab's own getMe() call will catch up later
+      }
     } catch (e) {
       setError(e.error || 'Invalid invite code')
     } finally {
