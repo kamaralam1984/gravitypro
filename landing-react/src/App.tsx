@@ -7,7 +7,6 @@ import AdminLogin from './pages/AdminLogin'
 import AdminPanel from './pages/AdminPanel'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
-import Share from './pages/Share'
 import LiveShare from './pages/LiveShare'
 import Timeline from './pages/Timeline'
 import SmartPlaces from './pages/SmartPlaces'
@@ -22,7 +21,6 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
-        <Route path="/share" element={<Share />} />
         <Route path="/live/:token" element={<LiveShare />} />
         <Route path="/parent" element={<Navigate to="/parent/panel" replace />} />
         <Route path="/parent/panel" element={<ParentPanel />} />

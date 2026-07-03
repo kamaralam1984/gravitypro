@@ -15,6 +15,17 @@ const sharesCircle = async (userA, userB) => {
   return result.rows.length > 0
 }
 
+// Viewing someone ELSE's screen-time/app-block data is a parent-only action —
+// self-view is always allowed. Without the account_type check, one child could
+// read a sibling's data just by sharing a circle (same bug class as the fixed
+// timeline.js canView()).
+const canViewChildData = async (requesterId, targetId) => {
+  if (requesterId === targetId) return true
+  const requester = await query('SELECT account_type FROM users WHERE id = $1', [requesterId])
+  if (requester.rows[0]?.account_type !== 'parent') return false
+  return sharesCircle(requesterId, targetId)
+}
+
 // ---------------- SCREEN TIME ----------------
 
 // POST /app-usage  → child self-reports a batch of app usage for a day.
@@ -56,7 +67,7 @@ router.get('/app-usage/:userId', authenticate, async (req, res) => {
   const { date } = req.query
   if (!date) return res.status(400).json({ error: 'date query param is required' })
 
-  if (req.user.id !== userId && !(await sharesCircle(req.user.id, userId))) {
+  if (!(await canViewChildData(req.user.id, userId))) {
     return res.status(403).json({ error: 'Not authorized to view this user' })
   }
 
@@ -88,7 +99,7 @@ router.get('/blocked-apps', authenticate, async (req, res) => {
 router.get('/blocked-apps/:childId', authenticate, async (req, res) => {
   const { childId } = req.params
 
-  if (req.user.id !== childId && !(await sharesCircle(req.user.id, childId))) {
+  if (!(await canViewChildData(req.user.id, childId))) {
     return res.status(403).json({ error: 'Not authorized to view this user' })
   }
 

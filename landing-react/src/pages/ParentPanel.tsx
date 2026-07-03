@@ -509,7 +509,7 @@ export default function ParentPanel() {
     }))
 
     // Load SOS history
-    const sosData = await apiGet('/sos/history')
+    const sosData = await apiGet('/sos/history?circle_id=' + cid)
     const sosAlerts: AlertItem[] = (sosData?.sos_events || sosData?.events || []).slice(0, 5).map((e: Record<string, unknown>) => ({
       id: 'sos-' + e.id,
       type: 'sos' as AlertItem['type'],

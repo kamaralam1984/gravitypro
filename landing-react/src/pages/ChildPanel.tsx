@@ -699,13 +699,18 @@ export default function ChildPanel() {
       showToast('✓ Family notified you are safe!', 'success')
     }
   }
-  const triggerShareLocation = () => {
-    const shareUrl = window.location.origin + '/share?uid=' + (gravityUser?.id || '')
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      showToast('📍 Location link copied!', 'success')
-    }).catch(() => {
-      showToast('📍 Location link copied!', 'success')
-    })
+  // Uses the token-based /share endpoint (30-min expiring, unguessable token) —
+  // NOT the caller's permanent user id, which would give whoever holds the link
+  // indefinite, unrevocable access to this child's live location.
+  const triggerShareLocation = async () => {
+    try {
+      const data = await apiPost('/share', {})
+      if (!data?.url) throw new Error('no url')
+      await navigator.clipboard.writeText(data.url)
+      showToast('📍 Location link copied! Valid for 30 minutes.', 'success')
+    } catch {
+      showToast('Could not create share link', 'error')
+    }
   }
   const triggerArriveSafe = () => {
     const locationLabel = myLat && myLng

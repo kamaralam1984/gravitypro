@@ -61,7 +61,6 @@ export const userAPI = {
   // Backend reads `req.body.token` (POST /users/me/push-token) — send as { token }.
   registerPushToken: (push_token) => api.post('/users/me/push-token', { token: push_token }),
   search: (phone) => api.get(`/users/search?phone=${encodeURIComponent(phone)}`),
-  getPublicLocation: (uid) => api.get(`/users/public-location?uid=${encodeURIComponent(uid)}`),
   batchPostLocations: (locations) => api.post('/locations/batch', { locations }),
   deleteAccount: () => api.delete('/users/me'),
 }

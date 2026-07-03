@@ -78,6 +78,7 @@ router.post('/circle/:circleId/icon/presign', authenticate, async (req, res) => 
   const { contentType, fileSize } = req.body
   const membership = await query('SELECT role FROM circle_members WHERE circle_id = $1 AND user_id = $2', [circleId, req.user.id])
   if (!membership.rows.length) return res.status(403).json({ error: 'Access denied' })
+  if (membership.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only circle admins can change the circle icon' })
   if (!ALLOWED_TYPES.includes(contentType)) return res.status(400).json({ error: 'Invalid file type' })
   if (fileSize > MAX_SIZE) return res.status(400).json({ error: 'File too large. Max 5MB.' })
   const ext = contentType.split('/')[1]
@@ -93,6 +94,7 @@ router.post('/circle/:circleId/icon/confirm', authenticate, async (req, res) => 
   const { publicUrl } = req.body
   const membership = await query('SELECT role FROM circle_members WHERE circle_id = $1 AND user_id = $2', [circleId, req.user.id])
   if (!membership.rows.length) return res.status(403).json({ error: 'Access denied' })
+  if (membership.rows[0].role !== 'admin') return res.status(403).json({ error: 'Only circle admins can change the circle icon' })
   await query('UPDATE circles SET icon_url = $1, updated_at = NOW() WHERE id = $2', [publicUrl, circleId])
   res.json({ icon_url: publicUrl })
 })

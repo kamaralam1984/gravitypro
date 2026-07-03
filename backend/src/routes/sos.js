@@ -161,7 +161,10 @@ router.post('/safe', authenticate, async (req, res) => {
   res.json({ success: true, message: 'Safe notification sent' })
 })
 
-// GET /api/v1/sos/history — get SOS history (optionally filtered by circle_id)
+// GET /api/v1/sos/history?circle_id= — get SOS history for a circle the caller belongs to.
+// circle_id is required and membership is checked — without this, any authenticated
+// user could pass an arbitrary circle_id (or omit it) and read every family's SOS
+// history + phone numbers platform-wide.
 router.get('/history', authenticate, async (req, res) => {
   await query(`CREATE TABLE IF NOT EXISTS sos_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -170,26 +173,43 @@ router.get('/history', authenticate, async (req, res) => {
     message TEXT, resolved BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW()
   )`).catch(() => {})
   const { circle_id } = req.query
-  const r = circle_id
-    ? await query(
-        'SELECT se.*, u.phone FROM sos_events se LEFT JOIN users u ON u.id=se.user_id WHERE se.circle_id=$1 ORDER BY se.created_at DESC LIMIT 50',
-        [circle_id]
-      )
-    : await query(
-        'SELECT se.*, u.phone FROM sos_events se LEFT JOIN users u ON u.id=se.user_id ORDER BY se.created_at DESC LIMIT 50',
-        []
-      )
+  if (!circle_id) return res.status(400).json({ error: 'circle_id is required' })
+  const membership = await query(
+    'SELECT 1 FROM circle_members WHERE circle_id = $1 AND user_id = $2',
+    [circle_id, req.user.id]
+  )
+  if (!membership.rows.length) return res.status(403).json({ error: 'Access denied' })
+  const r = await query(
+    'SELECT se.*, u.phone FROM sos_events se LEFT JOIN users u ON u.id=se.user_id WHERE se.circle_id=$1 ORDER BY se.created_at DESC LIMIT 50',
+    [circle_id]
+  )
   res.json({ sos_events: r.rows })
 })
 
-// PATCH /api/v1/sos/:sosId/resolve — mark SOS as resolved
+// PATCH /api/v1/sos/:sosId/resolve — mark SOS as resolved.
+// Only the person who raised it (cancelling their own false alarm) or a circle
+// admin (parent) may resolve it — otherwise any authenticated user, in any
+// circle, could silently dismiss someone else's real emergency alert.
 router.patch('/:sosId/resolve', authenticate, async (req, res) => {
   try {
+    const event = await query('SELECT user_id, circle_id FROM sos_events WHERE id = $1', [req.params.sosId])
+    if (!event.rows.length) return res.status(404).json({ error: 'SOS event not found' })
+    const { user_id: raiserId, circle_id: circleId } = event.rows[0]
+
+    let allowed = raiserId === req.user.id
+    if (!allowed && circleId) {
+      const membership = await query(
+        'SELECT role FROM circle_members WHERE circle_id = $1 AND user_id = $2',
+        [circleId, req.user.id]
+      )
+      allowed = membership.rows[0]?.role === 'admin'
+    }
+    if (!allowed) return res.status(403).json({ error: 'Not authorized to resolve this SOS' })
+
     const r = await query(
       'UPDATE sos_events SET resolved = TRUE WHERE id = $1 RETURNING id',
       [req.params.sosId]
     )
-    if (!r.rows.length) return res.status(404).json({ error: 'SOS event not found' })
     res.json({ success: true })
   } catch (e) {
     res.status(500).json({ error: 'Failed to resolve SOS' })
