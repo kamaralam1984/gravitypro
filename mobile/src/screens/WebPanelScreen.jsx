@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -60,6 +60,18 @@ export default function WebPanelScreen({ path }) {
 
   const retry = () => { setError(false); setLoading(true); setReloadKey(k => k + 1) }
 
+  // A background /users/me refresh (see effect above) creates a NEW `user`
+  // object reference even when the data is unchanged, which re-runs the
+  // effect below and can produce a new `inject`/`uri` value. Passing a fresh
+  // object literal as WebView's `source` prop on every such render makes
+  // react-native-webview treat it as a brand-new source and silently reload
+  // the WebView — including mid-navigation, after the user has already
+  // clicked into Timeline/Smart Places (client-side SPA routes with no full
+  // page reload), producing a blank screen. Memoizing on the `uri` STRING
+  // (not a fresh object) means WebView only sees a new source when the URL
+  // actually changes.
+  const source = useMemo(() => (uri ? { uri } : undefined), [uri])
+
   if (!uri || inject === null) {
     return <View style={styles.center}><ActivityIndicator size="large" color={Colors.accent} /></View>
   }
@@ -69,7 +81,7 @@ export default function WebPanelScreen({ path }) {
       <WebView
         key={reloadKey}
         ref={webRef}
-        source={{ uri }}
+        source={source}
         injectedJavaScriptBeforeContentLoaded={inject}
         onLoadStart={() => { setLoading(true); setError(false) }}
         onLoadEnd={() => setLoading(false)}
