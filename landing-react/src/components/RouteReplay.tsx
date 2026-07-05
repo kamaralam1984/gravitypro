@@ -28,7 +28,7 @@ type PlayState = 'idle' | 'playing' | 'paused'
 
 const SPEED_OPTIONS = [1, 2, 4] as const
 
-export default function RouteReplay({ map, points, resolveAddress }: Props) {
+export default function RouteReplay({ map, points = [], resolveAddress }: Props) {
   const [playState, setPlayState] = useState<PlayState>('idle')
   const [speedMultiplier, setSpeedMultiplier] = useState<1 | 2 | 4>(1)
   const [elapsedMs, setElapsedMs] = useState(0)

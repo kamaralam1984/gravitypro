@@ -29,6 +29,15 @@ async function getPool() {
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 15000,
+    // This app is India-only (IN phone numbers, temple/mosque/gurdwara zone
+    // categories, IST users). Without this, the session timezone defaults to
+    // UTC on Neon/most managed Postgres, so every `::date` cast and
+    // `to_char(ts, 'YYYY-MM-DD')` boundary (timeline day view, daily/weekly
+    // summaries, "Today"/"Yesterday" filters) resolves calendar-day
+    // boundaries in UTC — off by 5:30 from the user's actual local day.
+    // TIMESTAMPTZ columns still store/compare as UTC internally either way;
+    // this only fixes which "midnight" a bare date means.
+    options: '-c timezone=Asia/Kolkata',
   })
 
   _pool.on('error', (err) => {

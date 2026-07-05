@@ -13,6 +13,10 @@ async function apiGet(path: string) {
   if (!token) return null
   const res = await fetch(API_BASE + path, { headers: { Authorization: 'Bearer ' + token } })
   if (res.status === 401) { localStorage.clear(); return null }
+  // Without this, a 404 (removed/merged place) left `place` null forever
+  // with the loading spinner still showing, indistinguishable from a slow
+  // network — the caller now gets null and can show a real "not found" state.
+  if (!res.ok) return null
   return res.json()
 }
 
@@ -55,6 +59,10 @@ export default function SmartPlaceDetail() {
   const [weeklyVisits, setWeeklyVisits] = useState<WeekPoint[]>([])
   const [monthlyVisits, setMonthlyVisits] = useState<MonthPoint[]>([])
   const [visits, setVisits] = useState<Visit[]>([])
+  // Distinguishes "still fetching" from "fetch finished but place doesn't
+  // exist" — without this, a 404 (removed/merged place, bad link) left
+  // `place` null forever with the "Loading…" text shown indefinitely.
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const mapRef = useRef<HTMLDivElement>(null)
   const leafletMapRef = useRef<LeafletMap | null>(null)
@@ -64,7 +72,13 @@ export default function SmartPlaceDetail() {
     if (!placeId || !userId) return
     (async () => {
       const data = await apiGet(`/smart-places/${userId}/${placeId}`)
-      if (data?.place) { setPlace(data.place); setWeeklyVisits(data.weeklyVisits || []); setMonthlyVisits(data.monthlyVisits || []) }
+      if (data?.place) {
+        setPlace(data.place)
+        setWeeklyVisits(data.weeklyVisits || [])
+        setMonthlyVisits(data.monthlyVisits || [])
+      } else {
+        setLoadFailed(true)
+      }
       const visitsData = await apiGet(`/smart-places/${userId}/${placeId}/visits?limit=20`)
       if (visitsData?.visits) setVisits(visitsData.visits)
     })()
@@ -97,7 +111,7 @@ export default function SmartPlaceDetail() {
           <div className={styles.header}>
             <Link to={`/parent/smart-places?userId=${userId}`} className={styles.backBtn}>← Back</Link>
           </div>
-          <div className={styles.emptyState}>Loading…</div>
+          <div className={styles.emptyState}>{loadFailed ? 'Place not found — it may have been removed or merged.' : 'Loading…'}</div>
         </div>
       </div>
     )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import styles from './SmartPlaces.module.css'
 import DateRangeFilter from '../components/DateRangeFilter'
@@ -12,6 +12,7 @@ async function apiGet(path: string) {
   if (!token) return null
   const res = await fetch(API_BASE + path, { headers: { Authorization: 'Bearer ' + token } })
   if (res.status === 401) { localStorage.clear(); return null }
+  if (!res.ok) return null
   return res.json()
 }
 
@@ -68,6 +69,7 @@ export default function SmartPlaces() {
   const [useDateFilter, setUseDateFilter] = useState(false)
   const [range, setRange] = useState<DateRange>(() => rangeForPreset('30d'))
   const [loading, setLoading] = useState(false)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
     (async () => {
@@ -84,6 +86,10 @@ export default function SmartPlaces() {
 
   const loadPlaces = useCallback(async () => {
     if (!userId) return
+    // Guard against out-of-order responses when the user quickly changes
+    // member/search/date-filter — an earlier, slower request resolving
+    // after a newer one would otherwise silently overwrite fresher results.
+    const requestId = ++requestIdRef.current
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -91,9 +97,10 @@ export default function SmartPlaces() {
       if (useDateFilter) { params.set('from', range.from); params.set('to', range.to) }
       params.set('sort', 'visits')
       const data = await apiGet(`/smart-places/${userId}?${params.toString()}`)
-      if (data?.places) setPlaces(data.places)
+      if (requestId !== requestIdRef.current) return
+      setPlaces(data?.places || [])
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [userId, query, useDateFilter, range])
 

@@ -34,6 +34,12 @@ async function apiGet(path: string) {
   if (!token) return null
   const res = await fetch(API_BASE + path, { headers: { Authorization: 'Bearer ' + token } })
   if (res.status === 401) { localStorage.clear(); return null }
+  // Without this, an error body (403/404/500) was returned as if it were
+  // real data — e.g. route.simplified was undefined on an error response,
+  // which satisfied `!route.simplified` and rendered RouteReplay with
+  // route.points undefined, crashing on points.length before its own
+  // empty-check guard.
+  if (!res.ok) return null
   return res.json()
 }
 
@@ -91,6 +97,7 @@ export default function Timeline() {
   const polylineLayerRef = useRef<InstanceType<typeof L.LayerGroup> | null>(null)
   const clusterGroupRef = useRef<LeafletClusterGroup | null>(null)
   const currentMarkerRef = useRef<InstanceType<typeof L.Marker> | null>(null)
+  const timelineRequestIdRef = useRef(0)
 
   const currentUser = getCurrentUser()
   const isChildViewer = currentUser?.account_type === 'child'
@@ -138,22 +145,29 @@ export default function Timeline() {
 
   const loadTimelineData = useCallback(async () => {
     if (!userId) return
+    // Guard against out-of-order responses: if the user quickly switches
+    // member/date-range, an earlier (slower) request resolving after a
+    // newer one would otherwise silently overwrite the fresher state with
+    // stale data for a range/member no longer selected.
+    const requestId = ++timelineRequestIdRef.current
     setLoading(true)
     try {
       const [stopsData, routeData] = await Promise.all([
         apiGet(`/timeline/${userId}/stops?from=${range.from}&to=${range.to}&limit=200`),
         apiGet(`/timeline/${userId}/route?from=${range.from}&to=${range.to}${isSingleDay ? '' : '&simplify=25'}`),
       ])
-      if (stopsData?.stops) setStops(stopsData.stops)
-      if (routeData) setRoute(routeData)
+      if (requestId !== timelineRequestIdRef.current) return
+      setStops(stopsData?.stops || [])
+      setRoute(routeData || null)
       if (isSingleDay) {
         const summaryData = await apiGet(`/timeline/${userId}/summary?date=${range.to}`)
-        if (summaryData) setSummary(summaryData)
+        if (requestId !== timelineRequestIdRef.current) return
+        setSummary(summaryData || null)
       } else {
         setSummary(null)
       }
     } finally {
-      setLoading(false)
+      if (requestId === timelineRequestIdRef.current) setLoading(false)
     }
   }, [userId, range, isSingleDay])
 

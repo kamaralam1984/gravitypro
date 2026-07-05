@@ -6,7 +6,17 @@ export interface DateRange {
   to: string   // YYYY-MM-DD
 }
 
-export const toDateStr = (d: Date) => d.toISOString().slice(0, 10)
+// Local calendar date, NOT toISOString().slice(0,10) — that returns the UTC
+// date, which is wrong by a day for part of every day in any timezone ahead
+// of UTC (e.g. IST, UTC+5:30): pressing "Today" between midnight and 5:30am
+// IST would return yesterday's UTC date, silently showing yesterday's data
+// labeled "Today" during exactly the hours a parent is most likely checking.
+export const toDateStr = (d: Date) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 export function rangeForPreset(preset: RangePreset, customFrom?: string, customTo?: string): DateRange {
   const today = new Date()

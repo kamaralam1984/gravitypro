@@ -313,14 +313,18 @@ router.get('/:userId/stops', authenticate, async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200)
   const cursor = req.query.cursor ? new Date(String(req.query.cursor)) : null
 
+  // Overlap with the [from, to] window, not just "started inside it" — a
+  // stop that began the night before `from` and hasn't departed yet (e.g.
+  // still asleep at home) would otherwise vanish entirely from every day
+  // after the one it started on, even though the user is there the whole time.
   const result = await query(
     `SELECT id, ST_Y(center_geom) as lat, ST_X(center_geom) as lng,
             arrived_at, departed_at, point_count, place_name, place_type,
             address, safe_zone_id, safe_zone_name, photo_ids
        FROM timeline_stops
       WHERE user_id = $1
-        AND arrived_at >= $2::date
         AND arrived_at < ($3::date + INTERVAL '1 day')
+        AND (departed_at IS NULL OR departed_at >= $2::date)
         AND ($4::timestamptz IS NULL OR arrived_at < $4)
       ORDER BY arrived_at DESC
       LIMIT $5`,
@@ -441,17 +445,30 @@ router.get('/:userId/summary', authenticate, async (req, res) => {
     return res.status(403).json({ error: 'Not allowed to view this user' })
   }
 
+  // Overlap with the day, not "started during it" — a stop that began the
+  // night before and hasn't departed yet (e.g. still asleep at home) would
+  // otherwise be invisible to every day after the one it started on.
   const stopsResult = await query(
     `SELECT place_name, safe_zone_name, arrived_at, departed_at
        FROM timeline_stops
-      WHERE user_id = $1 AND arrived_at >= $2::date AND arrived_at < ($2::date + INTERVAL '1 day')
+      WHERE user_id = $1
+        AND arrived_at < ($2::date + INTERVAL '1 day')
+        AND (departed_at IS NULL OR departed_at >= $2::date)
       ORDER BY arrived_at ASC`,
     [userId, date]
   )
+  // Day boundaries as real UTC instants (IST midnight), so a stop that
+  // spans past midnight only counts its portion that actually falls on
+  // this day toward stoppedSec — not its full multi-day duration.
+  const dayStart = new Date(`${date}T00:00:00+05:30`)
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
   let stoppedSec = 0
   const placesVisited = stopsResult.rows.map((r) => {
-    const departedAt = r.departed_at || new Date()
-    stoppedSec += Math.max(0, Math.round((new Date(departedAt) - new Date(r.arrived_at)) / 1000))
+    const arrivedAt = new Date(r.arrived_at)
+    const departedAt = r.departed_at ? new Date(r.departed_at) : new Date()
+    const clippedStart = arrivedAt < dayStart ? dayStart : arrivedAt
+    const clippedEnd = departedAt > dayEnd ? dayEnd : departedAt
+    stoppedSec += Math.max(0, Math.round((clippedEnd - clippedStart) / 1000))
     return { name: r.place_name || r.safe_zone_name || 'Unknown', arrivedAt: r.arrived_at, departedAt: r.departed_at }
   })
 

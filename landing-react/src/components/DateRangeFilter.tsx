@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import styles from './DateRangeFilter.module.css'
 import { rangeForPreset, toDateStr } from './dateRange'
 import type { RangePreset, DateRange } from './dateRange'
@@ -26,6 +26,16 @@ export default function DateRangeFilter({ value, onChange, presets = DEFAULT_PRE
   const [customFrom, setCustomFrom] = useState(value.from)
   const [customTo, setCustomTo] = useState(value.to)
   const visiblePresets = ALL_PRESETS.filter((p) => presets.includes(p.key))
+
+  // Keep the Custom inputs tracking whichever preset is actually active, so
+  // that switching Today -> Last 30 Days -> Custom prefills the just-active
+  // 30-day range instead of silently reverting to whatever was set at mount.
+  useEffect(() => {
+    if (value.preset !== 'custom') {
+      setCustomFrom(value.from)
+      setCustomTo(value.to)
+    }
+  }, [value.preset, value.from, value.to])
 
   return (
     <div className={styles.wrap}>
