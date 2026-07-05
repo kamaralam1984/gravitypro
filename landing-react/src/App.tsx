@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import ParentPanel from './pages/ParentPanel'
@@ -13,9 +14,13 @@ import SmartPlaces from './pages/SmartPlaces'
 import SmartPlaceDetail from './pages/SmartPlaceDetail'
 import NotFound from './pages/NotFound'
 
-function App() {
+// Keyed by pathname so a crash on one route doesn't leave every subsequent
+// client-side navigation stuck on the same blank error screen — each new
+// route gets a fresh ErrorBoundary instance.
+function AppRoutes() {
+  const location = useLocation()
   return (
-    <BrowserRouter>
+    <ErrorBoundary key={location.pathname}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
@@ -36,6 +41,14 @@ function App() {
         <Route path="/admin/panel" element={<AdminPanel />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+    </ErrorBoundary>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
     </BrowserRouter>
   )
 }
