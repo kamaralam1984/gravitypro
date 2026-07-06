@@ -103,7 +103,13 @@ export default function WebPanelScreen({ path }) {
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         originWhitelist={['*']}
-        pullToRefreshEnabled
+        // Removed pullToRefreshEnabled: on Android it forces a native
+        // webView.reload() on a downward swipe gesture, independent of the
+        // source/inject prop stability fixes above — a swipe while
+        // scrolling a list (Timeline stops, Smart Places) can misfire as
+        // pull-to-refresh and blow away whatever client-side SPA route
+        // (Timeline/Smart Places) the user had navigated into, back to the
+        // panel's original URL, producing the same blank-screen symptom.
         allowsBackForwardNavigationGestures
         geolocationEnabled
         startInLoadingState
