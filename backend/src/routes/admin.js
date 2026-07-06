@@ -1,14 +1,24 @@
 const router = require('express').Router()
 const jwt = require('jsonwebtoken')
+const rateLimit = require('express-rate-limit')
 const { query } = require('../config/db')
 const crypto = require('crypto')
+
+// Falls back to JWT_SECRET if ADMIN_JWT_SECRET isn't configured yet, so
+// existing deployments don't break — but a shared secret means one leaked
+// user-auth secret compromises admin too. Set ADMIN_JWT_SECRET in .env to
+// fully separate the two trust roots.
+const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET
+if (!process.env.ADMIN_JWT_SECRET) {
+  console.warn('[admin] ADMIN_JWT_SECRET not set — falling back to JWT_SECRET (shared with regular user auth)')
+}
 
 // Admin auth middleware
 const adminAuth = (req, res, next) => {
   const token = req.headers['x-admin-token']
   if (!token) return res.status(401).json({ error: 'Admin token required' })
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const decoded = jwt.verify(token, ADMIN_JWT_SECRET)
     if (decoded.role !== 'admin') return res.status(403).json({ error: 'Not admin' })
     next()
   } catch {
@@ -16,13 +26,24 @@ const adminAuth = (req, res, next) => {
   }
 }
 
+// The global /api/ limiter (12000 req/15min) is sized for location-polling
+// families and is far too permissive for a password-guessing endpoint —
+// this caps login attempts specifically, independent of that budget.
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Try again later.' },
+})
+
 // POST /api/v1/admin/login
-router.post('/login', async (req, res) => {
+router.post('/login', adminLoginLimiter, async (req, res) => {
   const { password } = req.body
   if (!password || password !== process.env.ADMIN_SECRET) {
     return res.status(401).json({ error: 'Invalid admin password' })
   }
-  const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '12h' })
+  const token = jwt.sign({ role: 'admin' }, ADMIN_JWT_SECRET, { expiresIn: '12h' })
   res.json({ token, admin: true })
 })
 
