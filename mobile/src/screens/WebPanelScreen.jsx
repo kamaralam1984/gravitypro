@@ -16,6 +16,15 @@ const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesss
  *
  * Pass `path` to force a panel, otherwise it auto-selects by the user's account_type.
  */
+// TEMPORARY diagnostic — the Timeline/Smart Places blank-screen bug has
+// survived three separate fixes (source/inject prop stability, removing
+// pullToRefreshEnabled) targeting a "WebView silently reloads" theory that
+// hasn't been directly confirmed on a real device. This overlay makes the
+// WebView's actual load/navigation events visible on-screen (no DevTools
+// needed) so the next report can include real evidence instead of another
+// guess. Remove once the real cause is found and fixed.
+const DEBUG_OVERLAY = true
+
 export default function WebPanelScreen({ path }) {
   const insets = useSafeAreaInsets()
   const webRef = useRef(null)
@@ -24,6 +33,12 @@ export default function WebPanelScreen({ path }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [debugLog, setDebugLog] = useState([])
+  const logEvent = (label) => {
+    if (!DEBUG_OVERLAY) return
+    const time = new Date().toLocaleTimeString()
+    setDebugLog((prev) => [...prev.slice(-4), `${time} ${label}`])
+  }
   const token = useAuthStore(s => s.token)
   const user = useAuthStore(s => s.user)
   const updateUser = useAuthStore(s => s.updateUser)
@@ -66,11 +81,25 @@ export default function WebPanelScreen({ path }) {
       ${token ? `localStorage.setItem('gravity_token', ${JSON.stringify(token)});` : ''}
       localStorage.setItem('gravity_user', ${JSON.stringify(userKey)});
     }catch(e){}})(); true;`
+    logEvent(`uri/inject effect ran -> ${resolvedPath}`)
     setInject(js)
     setUri(BASE + resolvedPath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, accountType, token, userKey])
 
   const retry = () => { setError(false); setLoading(true); setReloadKey(k => k + 1) }
+
+  // Android can kill the WebView's render process under memory pressure
+  // (heavy pages — Leaflet map + marker clustering + polylines, exactly what
+  // Timeline/Smart Places render — are the most likely to trigger this on
+  // lower-RAM devices). Without handling this, the WebView is left showing
+  // whatever was on screen when the process died — typically blank white —
+  // forever, with no error event firing (onError does NOT cover this case).
+  // Recommended react-native-webview recovery: reload once automatically.
+  const onRenderProcessGone = () => {
+    logEvent('RENDER PROCESS GONE -> auto-reloading')
+    webRef.current?.reload()
+  }
 
   // A background /users/me refresh (see effect above) creates a NEW `user`
   // object reference even when the data is unchanged, which re-runs the
@@ -95,9 +124,12 @@ export default function WebPanelScreen({ path }) {
         ref={webRef}
         source={source}
         injectedJavaScriptBeforeContentLoaded={inject}
-        onLoadStart={() => { setLoading(true); setError(false) }}
-        onLoadEnd={() => setLoading(false)}
-        onError={() => { setError(true); setLoading(false) }}
+        onLoadStart={(e) => { logEvent(`onLoadStart ${e?.nativeEvent?.url?.slice(-40) || ''}`); setLoading(true); setError(false) }}
+        onLoadEnd={(e) => { logEvent(`onLoadEnd ${e?.nativeEvent?.url?.slice(-40) || ''}`); setLoading(false) }}
+        onError={(e) => { logEvent(`onError ${e?.nativeEvent?.description || ''}`); setError(true); setLoading(false) }}
+        onNavigationStateChange={(nav) => logEvent(`nav -> ${(nav?.url || '').slice(-40)} (loading:${nav?.loading})`)}
+        onContentProcessDidTerminate={() => { logEvent('CONTENT PROCESS TERMINATED (iOS crash) -> reloading'); webRef.current?.reload() }}
+        onRenderProcessGone={onRenderProcessGone}
         domStorageEnabled
         javaScriptEnabled
         sharedCookiesEnabled
@@ -128,6 +160,13 @@ export default function WebPanelScreen({ path }) {
           </TouchableOpacity>
         </View>
       )}
+      {DEBUG_OVERLAY && (
+        <View style={styles.debugBox} pointerEvents="none">
+          {debugLog.map((l, i) => (
+            <Text key={i} style={styles.debugText} numberOfLines={1}>{l}</Text>
+          ))}
+        </View>
+      )}
     </View>
   )
 }
@@ -145,4 +184,14 @@ const styles = StyleSheet.create({
   errText: { color: Colors.textMuted, textAlign: 'center', fontSize: 14, marginBottom: 16, lineHeight: 20 },
   retry: { backgroundColor: Colors.accent, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 },
   retryText: { color: '#071a0f', fontWeight: '700', fontSize: 14 },
+  debugBox: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    bottom: 4,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 6,
+    padding: 4,
+  },
+  debugText: { color: '#00E676', fontSize: 9, fontFamily: 'monospace' },
 })
