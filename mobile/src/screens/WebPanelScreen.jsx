@@ -44,19 +44,31 @@ export default function WebPanelScreen({ path }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey])
 
+  // A VALUE-based key, not the `user` object reference — updateUser() always
+  // creates a new object even when the fetched data is byte-for-byte
+  // identical (the background refresh above runs on every mount). Using the
+  // object itself as an effect dependency re-ran this effect on every such
+  // refresh and produced a new `inject`/`uri`, which made react-native-webview
+  // treat the WebView as having a brand-new source and silently reload it —
+  // including mid-navigation, after the user had already clicked into
+  // Timeline/Smart Places (client-side SPA routes, no full page reload),
+  // producing a blank screen. A string is compared by VALUE in a dependency
+  // array, so this only changes when the underlying data actually does.
+  const userKey = user ? JSON.stringify(user) : null
+
   useEffect(() => {
-    if (!user) return
+    if (userKey === null) return
     const resolvedPath = path || (accountType === 'child' ? '/child/panel' : '/parent/panel')
     // Seed the web app's auth so the panel is already logged in (SSO). Both
     // the routing decision above and this injected snapshot now read from the
     // SAME live store value — no second, independently-stale source.
     const js = `(function(){try{
       ${token ? `localStorage.setItem('gravity_token', ${JSON.stringify(token)});` : ''}
-      localStorage.setItem('gravity_user', ${JSON.stringify(JSON.stringify(user))});
+      localStorage.setItem('gravity_user', ${JSON.stringify(userKey)});
     }catch(e){}})(); true;`
     setInject(js)
     setUri(BASE + resolvedPath)
-  }, [path, accountType, token, user])
+  }, [path, accountType, token, userKey])
 
   const retry = () => { setError(false); setLoading(true); setReloadKey(k => k + 1) }
 
