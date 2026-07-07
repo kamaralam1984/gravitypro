@@ -669,7 +669,7 @@ export default function ParentPanel() {
       const d = JSON.parse((e as MessageEvent).data)
       showToast('🆘 SOS from ' + (d.userName || 'Member') + '!', 'error')
       const newAlert: AlertItem = {
-        id: 'sos-live-' + Date.now(),
+        id: d.id ? 'sos-' + d.id : 'sos-live-' + Date.now(),
         type: 'sos',
         icon: '🆘',
         title: (d.userName || 'Member') + ' sent SOS alert',
@@ -713,9 +713,13 @@ export default function ParentPanel() {
     const alert = alerts.find((a) => a.id === id)
     // SOS alerts must be persisted as resolved on the backend; geofence/battery
     // alerts are local-only dismissals. Best-effort: still remove locally on failure.
+    // `id` here is the AlertItem id, which is prefixed ('sos-<uuid>') to keep it
+    // distinct from geofence alert ids — strip the prefix to get the real
+    // sos_events row id the backend expects.
     if (alert?.type === 'sos') {
-      apiPatch('/sos/' + id + '/resolve', {}).catch((err) => {
-        console.error('Failed to resolve SOS alert', id, err)
+      const sosId = id.startsWith('sos-') ? id.slice(4) : id
+      apiPatch('/sos/' + sosId + '/resolve', {}).catch((err) => {
+        console.error('Failed to resolve SOS alert', sosId, err)
       })
     }
     setAlerts((prev) => prev.filter((a) => a.id !== id))

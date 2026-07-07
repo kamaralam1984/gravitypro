@@ -438,9 +438,9 @@ export default function AlertsScreen() {
       try {
         const data = JSON.parse(e.data)
         const newItem = {
-          id: data.sosId || String(Date.now()),
+          id: data.id || String(Date.now()),
           user_id: data.userId,
-          user_name: data.name,
+          user_name: data.userName,
           message: data.message,
           latitude: data.latitude,
           longitude: data.longitude,
@@ -452,7 +452,7 @@ export default function AlertsScreen() {
         setBanner({
           key: bannerKey.current,
           type: 'sos',
-          title: `SOS from ${data.name}`,
+          title: `SOS from ${data.userName}`,
           body: data.message || 'Emergency alert triggered',
         })
       } catch (err) {
@@ -468,7 +468,7 @@ export default function AlertsScreen() {
           key: bannerKey.current,
           type: 'geofence',
           eventType: 'enter',
-          title: `${data.name || 'Someone'} is safe`,
+          title: `${data.userName || 'Someone'} is safe`,
           body: data.message || 'They reported being safe',
         })
       } catch (err) {

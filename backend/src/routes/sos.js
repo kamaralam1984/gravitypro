@@ -20,9 +20,22 @@ router.post('/', authenticate, async (req, res) => {
     message: message || 'SOS! I need help!',
     timestamp: new Date().toISOString(),
   }
+  // Log SOS to DB first — the SSE payload needs each row's real id so
+  // clients can later resolve/dismiss this exact alert (see below).
+  const sosIdByCircle = {}
+  for (const row of circles.rows) {
+    const ins = await query(
+      `INSERT INTO sos_events (user_id, user_name, circle_id, latitude, longitude, message)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [userId, req.user.name, row.circle_id, latitude || null, longitude || null, message || 'SOS! I need help!']
+    ).catch(() => ({ rows: [] }))
+    sosIdByCircle[row.circle_id] = ins.rows[0]?.id || null
+  }
   // Send SOS via SSE to all circle members
   for (const row of circles.rows) {
-    await sendToCircleMembers(row.circle_id, 'sos_alert', sosData)
+    await sendToCircleMembers(row.circle_id, 'sos_alert', { ...sosData, id: sosIdByCircle[row.circle_id] })
   }
   // Send push notifications to all circle members
   try {
@@ -101,15 +114,6 @@ router.post('/', authenticate, async (req, res) => {
     }
   } catch (e) {
     console.error('[SOS] emergency-contact notify failed:', e.message)
-  }
-  // Log SOS to DB
-  for (const row of circles.rows) {
-    await query(
-      `INSERT INTO sos_events (user_id, user_name, circle_id, latitude, longitude, message)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT DO NOTHING`,
-      [userId, req.user.name, row.circle_id, latitude || null, longitude || null, message || 'SOS! I need help!']
-    ).catch(() => {})
   }
   // Log SOS event in geofence_events table if location available
   if (latitude && longitude) {
