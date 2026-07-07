@@ -70,6 +70,7 @@ interface OtpRecord {
   code: string
   expires_at: string
   used: boolean
+  sms_sent: boolean | null
   created_at: string
 }
 
@@ -614,9 +615,14 @@ export default function AdminPanel() {
     todayStart.setHours(0, 0, 0, 0)
     const todayOtps = otps.filter(o => new Date(o.created_at).getTime() >= todayStart.getTime())
     const todaySent = todayOtps.length
-    const todayDelivered = todayOtps.filter(o => o.used).length
-    const failed = todayOtps.filter(o => !o.used && new Date(o.expires_at).getTime() < Date.now()).length
-    const deliveryRate = todaySent > 0 ? Math.round((todayDelivered / todaySent) * 100) : 0
+    // sms_sent is the real SMS-provider delivery outcome (persisted separately
+    // from `used`, which only means the code was later verified/entered by a
+    // user — a normal drop-off, not a delivery failure). null = legacy rows
+    // from before delivery outcome was tracked; excluded from the rate.
+    const knownOutcome = todayOtps.filter(o => o.sms_sent !== null)
+    const todayDelivered = knownOutcome.filter(o => o.sms_sent === true).length
+    const failed = knownOutcome.filter(o => o.sms_sent === false).length
+    const deliveryRate = knownOutcome.length > 0 ? Math.round((todayDelivered / knownOutcome.length) * 100) : 0
     return { todaySent, todayDelivered, failed, deliveryRate }
   }
 

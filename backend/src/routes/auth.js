@@ -132,14 +132,18 @@ router.post('/send-otp', async (req, res) => {
 
   const otp = generateOTP()
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 min
-  await query(
-    `INSERT INTO phone_otps (phone, code, expires_at) VALUES ($1, $2, $3)`,
+  const inserted = await query(
+    `INSERT INTO phone_otps (phone, code, expires_at) VALUES ($1, $2, $3) RETURNING id`,
     [cleanPhone, otp, expiresAt]
   )
 
   // Don't block the HTTP response on the (possibly slow) SMS provider — that caused
   // the app to time out and show "Network Error". Wait at most 4s, then respond.
   const smsSent = await sendWithin(sendSMS(cleanPhone, otp), 4000)
+  // Persist the real delivery outcome (separate from `used`, which only means
+  // the code was later verified) so admin OTP Logs can report true SMS
+  // delivery stats instead of conflating them with verification/drop-off.
+  await query('UPDATE phone_otps SET sms_sent = $1 WHERE id = $2', [smsSent, inserted.rows[0].id]).catch(() => {})
 
   res.json({
     success: true,
