@@ -4,6 +4,7 @@ const cors = require('cors')
 const helmet = require('helmet')
 const morgan = require('morgan')
 const rateLimit = require('express-rate-limit')
+const { GLOBAL_API_WINDOW_MS, GLOBAL_API_MAX } = require('./config/rateLimits')
 
 const authRoutes = require('./routes/auth')
 const userRoutes = require('./routes/users')
@@ -32,7 +33,7 @@ app.use(express.json({ limit: '10mb' }))
 // shares ONE public IP (home WiFi / carrier NAT), and every device reports its
 // location every few seconds — so a low limit would 429 legitimate families.
 // 12000 / 15 min (~800/min per IP) leaves big headroom while still blocking abuse.
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 12000, standardHeaders: true, legacyHeaders: false })
+const limiter = rateLimit({ windowMs: GLOBAL_API_WINDOW_MS, max: GLOBAL_API_MAX, standardHeaders: true, legacyHeaders: false })
 app.use('/api/', limiter)
 
 // Routes

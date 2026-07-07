@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken')
 const rateLimit = require('express-rate-limit')
 const { query } = require('../config/db')
 const crypto = require('crypto')
+const { GLOBAL_API_WINDOW_MS, GLOBAL_API_MAX } = require('../config/rateLimits')
 
 // Falls back to JWT_SECRET if ADMIN_JWT_SECRET isn't configured yet, so
 // existing deployments don't break — but a shared secret means one leaked
@@ -200,9 +201,19 @@ router.get('/geofences', adminAuth, async (req, res) => {
 })
 
 // GET /api/v1/admin/otps
+// Codes that are still unused AND unexpired are still valid, live login
+// credentials — anyone with admin access could use one to log into that
+// user's account before they enter it themselves. Mask those; a used or
+// expired code can no longer log anyone in, so it's safe to show for
+// SMS-delivery debugging.
 router.get('/otps', adminAuth, async (req, res) => {
   const r = await query('SELECT phone, code, expires_at, used, sms_sent, created_at FROM phone_otps ORDER BY created_at DESC LIMIT 100')
-  res.json({ otps: r.rows })
+  const now = Date.now()
+  const otps = r.rows.map((row) => {
+    const isLive = !row.used && new Date(row.expires_at).getTime() > now
+    return { ...row, code: isLive ? '••••••' : row.code }
+  })
+  res.json({ otps })
 })
 
 // GET /api/v1/admin/system
@@ -216,7 +227,7 @@ router.get('/system', adminAuth, async (req, res) => {
   res.json({
     dbSize: dbSize.rows[0]?.db_size || 'N/A',
     tables: tables.rows,
-    rateLimit: { windowMs: 900000, max: 1000 },
+    rateLimit: { windowMs: GLOBAL_API_WINDOW_MS, max: GLOBAL_API_MAX },
     nodeVersion: process.version,
     uptime: process.uptime(),
     connectedClients: connected,
