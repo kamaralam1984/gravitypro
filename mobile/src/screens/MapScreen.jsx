@@ -222,7 +222,7 @@ export default function MapScreen() {
       es.addEventListener('sos_safe', (e) => {
         try {
           const data = JSON.parse(e.data)
-          showToast(`${data.name || 'Someone'} is safe`, c.success)
+          showToast(`${data.userName || 'Someone'} is safe`, c.success)
           // Dismiss active SOS overlay if it's from the same user
           setSosAlert(prev => (prev && prev.userId === data.userId) ? null : prev)
         } catch (_) {}
