@@ -126,6 +126,7 @@ export default function ChildPanel() {
   // geolocation watch ref
   const watchIdRef = useRef<number | null>(null)
   const lastLocationSentRef = useRef<number>(0)
+  const sseRef = useRef<EventSource | null>(null)
 
   // SOS state — home
   const [homeSosActive, setHomeSosActive] = useState(false)
@@ -361,7 +362,15 @@ export default function ChildPanel() {
     const fallback = setTimeout(() => {
       setHasCircle(prev => prev === null ? false : prev)
     }, 4000)
-    return () => clearTimeout(fallback)
+    return () => {
+      clearTimeout(fallback)
+      sseRef.current?.close()
+      sseRef.current = null
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+    }
   }, [apiGet, gravityUser])
 
   // Geolocation watch — sends child's own location to backend every 30 s
@@ -412,7 +421,9 @@ export default function ChildPanel() {
   // SSE
   const connectSSE = useCallback(() => {
     if (!currentCircleIdRef.current || !gravityToken) return
+    sseRef.current?.close()
     const evtSource = new EventSource(API_BASE + '/sse/stream?token=' + gravityToken)
+    sseRef.current = evtSource
     evtSource.addEventListener('location_update', (e: MessageEvent) => {
       const d = JSON.parse(e.data)
       if (!d.userId || !d.latitude || !d.longitude) return
@@ -457,7 +468,10 @@ export default function ChildPanel() {
       }, ...prev].slice(0, 50))
       setUnreadAlerts(prev => prev + 1)
     })
-    evtSource.onerror = () => evtSource.close()
+    evtSource.onerror = () => {
+      evtSource.close()
+      if (sseRef.current === evtSource) sseRef.current = null
+    }
   }, [gravityToken, showToast])
 
   // Reveal observer
