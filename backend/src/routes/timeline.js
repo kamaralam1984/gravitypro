@@ -61,11 +61,16 @@ router.get('/:userId/days', authenticate, async (req, res) => {
   if (!(await canView(req.user.id, userId))) {
     return res.status(403).json({ error: 'Not allowed to view this user' })
   }
+  // Sargable range predicate (month + '-01' as the range start) instead of
+  // to_char(recorded_at, 'YYYY-MM') = $2, which can't use the recorded_at
+  // index — the DISTINCT day list itself still needs to_char() to format
+  // output, but that no longer gates which rows get scanned.
   const result = await query(
     `SELECT DISTINCT to_char(recorded_at, 'YYYY-MM-DD') AS day
        FROM device_locations
       WHERE user_id = $1
-        AND to_char(recorded_at, 'YYYY-MM') = $2
+        AND recorded_at >= ($2 || '-01')::date
+        AND recorded_at < (($2 || '-01')::date + INTERVAL '1 month')
       ORDER BY day`,
     [userId, month]
   )
@@ -79,13 +84,15 @@ router.get('/:userId/days', authenticate, async (req, res) => {
 async function computeDay(userId, date) {
   const zeros = { totalDistanceMeters: 0, placesVisited: 0, movingSec: 0, stillSec: 0 }
 
-  // Fetch the day's ordered points (lat/lng + timestamp)
+  // Fetch the day's ordered points (lat/lng + timestamp). Uses a sargable
+  // range predicate (matches /summary and /route below) instead of
+  // to_char(recorded_at, ...) = $2, which can't use the recorded_at index.
   const ptsRes = await query(
     `SELECT ST_Y(geom) AS lat, ST_X(geom) AS lng, recorded_at,
             EXTRACT(EPOCH FROM recorded_at) * 1000 AS ts
        FROM device_locations
       WHERE user_id = $1
-        AND to_char(recorded_at, 'YYYY-MM-DD') = $2
+        AND recorded_at >= $2::date AND recorded_at < ($2::date + INTERVAL '1 day')
       ORDER BY recorded_at ASC`,
     [userId, date]
   )
@@ -144,33 +151,47 @@ async function computeDay(userId, date) {
     clng: Number(z.clng),
   }))
 
-  async function nearestZone(lat, lng) {
-    if (!zones.length) return { place: 'Unknown', zoneId: null, category: null, inside: false }
-    let best = null
-    let bestD = Infinity
-    for (const z of zones) {
-      const d = haversine(lat, lng, z.clat, z.clng)
-      if (d < bestD) {
-        bestD = d
-        best = z
+  // Nearest zone (by centroid distance, pure JS) for each stay centroid, plus
+  // true polygon containment for all of them in ONE batched query — instead
+  // of nearestZone() issuing its own ST_Contains query per stay, which meant
+  // one extra DB round-trip per stay cluster in the day.
+  async function nearestZonesBatch(centroids) {
+    if (!zones.length) return centroids.map(() => ({ place: 'Unknown', zoneId: null, category: null, inside: false }))
+    const nearest = centroids.map(({ lat, lng }) => {
+      let best = null
+      let bestD = Infinity
+      for (const z of zones) {
+        const d = haversine(lat, lng, z.clat, z.clng)
+        if (d < bestD) {
+          bestD = d
+          best = z
+        }
       }
-    }
-    // Determine "inside" by true polygon containment in PostGIS.
-    let inside = false
-    if (best) {
+      return best
+    })
+    const candidates = []
+    nearest.forEach((z, i) => { if (z) candidates.push({ i, lat: centroids[i].lat, lng: centroids[i].lng, zoneId: z.id }) })
+    const insideByIndex = new Map()
+    if (candidates.length) {
+      const values = candidates.map((_, k) => `($${k * 4 + 1}::int, $${k * 4 + 2}::float8, $${k * 4 + 3}::float8, $${k * 4 + 4}::uuid)`).join(',')
+      const params = candidates.flatMap((c) => [c.i, c.lng, c.lat, c.zoneId])
       const r = await query(
-        `SELECT ST_Contains(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)) AS inside
-           FROM safe_zones WHERE id = $3`,
-        [lng, lat, best.id]
+        `SELECT v.idx, ST_Contains(sz.geom, ST_SetSRID(ST_MakePoint(v.lng, v.lat), 4326)) AS inside
+           FROM (VALUES ${values}) AS v(idx, lng, lat, zone_id)
+           JOIN safe_zones sz ON sz.id = v.zone_id`,
+        params
       )
-      inside = !!(r.rows[0] && r.rows[0].inside)
+      for (const row of r.rows) insideByIndex.set(row.idx, !!row.inside)
     }
-    return {
-      place: best ? best.name : 'Unknown',
-      zoneId: best ? best.id : null,
-      category: best ? best.category : null,
-      inside,
-    }
+    return centroids.map((_, i) => {
+      const best = nearest[i]
+      return {
+        place: best ? best.name : 'Unknown',
+        zoneId: best ? best.id : null,
+        category: best ? best.category : null,
+        inside: best ? !!insideByIndex.get(i) : false,
+      }
+    })
   }
 
   // ---- Build ordered segments: stays, with trips between them ----
@@ -220,6 +241,10 @@ async function computeDay(userId, date) {
       if (isStay(c)) stayRanges.push({ start, end, cluster: c })
     }
 
+    // One batched nearest-zone/containment lookup for every stay in the day,
+    // instead of one inside the loop below per stay.
+    const stayNz = await nearestZonesBatch(stayRanges.map((sr) => ({ lat: sr.cluster.cLat, lng: sr.cluster.cLng })))
+
     let prevStayEnd = null // index in points of the previous stay's last point
     for (let si = 0; si < stayRanges.length; si++) {
       const sr = stayRanges[si]
@@ -252,7 +277,7 @@ async function computeDay(userId, date) {
       const leave = c.points[c.points.length - 1]
       const durSec = Math.round((leave.ts - arrive.ts) / 1000)
       stillSec += durSec
-      const nz = await nearestZone(c.cLat, c.cLng)
+      const nz = stayNz[si]
       segments.push({
         type: 'stay',
         lat: c.cLat,
