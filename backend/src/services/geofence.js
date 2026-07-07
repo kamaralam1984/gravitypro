@@ -17,12 +17,23 @@ const checkGeofenceStatus = async (userId, latitude, longitude) => {
     [locationWKT, userId]
   )
 
+  if (!result.rows.length) return
+
+  // One batched lookup of each zone's most recent event for this user, instead
+  // of a separate query per zone — this function runs on every single GPS
+  // location update (and once per point in a /locations/batch upload), so a
+  // per-zone query multiplied out to N extra round-trips per ping.
+  const lastEvents = await query(
+    `SELECT DISTINCT ON (safe_zone_id) safe_zone_id, event_type
+     FROM geofence_events
+     WHERE user_id = $1 AND safe_zone_id = ANY($2)
+     ORDER BY safe_zone_id, created_at DESC`,
+    [userId, result.rows.map(z => z.id)]
+  )
+  const lastEventByZone = new Map(lastEvents.rows.map(r => [r.safe_zone_id, r.event_type]))
+
   for (const zone of result.rows) {
-    const lastEvent = await query(
-      'SELECT event_type FROM geofence_events WHERE user_id = $1 AND safe_zone_id = $2 ORDER BY created_at DESC LIMIT 1',
-      [userId, zone.id]
-    )
-    const lastEventType = lastEvent.rows[0]?.event_type || null
+    const lastEventType = lastEventByZone.get(zone.id) || null
     if (zone.is_inside && lastEventType !== 'entry') {
       await query(
         'INSERT INTO geofence_events (user_id, safe_zone_id, event_type, geom) VALUES ($1, $2, $3, ST_SetSRID(ST_GeomFromText($4), 4326))',
