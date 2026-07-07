@@ -482,9 +482,9 @@ export default function AlertsScreen() {
         const newItem = {
           id: String(Date.now()),
           user_id: data.userId,
-          user_name: data.name,
+          user_name: data.userName,
           event_type: data.eventType,
-          safe_zone_id: data.zoneId,
+          zone_id: data.zoneId,
           zone_name: data.zoneName,
           created_at: new Date().toISOString(),
         }
@@ -494,7 +494,7 @@ export default function AlertsScreen() {
           key: bannerKey.current,
           type: 'geofence',
           eventType: data.eventType,
-          title: data.eventType === 'exit' ? `${data.name} left ${data.zoneName}` : `${data.name} arrived at ${data.zoneName}`,
+          title: data.eventType === 'exit' ? `${data.userName} left ${data.zoneName}` : `${data.userName} arrived at ${data.zoneName}`,
           body: data.eventType === 'exit' ? 'Geofence exit event' : 'Geofence entry event',
         })
       } catch (err) {

@@ -121,7 +121,7 @@ export default function MapScreen() {
   const toastTimer = useRef(null)
 
   // ── SOS alert overlay (incoming) ─────────────────────────────────────────
-  const [sosAlert, setSosAlert] = useState(null)          // { userId, name, message, latitude, longitude }
+  const [sosAlert, setSosAlert] = useState(null)          // { userId, userName, message, latitude, longitude }
 
   // ── animations ───────────────────────────────────────────────────────────
   const headerAnim = useRef(new Animated.Value(0)).current
@@ -869,7 +869,7 @@ export default function MapScreen() {
               </View>
             </View>
             <Text style={[styles.sosModalTitle, { color: '#FF8A80' }]}>SOS ALERT</Text>
-            <Text style={styles.sosAlertName}>{sosAlert?.name || 'A family member'}</Text>
+            <Text style={styles.sosAlertName}>{sosAlert?.userName || 'A family member'}</Text>
             <Text style={styles.sosAlertMessage}>
               {sosAlert?.message || 'Needs help!'}
             </Text>
