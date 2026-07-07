@@ -2,9 +2,23 @@ const router = require('express').Router()
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { z } = require('zod')
+const rateLimit = require('express-rate-limit')
 const { query } = require('../config/db')
 const { validate } = require('../middleware/validate')
 const crypto = require('crypto')
+
+// The global /api/ limiter (12000 req/15min, app.js) is sized for
+// location-polling families and far too permissive for endpoints that check
+// a 6-digit OTP or a password — same reasoning as admin.js's
+// adminLoginLimiter, applied here to every user-facing endpoint that
+// verifies an OTP/password against a stored value.
+const otpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Try again later.' },
+})
 
 // ── OTP helpers ──────────────────────────────────────────
 function generateOTP() {
@@ -140,7 +154,7 @@ router.post('/send-otp', async (req, res) => {
 })
 
 // POST /auth/verify-otp  (login via OTP only — no password)
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otp', otpVerifyLimiter, async (req, res) => {
   const { phone, otp } = req.body
   if (!phone || !otp) return res.status(400).json({ error: 'phone and otp required' })
 
@@ -224,7 +238,7 @@ async function consumeEmailOTP(email, otp) {
 }
 
 // POST /auth/verify-email — verify email OTP at SIGNUP; returns short-lived email_token.
-router.post('/verify-email', async (req, res) => {
+router.post('/verify-email', otpVerifyLimiter, async (req, res) => {
   try {
     const { email, otp } = req.body
     if (!email || !otp) return res.status(400).json({ error: 'email and otp required' })
@@ -247,7 +261,7 @@ router.post('/verify-email', async (req, res) => {
 })
 
 // POST /auth/verify-email-otp — LOGIN via email OTP. Returns { user, token }.
-router.post('/verify-email-otp', async (req, res) => {
+router.post('/verify-email-otp', otpVerifyLimiter, async (req, res) => {
   const { email, otp } = req.body
   if (!email || !otp) return res.status(400).json({ error: 'email and otp required' })
   const cleanEmail = email.trim().toLowerCase()
@@ -286,7 +300,7 @@ const loginSchema = z.object({
 })
 
 // POST /auth/register
-router.post('/register', validate(registerSchema), async (req, res) => {
+router.post('/register', otpVerifyLimiter, validate(registerSchema), async (req, res) => {
   const { phone, name, email, password, otp, country_code, account_type } = req.body
 
   // Verify OTP
@@ -320,7 +334,7 @@ router.post('/register', validate(registerSchema), async (req, res) => {
 })
 
 // POST /auth/login
-router.post('/login', validate(loginSchema), async (req, res) => {
+router.post('/login', otpVerifyLimiter, validate(loginSchema), async (req, res) => {
   const { phone, password, otp } = req.body
 
   // Verify OTP first
@@ -367,7 +381,7 @@ router.post('/google', async (req, res) => {
 // POST /auth/verify-phone
 // Verifies OTP, marks it used, returns a short-lived phone_token JWT.
 // Does NOT create any user account.
-router.post('/verify-phone', async (req, res) => {
+router.post('/verify-phone', otpVerifyLimiter, async (req, res) => {
   try {
     const { phone, otp } = req.body
     if (!phone || !otp) return res.status(400).json({ error: 'phone and otp required' })
