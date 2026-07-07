@@ -533,17 +533,26 @@ export default function AdminPanel() {
     setSosLoading(false)
   }, [apiCall])
 
-  const handleResolve = async (id: string) => {
+  const handleResolve = async (id: string): Promise<boolean> => {
     const data = await apiCall(`/sos/${id}/resolve`, 'PATCH')
     if (data) {
       setSosEvents(prev => prev.map(e => e.id === id ? { ...e, resolved: true } : e))
       setSelectedSos(prev => prev.filter(sid => sid !== id))
+      return true
     }
+    showToast('Failed to resolve SOS alert', 'error')
+    return false
   }
 
   const handleResolveSelected = async () => {
-    await Promise.all(selectedSos.map(id => handleResolve(id)))
-    showToast('Resolved', 'success')
+    const results = await Promise.all(selectedSos.map(id => handleResolve(id)))
+    const succeeded = results.filter(Boolean).length
+    const failed = results.length - succeeded
+    if (failed === 0) {
+      showToast(`Resolved ${succeeded} alert${succeeded === 1 ? '' : 's'}`, 'success')
+    } else {
+      showToast(`Resolved ${succeeded}, failed ${failed} — please retry`, 'error')
+    }
   }
 
   const handleDismissSelected = () => {
