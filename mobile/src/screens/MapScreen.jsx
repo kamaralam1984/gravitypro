@@ -231,9 +231,10 @@ export default function MapScreen() {
       es.addEventListener('geofence_event', (e) => {
         try {
           const data = JSON.parse(e.data)
-          const { name, eventType, zoneName } = data
-          const verb = eventType === 'enter' ? 'entered' : 'left'
-          showToast(`${name || 'Someone'} ${verb} ${zoneName || 'a zone'}`, c.info)
+          const { userName, eventType, zoneName } = data
+          // Backend emits 'entry'/'exit' (services/geofence.js), never 'enter'.
+          const verb = eventType === 'entry' ? 'entered' : 'left'
+          showToast(`${userName || 'Someone'} ${verb} ${zoneName || 'a zone'}`, c.info)
         } catch (_) {}
       })
 
