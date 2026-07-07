@@ -49,16 +49,6 @@ router.post('/login', adminLoginLimiter, async (req, res) => {
 
 // GET /api/v1/admin/dashboard
 router.get('/dashboard', adminAuth, async (req, res) => {
-  // Ensure sos_events table exists
-  await query(`CREATE TABLE IF NOT EXISTS sos_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    user_name TEXT,
-    circle_id UUID,
-    latitude FLOAT, longitude FLOAT, message TEXT,
-    resolved BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  )`).catch(() => {})
   // Ensure is_banned column exists
   await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT FALSE').catch(() => {})
 
@@ -91,16 +81,33 @@ router.get('/users', adminAuth, async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1)
   const limit = parseInt(req.query.limit) || 20
   const search = (req.query.search || '').trim()
+  const role = (req.query.role || 'all').trim()
+  const status = (req.query.status || 'all').trim()
   const offset = (page - 1) * limit
-  const where = search ? `WHERE (name ILIKE $1 OR phone ILIKE $1 OR email ILIKE $1)` : ''
-  const params = search ? [`%${search}%`] : []
-  const countParams = [...params]
-  const listParams = search ? [...params, limit, offset] : [limit, offset]
-  const limitIdx = search ? 2 : 1
-  const offsetIdx = search ? 3 : 2
+
+  const conditions = []
+  const params = []
+  if (search) {
+    params.push(`%${search}%`)
+    conditions.push(`(name ILIKE $${params.length} OR phone ILIKE $${params.length} OR email ILIKE $${params.length})`)
+  }
+  if (role === 'parent' || role === 'child') {
+    params.push(role)
+    conditions.push(`account_type = $${params.length}`)
+  }
+  if (status === 'active') {
+    conditions.push('COALESCE(is_banned, FALSE) = FALSE')
+  } else if (status === 'banned') {
+    conditions.push('is_banned = TRUE')
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  const listParams = [...params, limit, offset]
+  const limitIdx = params.length + 1
+  const offsetIdx = params.length + 2
 
   const [countRes, usersRes] = await Promise.all([
-    query(`SELECT COUNT(*) total FROM users ${where}`, countParams),
+    query(`SELECT COUNT(*) total FROM users ${where}`, params),
     query(`SELECT id, name, phone, email, account_type, country_code, avatar_url, created_at, is_banned,
       (SELECT COUNT(*) FROM circle_members WHERE user_id = users.id) circle_count
       FROM users ${where} ORDER BY created_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`, listParams)
@@ -166,12 +173,6 @@ router.patch('/circles/:id/invite', adminAuth, async (req, res) => {
 
 // GET /api/v1/admin/sos
 router.get('/sos', adminAuth, async (req, res) => {
-  await query(`CREATE TABLE IF NOT EXISTS sos_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    user_name TEXT, circle_id UUID, latitude FLOAT, longitude FLOAT,
-    message TEXT, resolved BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW()
-  )`).catch(() => {})
   const r = await query('SELECT se.*, u.phone user_phone FROM sos_events se LEFT JOIN users u ON u.id = se.user_id ORDER BY se.created_at DESC LIMIT 100')
   res.json({ sos_events: r.rows })
 })
@@ -200,7 +201,7 @@ router.get('/geofences', adminAuth, async (req, res) => {
 
 // GET /api/v1/admin/otps
 router.get('/otps', adminAuth, async (req, res) => {
-  const r = await query('SELECT phone, code, expires_at, used, created_at FROM phone_otps ORDER BY created_at DESC LIMIT 100')
+  const r = await query('SELECT phone, code, expires_at, used, sms_sent, created_at FROM phone_otps ORDER BY created_at DESC LIMIT 100')
   res.json({ otps: r.rows })
 })
 
