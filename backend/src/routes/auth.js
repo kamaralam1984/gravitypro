@@ -130,8 +130,12 @@ router.post('/send-otp', async (req, res) => {
   res.json({
     success: true,
     sms_sent: smsSent,
-    // Return OTP when no SMS was sent so testers can use without real SMS service
-    ...(!smsSent && { dev_otp: otp }),
+    // Return OTP when no SMS was sent so testers can use without real SMS service —
+    // NEVER in production: OTP-only login means leaking this lets anyone log in as
+    // anyone by phone number alone. Production has no MSG91 credentials configured,
+    // so smsSent is always false there — gating on NODE_ENV is the only thing that
+    // actually keeps this out of the live API.
+    ...(!smsSent && process.env.NODE_ENV !== 'production' && { dev_otp: otp }),
   })
 })
 
@@ -200,8 +204,9 @@ router.post('/send-email-otp', async (req, res) => {
   res.json({
     success: true,
     email_sent: emailSent,
-    // Return OTP when no email was sent so testers can use without real SMTP
-    ...(!emailSent && { dev_otp: otp }),
+    // Return OTP when no email was sent so testers can use without real SMTP —
+    // NEVER in production, same reasoning as send-otp above.
+    ...(!emailSent && process.env.NODE_ENV !== 'production' && { dev_otp: otp }),
   })
 })
 
@@ -347,55 +352,16 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 })
 
 // ── Google OAuth ──────────────────────────────────────────
-function decodeGoogleToken(idToken) {
-  try {
-    const parts = idToken.split('.')
-    if (parts.length !== 3) return null
-    const payload = Buffer.from(parts[1], 'base64url').toString('utf8')
-    return JSON.parse(payload)
-  } catch(e) { return null }
-}
-
+// Disabled: the previous implementation decoded the id_token's payload
+// without verifying its cryptographic signature, audience, or issuer —
+// anyone could POST a self-forged token claiming any email and receive a
+// valid session for that account. No client (mobile or web) actually wires
+// up real Google Sign-In yet (see mobile/src/screens/auth/LoginScreen.jsx —
+// handleGoogleSignIn is still a TODO stub) and no GOOGLE_CLIENT_ID is
+// configured anywhere, so this is disabled until it can be rebuilt on
+// google-auth-library's verifyIdToken() with a real audience check.
 router.post('/google', async (req, res) => {
-  const { id_token, account_type } = req.body
-  if (!id_token) return res.status(400).json({ error: 'id_token required' })
-  const payload = decodeGoogleToken(id_token)
-  if (!payload || !payload.email) return res.status(400).json({ error: 'Invalid Google token' })
-  const { email, name, sub: googleId } = payload
-  const type = (account_type === 'child') ? 'child' : 'parent'
-
-  let result = await query(
-    `SELECT id, name, phone, email, avatar_url, push_token, country_code, account_type
-     FROM users WHERE google_id = $1 OR email = $2`,
-    [googleId, email]
-  )
-  let user
-  if (result.rows.length) {
-    user = result.rows[0]
-    if (!user.google_id) {
-      await query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, user.id]).catch(() => {})
-    }
-  } else {
-    // Google users have no password — store a random hash (password_hash is
-    // NOT NULL in older schemas; see migration 009).
-    const googleHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10)
-    const inserted = await query(
-      `INSERT INTO users (name, email, google_id, country_code, account_type, password_hash)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, phone, email, avatar_url, push_token, country_code, account_type`,
-      [name || email.split('@')[0], email, googleId, 'IN', type, googleHash]
-    ).catch(async () => {
-      return query(
-        `INSERT INTO users (name, email, country_code, account_type, password_hash)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, name, phone, email, avatar_url, push_token, country_code, account_type`,
-        [name || email.split('@')[0], email, 'IN', type, googleHash]
-      )
-    })
-    user = inserted.rows[0]
-  }
-  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN })
-  res.json({ user, token })
+  res.status(501).json({ error: 'Google sign-in is not available yet' })
 })
 
 // POST /auth/verify-phone
