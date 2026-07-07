@@ -59,10 +59,12 @@ router.post('/', authenticate, async (req, res) => {
           method: "POST",
           headers: { "Content-Type": "application/json", "Accept": "application/json" },
           body: JSON.stringify(chunk)
-        }).catch(() => {})
+        }).catch((e) => console.error('[SOS] push send failed:', e.message))
       }
     }
-  } catch {}
+  } catch (e) {
+    console.error('[SOS] push notification error:', e.message)
+  }
   // ── Also notify the raiser's emergency contacts ──────────────────────────────
   // Emergency contacts are free-form (name/phone/relation) and have no push
   // tokens of their own. We (a) log each one, (b) send each an SMS via the
@@ -108,7 +110,7 @@ router.post('/', authenticate, async (req, res) => {
             method: "POST",
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify(ecMessages)
-          }).catch(() => {})
+          }).catch((e) => console.error('[SOS] emergency-contact push send failed:', e.message))
         }
       }
     }
@@ -159,9 +161,11 @@ router.post('/safe', authenticate, async (req, res) => {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify(messages)
-      }).catch(() => {})
+      }).catch((e) => console.error('[SOS] safe-notification push send failed:', e.message))
     }
-  } catch {}
+  } catch (e) {
+    console.error('[SOS] safe-notification push error:', e.message)
+  }
   res.json({ success: true, message: 'Safe notification sent' })
 })
 
@@ -170,12 +174,6 @@ router.post('/safe', authenticate, async (req, res) => {
 // user could pass an arbitrary circle_id (or omit it) and read every family's SOS
 // history + phone numbers platform-wide.
 router.get('/history', authenticate, async (req, res) => {
-  await query(`CREATE TABLE IF NOT EXISTS sos_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    user_name TEXT, circle_id UUID, latitude FLOAT, longitude FLOAT,
-    message TEXT, resolved BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW()
-  )`).catch(() => {})
   const { circle_id } = req.query
   if (!circle_id) return res.status(400).json({ error: 'circle_id is required' })
   const membership = await query(
