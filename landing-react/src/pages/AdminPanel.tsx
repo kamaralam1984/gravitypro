@@ -329,6 +329,7 @@ export default function AdminPanel() {
   const [circleMenuOpen, setCircleMenuOpen] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [showCreateCircle, setShowCreateCircle] = useState(false)
+  const [confirmDeleteCircle, setConfirmDeleteCircle] = useState<Circle | null>(null)
   const [newCircleName, setNewCircleName] = useState("")
   const [newCirclePhone, setNewCirclePhone] = useState("")
   const [creating, setCreating] = useState(false)
@@ -476,7 +477,6 @@ export default function AdminPanel() {
   }, [apiCall])
 
   const handleDeleteCircle = async (id: string) => {
-    if (!window.confirm('Delete this circle? This cannot be undone.')) return
     const data = await apiCall(`/circles/${id}`, 'DELETE')
     if (data) {
       setCircles(prev => prev.filter(c => c.id !== id))
@@ -486,6 +486,7 @@ export default function AdminPanel() {
     } else {
       showToast('Failed to delete circle', 'error')
     }
+    setConfirmDeleteCircle(null)
   }
 
   const handleRegenInvite = async (id: string) => {
@@ -739,7 +740,7 @@ export default function AdminPanel() {
   const visibleGeo = filteredGeo.slice(0, geoPage)
   const hasMoreGeo = filteredGeo.length > geoPage
   const filteredOtps = getFilteredOtps()
-  const totalRows = sysData?.tables?.reduce((sum, t) => sum + (t.rows ?? 0), 0) ?? 0
+  const totalRows = sysData?.tables?.reduce((sum, t) => sum + Number(t.rows ?? 0), 0) ?? 0
   const charCount = bMessage.length
   const MAX_CHARS = 500
 
@@ -1134,7 +1135,7 @@ export default function AdminPanel() {
                       {isMenuOpen && (
                         <div className={styles.dropdownMenu}>
                           <button className={styles.dropdownItem} onClick={e => { e.stopPropagation(); handleRegenInvite(circle.id) }}>⟳ Regen Code</button>
-                          <button className={styles.dropdownItemRed} onClick={e => { e.stopPropagation(); handleDeleteCircle(circle.id) }}>🗑️ Delete Circle</button>
+                          <button className={styles.dropdownItemRed} onClick={e => { e.stopPropagation(); setCircleMenuOpen(null); setConfirmDeleteCircle(circle) }}>🗑️ Delete Circle</button>
                         </div>
                       )}
                     </div>
@@ -1164,6 +1165,20 @@ export default function AdminPanel() {
                       {creating ? "Creating..." : "Create Circle"}
                     </button>
                     <button className={styles.sheetCancelBtn} onClick={() => setShowCreateCircle(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {confirmDeleteCircle && (
+                <div className={styles.modalOverlay} onClick={() => setConfirmDeleteCircle(null)}>
+                  <div className={styles.bottomSheet} onClick={e => e.stopPropagation()}>
+                    <div className={styles.sheetHandle} />
+                    <div className={styles.sheetTitle}>Delete "{confirmDeleteCircle.name}"?</div>
+                    <div className={styles.sheetSubtitle}>This permanently deletes the circle and cannot be undone.</div>
+                    <button className={styles.sheetSubmitBtn} style={{ background: 'linear-gradient(135deg,#FF5252,#CC4444)' }} onClick={() => handleDeleteCircle(confirmDeleteCircle.id)}>
+                      🗑️ Delete Circle
+                    </button>
+                    <button className={styles.sheetCancelBtn} onClick={() => setConfirmDeleteCircle(null)}>Cancel</button>
                   </div>
                 </div>
               )}
