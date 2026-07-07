@@ -20,12 +20,9 @@ const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 export default function LoginScreen({ navigation }) {
   const c = useTheme()
   const styles = useMemo(() => makeStyles(c), [c])
-  // method: 'email' | 'phone' — Email is the PRIMARY method (free, no SMS cost).
-  // Phone (SMS) is an optional fallback.
-  const [method, setMethod] = useState('email')
-  // step: 'phone' | 'otp'  (phone here means "identifier entry", reused for both methods)
-  const [step, setStep] = useState('phone')
-  const [phone, setPhone] = useState('')
+  // Login is email-only — a phone number, if the account has one, is contact
+  // info only, never a login credential.
+  const [step, setStep] = useState('email')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''))
   const [devBanner, setDevBanner] = useState('')
@@ -47,49 +44,8 @@ export default function LoginScreen({ navigation }) {
     ]).start()
   }
 
-  // ── Step 1: send OTP ────────────────────────────────────────────────────────
-  const handleSendOtp = async () => {
-    const trimmed = phone.trim()
-    if (!trimmed) { setError('Please enter your phone number'); shake(); return }
-    setLoading(true); setError(''); setDevBanner('')
-    try {
-      const res = await authAPI.sendOtp(trimmed)
-      if (res?.dev_otp) {
-        const digits = String(res.dev_otp).split('').slice(0, OTP_LENGTH)
-        while (digits.length < OTP_LENGTH) digits.push('')
-        setOtp(digits)
-        setDevBanner(`Dev mode: OTP auto-filled (${res.dev_otp})`)
-      } else {
-        setOtp(Array(OTP_LENGTH).fill(''))
-      }
-      setStep('otp')
-      setTimeout(() => otpRefs.current[0]?.focus(), 200)
-    } catch (err) {
-      setError(err?.error || err?.message || 'Failed to send OTP. Please try again.')
-      shake()
-    } finally { setLoading(false) }
-  }
-
-  // ── Step 2: verify OTP ──────────────────────────────────────────────────────
-  const handleVerifyOtp = async () => {
-    const code = otp.join('')
-    if (code.length < OTP_LENGTH) { setError('Enter all 6 digits'); shake(); return }
-    setLoading(true); setError('')
-    try {
-      const res = await authAPI.verifyOtp(phone.trim(), code)
-      await login(res.user, res.token)
-    } catch (err) {
-      if (err?.status === 404 || err?.code === 'USER_NOT_FOUND') {
-        setError('No account found for this number.')
-      } else {
-        setError(err?.error || err?.message || 'Verification failed. Check the OTP and try again.')
-      }
-      shake()
-    } finally { setLoading(false) }
-  }
-
-  // ── Email: send OTP ───────────────────────────────────────────────────────────
-  const handleSendEmailOtp = async () => {
+  // ── Send OTP ─────────────────────────────────────────────────────────────────
+  const handleSend = async () => {
     const trimmed = email.trim().toLowerCase()
     if (!isValidEmail(trimmed)) { setError('Please enter a valid email'); shake(); return }
     setLoading(true); setError(''); setDevBanner('')
@@ -112,8 +68,8 @@ export default function LoginScreen({ navigation }) {
     } finally { setLoading(false) }
   }
 
-  // ── Email: verify OTP (login) ─────────────────────────────────────────────────
-  const handleVerifyEmailOtp = async () => {
+  // ── Verify OTP (login) ────────────────────────────────────────────────────────
+  const handleVerify = async () => {
     const code = otp.join('')
     if (code.length < OTP_LENGTH) { setError('Enter all 6 digits'); shake(); return }
     setLoading(true); setError('')
@@ -128,18 +84,6 @@ export default function LoginScreen({ navigation }) {
       }
       shake()
     } finally { setLoading(false) }
-  }
-
-  // Unified resend / send based on active method
-  const handleSend = () => (method === 'email' ? handleSendEmailOtp() : handleSendOtp())
-  const handleVerify = () => (method === 'email' ? handleVerifyEmailOtp() : handleVerifyOtp())
-
-  const switchMethod = (m) => {
-    if (m === method) return
-    setMethod(m)
-    setStep('phone')
-    setError(''); setDevBanner('')
-    setOtp(Array(OTP_LENGTH).fill(''))
   }
 
   // ── Google Sign-In ──────────────────────────────────────────────────────────
@@ -216,62 +160,26 @@ export default function LoginScreen({ navigation }) {
               </View>
             )}
 
-            {step === 'phone' ? (
+            {step === 'email' ? (
               <>
-                {/* Method toggle: Email (primary) / Phone (optional) */}
-                <View style={styles.methodRow}>
-                  <Pressable
-                    onPress={() => switchMethod('email')}
-                    style={[styles.methodBtn, method === 'email' && styles.methodBtnSelected]}>
-                    <Ionicons name="mail-outline" size={16} color={method === 'email' ? c.accent : c.textMuted} />
-                    <Text style={[styles.methodLabel, method === 'email' && styles.methodLabelSelected]}>Email</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => switchMethod('phone')}
-                    style={[styles.methodBtn, method === 'phone' && styles.methodBtnSelected]}>
-                    <Ionicons name="call-outline" size={16} color={method === 'phone' ? c.accent : c.textMuted} />
-                    <Text style={[styles.methodLabel, method === 'phone' && styles.methodLabelSelected]}>Phone</Text>
-                  </Pressable>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email Address</Text>
+                  <View style={styles.inputWrap}>
+                    <Ionicons name="mail-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholder="you@example.com"
+                      placeholderTextColor={c.textMuted}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      returnKeyType="done"
+                      onSubmitEditing={handleSend}
+                    />
+                  </View>
                 </View>
-
-                {method === 'phone' ? (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Phone Number</Text>
-                    <View style={styles.inputWrap}>
-                      <Ionicons name="call-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        value={phone}
-                        onChangeText={setPhone}
-                        placeholder="+91 98765 43210"
-                        placeholderTextColor={c.textMuted}
-                        keyboardType="phone-pad"
-                        autoComplete="tel"
-                        returnKeyType="done"
-                        onSubmitEditing={handleSend}
-                      />
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Email Address</Text>
-                    <View style={styles.inputWrap}>
-                      <Ionicons name="mail-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        value={email}
-                        onChangeText={setEmail}
-                        placeholder="you@example.com"
-                        placeholderTextColor={c.textMuted}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        autoComplete="email"
-                        returnKeyType="done"
-                        onSubmitEditing={handleSend}
-                      />
-                    </View>
-                  </View>
-                )}
 
                 {!!error && (
                   <View style={styles.errorBox}>
@@ -281,7 +189,7 @@ export default function LoginScreen({ navigation }) {
                 )}
 
                 <PremiumButton
-                  title={method === 'email' ? 'Send Code' : 'Send OTP'}
+                  title="Send Code"
                   onPress={handleSend}
                   loading={loading}
                   icon={<Ionicons name="send-outline" size={20} color="#fff" />}
@@ -292,9 +200,9 @@ export default function LoginScreen({ navigation }) {
               <>
                 {/* Identifier recap + back */}
                 <View style={styles.phoneRecap}>
-                  <Ionicons name={method === 'email' ? 'mail-outline' : 'call-outline'} size={16} color={c.accentSoft} />
-                  <Text style={styles.phoneRecapText}>{method === 'email' ? email.trim().toLowerCase() : phone.trim()}</Text>
-                  <Pressable onPress={() => { setStep('phone'); setError(''); setDevBanner('') }}>
+                  <Ionicons name="mail-outline" size={16} color={c.accentSoft} />
+                  <Text style={styles.phoneRecapText}>{email.trim().toLowerCase()}</Text>
+                  <Pressable onPress={() => { setStep('email'); setError(''); setDevBanner('') }}>
                     <Text style={styles.changeLink}>Change</Text>
                   </Pressable>
                 </View>
@@ -341,7 +249,7 @@ export default function LoginScreen({ navigation }) {
 
                 <Pressable onPress={handleSend} style={styles.resendRow}>
                   <Text style={styles.resendText}>Didn't receive it? </Text>
-                  <Text style={styles.resendLink}>Resend {method === 'email' ? 'Code' : 'OTP'}</Text>
+                  <Text style={styles.resendLink}>Resend Code</Text>
                 </Pressable>
               </>
             )}
@@ -384,15 +292,6 @@ const makeStyles = (c) => StyleSheet.create({
   },
   devBannerText: { color: '#FFD600', fontSize: 13, flex: 1, fontWeight: '600' },
   inputGroup: { gap: 8 },
-  methodRow: { flexDirection: 'row', gap: 10 },
-  methodBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    paddingVertical: 12, borderRadius: 14,
-    backgroundColor: c.bgCard, borderWidth: 1.5, borderColor: c.border,
-  },
-  methodBtnSelected: { borderColor: c.accent, backgroundColor: 'rgba(0,230,118,0.1)' },
-  methodLabel: { fontSize: 15, fontWeight: '700', color: c.textMuted },
-  methodLabelSelected: { color: c.accent },
   label: { fontSize: 12, fontWeight: '700', color: c.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
   inputWrap: {
     flexDirection: 'row', alignItems: 'center',

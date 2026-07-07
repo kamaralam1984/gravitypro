@@ -33,16 +33,13 @@ api.interceptors.response.use(
 )
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
+// Login/signup is email-only — phone is optional contact info, never a
+// credential (no send-otp/verify-otp/verify-phone/password login).
 export const authAPI = {
-  sendOtp: (phone) => api.post('/auth/send-otp', { phone }),
-  verifyOtp: (phone, otp) => api.post('/auth/verify-otp', { phone, otp }),
-  verifyPhone: (phone, otp) => api.post('/auth/verify-phone', { phone, otp }),
-  // Email OTP
   sendEmailOtp: (email) => api.post('/auth/send-email-otp', { email }),
   verifyEmail: (email, otp) => api.post('/auth/verify-email', { email, otp }),       // SIGNUP -> { verified, email_token, already_registered }
   verifyEmailOtp: (email, otp) => api.post('/auth/verify-email-otp', { email, otp }), // LOGIN  -> { user, token }
   registerFree: (data) => api.post('/auth/register-free', data),
-  register: (data) => api.post('/auth/register', data),
   google: (id_token) => api.post('/auth/google', { id_token }),
 }
 

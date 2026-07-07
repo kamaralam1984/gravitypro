@@ -1,10 +1,8 @@
 const router = require('express').Router()
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { z } = require('zod')
 const rateLimit = require('express-rate-limit')
 const { query } = require('../config/db')
-const { validate } = require('../middleware/validate')
 const crypto = require('crypto')
 
 // The global /api/ limiter (12000 req/15min, app.js) is sized for
@@ -32,41 +30,6 @@ function sendWithin(promise, ms) {
   const safe = Promise.resolve(promise).catch(() => false)
   const timeout = new Promise((resolve) => setTimeout(() => resolve(false), ms))
   return Promise.race([safe, timeout])
-}
-
-async function sendSMS(phone, otp) {
-  // MSG91 integration — set MSG91_AUTH_KEY + MSG91_TEMPLATE_ID in .env to enable
-  if (process.env.MSG91_AUTH_KEY && process.env.MSG91_TEMPLATE_ID) {
-    try {
-      const https = require('https')
-      const body = JSON.stringify({
-        template_id: process.env.MSG91_TEMPLATE_ID,
-        short_url: '0',
-        mobiles: phone.replace(/[^0-9]/g, ''),
-        var1: otp,
-      })
-      await new Promise((resolve, reject) => {
-        const req = https.request({
-          hostname: 'api.msg91.com',
-          path: '/api/v5/otp',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'authkey': process.env.MSG91_AUTH_KEY,
-          },
-        }, (r) => { r.resume(); resolve() })
-        req.on('error', reject)
-        req.write(body)
-        req.end()
-      })
-      return true
-    } catch (e) {
-      console.error('MSG91 send failed:', e.message)
-    }
-  }
-  // Dev fallback — log OTP to console
-  console.log(`[OTP] ${phone} → ${otp}`)
-  return false
 }
 
 // ── Email OTP delivery — set SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS/SMTP_FROM to enable ──
@@ -109,85 +72,6 @@ async function sendEmailOTP(email, otp) {
   console.log(`[EMAIL OTP] ${email} → ${otp}`)
   return false
 }
-
-// POST /auth/send-otp
-router.post('/send-otp', async (req, res) => {
-  const { phone } = req.body
-  if (!phone || phone.trim().length < 7) {
-    return res.status(400).json({ error: 'Valid phone number required' })
-  }
-  const cleanPhone = phone.trim()
-
-  // Rate limit: max 10 OTPs per phone in 5 minutes
-  const recent = await query(
-    `SELECT COUNT(*) FROM phone_otps WHERE phone = $1 AND created_at > NOW() - INTERVAL '5 minutes'`,
-    [cleanPhone]
-  )
-  if (parseInt(recent.rows[0].count) >= 10) {
-    return res.status(429).json({ error: 'Too many OTP requests. Wait 5 minutes.' })
-  }
-
-  // Invalidate old OTPs
-  await query(`UPDATE phone_otps SET used = TRUE WHERE phone = $1 AND used = FALSE`, [cleanPhone])
-
-  const otp = generateOTP()
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 min
-  const inserted = await query(
-    `INSERT INTO phone_otps (phone, code, expires_at) VALUES ($1, $2, $3) RETURNING id`,
-    [cleanPhone, otp, expiresAt]
-  )
-
-  // Don't block the HTTP response on the (possibly slow) SMS provider — that caused
-  // the app to time out and show "Network Error". Wait at most 4s, then respond.
-  const smsSent = await sendWithin(sendSMS(cleanPhone, otp), 4000)
-  // Persist the real delivery outcome (separate from `used`, which only means
-  // the code was later verified) so admin OTP Logs can report true SMS
-  // delivery stats instead of conflating them with verification/drop-off.
-  await query('UPDATE phone_otps SET sms_sent = $1 WHERE id = $2', [smsSent, inserted.rows[0].id]).catch(() => {})
-
-  res.json({
-    success: true,
-    sms_sent: smsSent,
-    // Return OTP when no SMS was sent so testers can use without real SMS service —
-    // NEVER in production: OTP-only login means leaking this lets anyone log in as
-    // anyone by phone number alone. Production has no MSG91 credentials configured,
-    // so smsSent is always false there — gating on NODE_ENV is the only thing that
-    // actually keeps this out of the live API.
-    ...(!smsSent && process.env.NODE_ENV !== 'production' && { dev_otp: otp }),
-  })
-})
-
-// POST /auth/verify-otp  (login via OTP only — no password)
-router.post('/verify-otp', otpVerifyLimiter, async (req, res) => {
-  const { phone, otp } = req.body
-  if (!phone || !otp) return res.status(400).json({ error: 'phone and otp required' })
-
-  const result = await query(
-    `SELECT id FROM phone_otps
-     WHERE phone = $1 AND code = $2 AND used = FALSE AND expires_at > NOW()
-     ORDER BY created_at DESC LIMIT 1`,
-    [phone.trim(), otp.trim()]
-  )
-  if (!result.rows.length) return res.status(400).json({ error: 'Invalid or expired OTP' })
-
-  // Mark used
-  await query(`UPDATE phone_otps SET used = TRUE WHERE id = $1`, [result.rows[0].id])
-
-  // Find or create user
-  let userResult = await query(
-    `SELECT id, name, phone, email, avatar_url, push_token, country_code, account_type
-     FROM users WHERE phone = $1`,
-    [phone.trim()]
-  )
-
-  if (!userResult.rows.length) {
-    return res.status(404).json({ error: 'No account found. Please register first.' })
-  }
-
-  const user = userResult.rows[0]
-  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN })
-  res.json({ user, token })
-})
 
 // ── Email OTP endpoints ───────────────────────────────────
 // POST /auth/send-email-otp
@@ -286,89 +170,6 @@ router.post('/verify-email-otp', otpVerifyLimiter, async (req, res) => {
   res.json({ user, token })
 })
 
-// ── Schemas ───────────────────────────────────────────────
-const registerSchema = z.object({
-  phone: z.string().min(7).max(20),
-  name: z.string().min(2).max(100),
-  email: z.string().email().optional(),
-  password: z.string().min(6).optional(),
-  otp: z.string().length(6),
-  country_code: z.enum(['KE', 'IN', 'AE', 'GB', 'US', 'PK']).default('IN'),
-  account_type: z.enum(['parent', 'child']).default('parent'),
-})
-
-const loginSchema = z.object({
-  phone: z.string(),
-  password: z.string(),
-  otp: z.string().length(6),
-})
-
-// POST /auth/register
-router.post('/register', otpVerifyLimiter, validate(registerSchema), async (req, res) => {
-  const { phone, name, email, password, otp, country_code, account_type } = req.body
-
-  // Verify OTP
-  const otpResult = await query(
-    `SELECT id FROM phone_otps
-     WHERE phone = $1 AND code = $2 AND used = FALSE AND expires_at > NOW()
-     ORDER BY created_at DESC LIMIT 1`,
-    [phone, otp]
-  )
-  if (!otpResult.rows.length) return res.status(400).json({ error: 'Invalid or expired OTP' })
-  await query(`UPDATE phone_otps SET used = TRUE WHERE id = $1`, [otpResult.rows[0].id])
-
-  const existing = await query('SELECT id FROM users WHERE phone = $1', [phone])
-  if (existing.rows.length) return res.status(409).json({ error: 'Phone already registered' })
-
-  // password_hash is NOT NULL in the schema. When no password is provided
-  // (OTP-only signup), store a random unguessable hash so the row is valid and
-  // password login is effectively disabled until the user sets a password.
-  const passwordHash = password
-    ? await bcrypt.hash(password, 12)
-    : await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12)
-  const result = await query(
-    `INSERT INTO users (phone, name, email, password_hash, country_code, account_type)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, name, phone, email, country_code, account_type, created_at`,
-    [phone, name, email || null, passwordHash, country_code, account_type]
-  )
-  const user = result.rows[0]
-  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN })
-  res.status(201).json({ user, token })
-})
-
-// POST /auth/login
-router.post('/login', otpVerifyLimiter, validate(loginSchema), async (req, res) => {
-  const { phone, password, otp } = req.body
-
-  // Verify OTP first
-  const otpResult = await query(
-    `SELECT id FROM phone_otps
-     WHERE phone = $1 AND code = $2 AND used = FALSE AND expires_at > NOW()
-     ORDER BY created_at DESC LIMIT 1`,
-    [phone, otp]
-  )
-  if (!otpResult.rows.length) return res.status(400).json({ error: 'Invalid or expired OTP' })
-
-  const result = await query(
-    `SELECT id, name, phone, email, avatar_url, push_token, country_code, account_type, password_hash
-     FROM users WHERE phone = $1`,
-    [phone]
-  )
-  if (!result.rows.length) return res.status(401).json({ error: 'Invalid credentials' })
-  const user = result.rows[0]
-
-  const valid = await bcrypt.compare(password, user.password_hash || '')
-  if (!valid) return res.status(401).json({ error: 'Invalid credentials' })
-
-  // Mark OTP used only after password also verified
-  await query(`UPDATE phone_otps SET used = TRUE WHERE id = $1`, [otpResult.rows[0].id])
-
-  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN })
-  const { password_hash, ...safeUser } = user
-  res.json({ user: safeUser, token })
-})
-
 // ── Google OAuth ──────────────────────────────────────────
 // Disabled: the previous implementation decoded the id_token's payload
 // without verifying its cryptographic signature, audience, or issuer —
@@ -382,55 +183,14 @@ router.post('/google', async (req, res) => {
   res.status(501).json({ error: 'Google sign-in is not available yet' })
 })
 
-// POST /auth/verify-phone
-// Verifies OTP, marks it used, returns a short-lived phone_token JWT.
-// Does NOT create any user account.
-router.post('/verify-phone', otpVerifyLimiter, async (req, res) => {
-  try {
-    const { phone, otp } = req.body
-    if (!phone || !otp) return res.status(400).json({ error: 'phone and otp required' })
-
-    const cleanPhone = phone.trim()
-    const cleanOtp = otp.trim()
-
-    const result = await query(
-      `SELECT id FROM phone_otps
-       WHERE phone = $1 AND code = $2 AND used = FALSE AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
-      [cleanPhone, cleanOtp]
-    )
-    if (!result.rows.length) return res.status(400).json({ error: 'Invalid or expired OTP' })
-
-    // Mark OTP used
-    await query(`UPDATE phone_otps SET used = TRUE WHERE id = $1`, [result.rows[0].id])
-
-    const phone_token = jwt.sign(
-      { phone: cleanPhone, type: 'phone_verified' },
-      process.env.JWT_SECRET,
-      { expiresIn: '30m' }
-    )
-
-    // Check if phone already has an account
-    const existing = await query('SELECT id FROM users WHERE phone = $1', [cleanPhone])
-    if (existing.rows.length) {
-      return res.json({ verified: true, phone_token, already_registered: true })
-    }
-
-    res.json({ verified: true, phone_token })
-  } catch (err) {
-    console.error('verify-phone error:', err)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-})
-
 // POST /auth/register-free
-// Creates a free account using a verified phone_token.
+// Creates a free account using a verified email_token. Login/registration is
+// email-only; phone is an optional plain contact-info field (not a
+// credential — no verification needed for it, same as name).
 router.post('/register-free', async (req, res) => {
   try {
-    const { phone_token, email_token, name, account_type, country_code } = req.body
+    const { email_token, name, account_type, country_code, phone: rawPhone } = req.body
 
-    // Email is the PRIMARY required verification. Phone is OPTIONAL — pass a
-    // phone_token only if the user chose to verify a phone number (SMS).
     if (!email_token) return res.status(400).json({ error: 'email_token required' })
 
     // Verify email_token (required)
@@ -444,21 +204,7 @@ router.post('/register-free', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email token type' })
     }
 
-    // Verify phone_token (optional — only if provided)
-    let phone = null
-    if (phone_token) {
-      let phonePayload
-      try {
-        phonePayload = jwt.verify(phone_token, process.env.JWT_SECRET)
-      } catch (e) {
-        return res.status(401).json({ error: 'Invalid or expired phone_token' })
-      }
-      if (phonePayload.type !== 'phone_verified') {
-        return res.status(401).json({ error: 'Invalid phone token type' })
-      }
-      phone = phonePayload.phone
-    }
-
+    const phone = rawPhone && String(rawPhone).trim() ? String(rawPhone).trim() : null
     const email = emailPayload.email
 
     // Validate name

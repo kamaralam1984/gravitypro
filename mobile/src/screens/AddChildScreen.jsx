@@ -107,15 +107,17 @@ export default function AddChildScreen() {
   const save = async () => {
     if (!circleId) return Alert.alert('Pick a circle', 'Choose which family circle this child belongs to.')
     if (!name.trim()) return Alert.alert('Name required', "Enter the child's name.")
+    // Login is email-only — without an email the child has no way to ever
+    // log into their own account (phone is contact info only, not a credential).
+    if (!email.trim()) return Alert.alert('Email required', "Enter the child's email — they'll use it to log in.")
     const dob = (year || month || day) ? toISO(year, month, day) : null
     if ((year || month || day) && !dob) return Alert.alert('Invalid date', 'Enter a valid date of birth.')
 
     setSaving(true)
     try {
-      const body = { circle_id: circleId, name: name.trim() }
+      const body = { circle_id: circleId, name: name.trim(), email: email.trim() }
       if (dob) body.dob = dob
       if (phone.trim()) body.phone = phone.trim()
-      if (email.trim()) body.email = email.trim()
 
       // Resolve the child's avatar_url. If the parent picked a local photo
       // (a file:// URI), upload it via the same presign → PUT → confirm flow
@@ -132,11 +134,7 @@ export default function AddChildScreen() {
       await familyAPI.createChild(body)
       const circle = circles.find((c) => c.id === circleId)
       const code = circle?.invite_code
-      const loginLine = email.trim()
-        ? `\n\n📲 To connect: install Gravity on ${name.trim()}'s phone and log in with this email (OTP):\n${email.trim()}\nThey'll be connected to your family automatically.`
-        : (phone.trim()
-            ? `\n\n📲 To connect: log in on their phone with this number (OTP): ${phone.trim()}`
-            : '\n\n📲 Add an email or phone so they can log in and connect.')
+      const loginLine = `\n\n📲 To connect: install Gravity on ${name.trim()}'s phone and log in with this email (OTP):\n${email.trim()}\nThey'll be connected to your family automatically.`
       const codeLine = code ? `\n\nOr they can tap "Join Circle" and enter invite code:\n${code}` : ''
       Alert.alert('Child Added ✅', `${name.trim()} was added to "${circle?.name || 'the circle'}".${loginLine}${codeLine}`)
       navigation.goBack()
@@ -186,7 +184,7 @@ export default function AddChildScreen() {
             placeholder="YYYY" placeholderTextColor={colors.textSecondary} keyboardType="number-pad" maxLength={4} />
         </View>
 
-        <Text style={s.label}>Email (so they can log in & connect)</Text>
+        <Text style={s.label}>Email (required — so they can log in & connect)</Text>
         <TextInput
           style={s.input} value={email} onChangeText={setEmail}
           placeholder="child@example.com" placeholderTextColor={colors.textSecondary}

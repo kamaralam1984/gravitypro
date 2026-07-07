@@ -73,17 +73,14 @@ function FieldStatus({ valid, show }) {
 export default function RegisterScreen({ navigation }) {
   const c = useTheme()
   const styles = useMemo(() => makeStyles(c), [c])
-  // EMAIL is the PRIMARY / required path. PHONE (SMS) is OPTIONAL.
-  // step: 0 = profile (name + email), 1 = email otp (creates account),
-  //       2 = optional phone, 3 = optional phone otp
+  // Signup is email-only: step 0 = profile (name + email + optional phone),
+  // step 1 = email OTP, which creates the account. Phone (if entered) is
+  // stored as plain contact info — never a login credential.
   const [step, setStep] = useState(0)
   const [phone, setPhone] = useState('')
-  const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''))
-  const [devBanner, setDevBanner] = useState('')
 
   // Email OTP
   const [emailOtp, setEmailOtp] = useState(Array(OTP_LENGTH).fill(''))
-  const [emailToken, setEmailToken] = useState(null)
   const [emailDevBanner, setEmailDevBanner] = useState('')
   const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false)
 
@@ -95,11 +92,9 @@ export default function RegisterScreen({ navigation }) {
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [alreadyRegistered, setAlreadyRegistered] = useState(false)
 
   const login = useAuthStore(s => s.login)
   const shakeAnim = useRef(new Animated.Value(0)).current
-  const otpRefs = useRef([])
   const emailOtpRefs = useRef([])
 
   const shake = () => {
@@ -111,69 +106,6 @@ export default function RegisterScreen({ navigation }) {
       Animated.timing(shakeAnim, { toValue: -8, duration: 60, useNativeDriver: true }),
       Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
     ]).start()
-  }
-
-  // ── Optional phone: Send SMS OTP ────────────────────────────────────────────
-  const handleSendOtp = async () => {
-    const trimmed = phone.trim()
-    if (!trimmed) { setError('Please enter your phone number'); shake(); return }
-    setLoading(true); setError(''); setDevBanner(''); setAlreadyRegistered(false)
-    try {
-      const res = await authAPI.sendOtp(trimmed)
-      if (res?.dev_otp) {
-        const digits = String(res.dev_otp).split('').slice(0, OTP_LENGTH)
-        while (digits.length < OTP_LENGTH) digits.push('')
-        setOtp(digits)
-        setDevBanner(`Dev mode: OTP auto-filled (${res.dev_otp})`)
-      } else {
-        setOtp(Array(OTP_LENGTH).fill(''))
-      }
-      setStep(3)
-      setTimeout(() => otpRefs.current[0]?.focus(), 200)
-    } catch (err) {
-      setError(err?.error || err?.message || 'Failed to send OTP. Please try again.')
-      shake()
-    } finally { setLoading(false) }
-  }
-
-  // ── Optional phone: Verify SMS OTP, then register WITH phone ────────────────
-  const handleVerifyPhone = async () => {
-    const code = otp.join('')
-    if (code.length < OTP_LENGTH) { setError('Enter all 6 digits'); shake(); return }
-    setLoading(true); setError(''); setAlreadyRegistered(false)
-    try {
-      const res = await authAPI.verifyPhone(phone.trim(), code)
-      if (res?.already_registered) {
-        setAlreadyRegistered(true)
-        shake()
-        return
-      }
-      // Register with both verified email + phone tokens
-      await registerAndLogin(res.phone_token)
-    } catch (err) {
-      if (err?.already_registered || err?.code === 'ALREADY_REGISTERED') {
-        setAlreadyRegistered(true)
-        shake()
-      } else {
-        setError(err?.error || err?.message || 'Verification failed. Check the OTP and try again.')
-        shake()
-      }
-    } finally { setLoading(false) }
-  }
-
-  // ── OTP box helpers ─────────────────────────────────────────────────────────
-  const handleOtpChange = (text, index) => {
-    const digit = text.replace(/\D/g, '').slice(-1)
-    const next = [...otp]
-    next[index] = digit
-    setOtp(next)
-    if (digit && index < OTP_LENGTH - 1) otpRefs.current[index + 1]?.focus()
-  }
-
-  const handleOtpKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus()
-    }
   }
 
   // ── Email OTP box helpers ─────────────────────────────────────────────────────
@@ -191,7 +123,7 @@ export default function RegisterScreen({ navigation }) {
     }
   }
 
-  // ── Step 0 -> 1: send email OTP (PRIMARY required path) ───────────────────────
+  // ── Step 0 -> 1: send email OTP ────────────────────────────────────────────────
   const canSubmit = isValidName(name) && isValidEmail(email)
 
   const handleSendEmailOtp = async () => {
@@ -217,20 +149,7 @@ export default function RegisterScreen({ navigation }) {
     } finally { setLoading(false) }
   }
 
-  // ── Shared: create the free account (email required, phone optional) ──────────
-  // emailToken is captured in state at email-verify time; phoneTok is optional.
-  const registerAndLogin = async (phoneTok = null) => {
-    const res = await authAPI.registerFree({
-      ...(phoneTok ? { phone_token: phoneTok } : {}),
-      email_token: emailToken,
-      name: name.trim(),
-      account_type: accountType,
-      country_code: countryCode,
-    })
-    await login(res.user, res.token)
-  }
-
-  // ── Step 1: verify email OTP -> email_token. Then offer OPTIONAL phone. ────────
+  // ── Step 1: verify email OTP -> email_token, then create the account. ──────────
   const handleVerifyEmail = async () => {
     const code = emailOtp.join('')
     if (code.length < OTP_LENGTH) { setError('Enter all 6 digits'); shake(); return }
@@ -242,9 +161,14 @@ export default function RegisterScreen({ navigation }) {
         shake()
         return
       }
-      setEmailToken(verifyRes.email_token)
-      // Email verified — go to the OPTIONAL "add phone" step.
-      setStep(2)
+      const res = await authAPI.registerFree({
+        email_token: verifyRes.email_token,
+        name: name.trim(),
+        account_type: accountType,
+        country_code: countryCode,
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
+      })
+      await login(res.user, res.token)
     } catch (err) {
       if (err?.already_registered || err?.code === 'ALREADY_REGISTERED') {
         setEmailAlreadyRegistered(true)
@@ -253,17 +177,6 @@ export default function RegisterScreen({ navigation }) {
         setError(err?.error || err?.message || 'Verification failed. Check the code and try again.')
         shake()
       }
-    } finally { setLoading(false) }
-  }
-
-  // ── Step 2: SKIP phone — register email-only and finish. ──────────────────────
-  const handleSkipPhone = async () => {
-    setLoading(true); setError('')
-    try {
-      await registerAndLogin(null)
-    } catch (err) {
-      setError(err?.error || err?.message || 'Could not create account. Please try again.')
-      shake()
     } finally { setLoading(false) }
   }
 
@@ -281,20 +194,12 @@ export default function RegisterScreen({ navigation }) {
             </LinearGradient>
             <Text style={styles.brand}>Join Gravity</Text>
             <Text style={styles.subtitle}>Connect with your family circle</Text>
-            <StepDots current={step} total={4} />
+            <StepDots current={step} total={2} />
           </View>
 
           <Animated.View style={[styles.form, { transform: [{ translateX: shakeAnim }] }]}>
 
-            {/* Dev OTP banner */}
-            {!!devBanner && (
-              <View style={styles.devBanner}>
-                <Ionicons name="bug-outline" size={16} color="#FFD600" />
-                <Text style={styles.devBannerText}>{devBanner}</Text>
-              </View>
-            )}
-
-            {/* ── STEP 0: Profile (name + email — PRIMARY) ─────────────────── */}
+            {/* ── STEP 0: Profile (name + email + optional phone) ──────────── */}
             {step === 0 && (
               <>
                 {/* Name */}
@@ -331,6 +236,23 @@ export default function RegisterScreen({ navigation }) {
                       autoComplete="email"
                     />
                     <FieldStatus valid={isValidEmail(email)} show={email.length > 0} />
+                  </View>
+                </View>
+
+                {/* Phone (optional, plain contact info — not used for login) */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Phone Number (optional)</Text>
+                  <View style={styles.inputWrap}>
+                    <Ionicons name="call-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      value={phone}
+                      onChangeText={setPhone}
+                      placeholder="+91 98765 43210"
+                      placeholderTextColor={c.textMuted}
+                      keyboardType="phone-pad"
+                      autoComplete="tel"
+                    />
                   </View>
                 </View>
 
@@ -391,7 +313,7 @@ export default function RegisterScreen({ navigation }) {
               </>
             )}
 
-            {/* ── STEP 1: Email OTP (PRIMARY required verification) ────────── */}
+            {/* ── STEP 1: Email OTP -> creates the account ──────────────────── */}
             {step === 1 && (
               <>
                 {/* Email dev banner */}
@@ -450,7 +372,7 @@ export default function RegisterScreen({ navigation }) {
                 )}
 
                 <PremiumButton
-                  title="Verify Email"
+                  title="Verify & Create Account"
                   onPress={handleVerifyEmail}
                   loading={loading}
                   icon={<Ionicons name="checkmark-circle-outline" size={20} color="#fff" />}
@@ -460,133 +382,6 @@ export default function RegisterScreen({ navigation }) {
                 <Pressable onPress={handleSendEmailOtp} style={styles.resendRow}>
                   <Text style={styles.resendText}>Didn't receive it? </Text>
                   <Text style={styles.resendLink}>Resend Code</Text>
-                </Pressable>
-              </>
-            )}
-
-            {/* ── STEP 2: Optional phone (SMS) — skippable ─────────────────── */}
-            {step === 2 && (
-              <>
-                <View style={styles.infoBox}>
-                  <Ionicons name="information-circle" size={16} color={c.accent} />
-                  <Text style={styles.infoText}>
-                    Optional: add a phone number for SMS alerts. You can skip this and add it later.
-                  </Text>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Phone Number (optional)</Text>
-                  <View style={styles.inputWrap}>
-                    <Ionicons name="call-outline" size={20} color={c.accentSoft} style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      value={phone}
-                      onChangeText={setPhone}
-                      placeholder="+91 98765 43210"
-                      placeholderTextColor={c.textMuted}
-                      keyboardType="phone-pad"
-                      autoComplete="tel"
-                      returnKeyType="done"
-                      onSubmitEditing={handleSendOtp}
-                    />
-                  </View>
-                </View>
-
-                {!!error && (
-                  <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle" size={16} color={c.danger} />
-                    <Text style={styles.errorText}>{error}</Text>
-                  </View>
-                )}
-
-                <PremiumButton
-                  title="Send SMS OTP"
-                  onPress={handleSendOtp}
-                  loading={loading}
-                  disabled={!phone.trim()}
-                  icon={<Ionicons name="send-outline" size={20} color="#fff" />}
-                  style={{ marginTop: 8 }}
-                />
-
-                <Pressable onPress={handleSkipPhone} style={styles.resendRow}>
-                  <Text style={styles.resendLink}>Skip — finish with email only</Text>
-                </Pressable>
-              </>
-            )}
-
-            {/* ── STEP 3: Optional phone OTP ───────────────────────────────── */}
-            {step === 3 && (
-              <>
-                {/* Phone dev banner */}
-                {!!devBanner && (
-                  <View style={styles.devBanner}>
-                    <Ionicons name="bug-outline" size={16} color="#FFD600" />
-                    <Text style={styles.devBannerText}>{devBanner}</Text>
-                  </View>
-                )}
-
-                {/* Phone recap */}
-                <View style={styles.phoneRecap}>
-                  <Ionicons name="call-outline" size={16} color={c.accentSoft} />
-                  <Text style={styles.phoneRecapText}>{phone.trim()}</Text>
-                  <Pressable onPress={() => { setStep(2); setError(''); setDevBanner(''); setAlreadyRegistered(false) }}>
-                    <Text style={styles.changeLink}>Change</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Enter 6-digit OTP</Text>
-                  <View style={styles.otpRow}>
-                    {otp.map((digit, i) => (
-                      <TextInput
-                        key={i}
-                        ref={el => otpRefs.current[i] = el}
-                        style={[styles.otpBox, digit ? styles.otpBoxFilled : null]}
-                        value={digit}
-                        onChangeText={text => handleOtpChange(text, i)}
-                        onKeyPress={e => handleOtpKeyPress(e, i)}
-                        keyboardType="number-pad"
-                        maxLength={1}
-                        textAlign="center"
-                        selectTextOnFocus
-                      />
-                    ))}
-                  </View>
-                </View>
-
-                {/* Phone already registered notice */}
-                {alreadyRegistered && (
-                  <View style={styles.infoBox}>
-                    <Ionicons name="information-circle" size={16} color={c.accent} />
-                    <Text style={styles.infoText}>This phone is already registered. </Text>
-                    <Pressable onPress={handleSkipPhone}>
-                      <Text style={styles.inlineLink}>Finish with email only.</Text>
-                    </Pressable>
-                  </View>
-                )}
-
-                {!!error && !alreadyRegistered && (
-                  <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle" size={16} color={c.danger} />
-                    <Text style={styles.errorText}>{error}</Text>
-                  </View>
-                )}
-
-                <PremiumButton
-                  title="Verify & Create Account"
-                  onPress={handleVerifyPhone}
-                  loading={loading}
-                  icon={<Ionicons name="shield-checkmark-outline" size={20} color="#fff" />}
-                  style={{ marginTop: 8 }}
-                />
-
-                <Pressable onPress={handleSendOtp} style={styles.resendRow}>
-                  <Text style={styles.resendText}>Didn't receive it? </Text>
-                  <Text style={styles.resendLink}>Resend OTP</Text>
-                </Pressable>
-
-                <Pressable onPress={handleSkipPhone} style={styles.resendRow}>
-                  <Text style={styles.resendLink}>Skip — finish with email only</Text>
                 </Pressable>
               </>
             )}

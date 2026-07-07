@@ -4,11 +4,6 @@ import styles from './Login.module.css'
 
 const API = window.location.origin + '/api/v1'
 
-function validatePhone(phone: string): boolean {
-  const clean = phone.replace(/[\s\-().]/g, '')
-  return clean.length >= 8 && /^[+\d]/.test(clean)
-}
-
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
@@ -18,9 +13,8 @@ function validateName(name: string): boolean {
 }
 
 type Tab = 'login' | 'register'
-type LoginMethod = 'phone' | 'email'
 type LoginStep = 1 | 2
-type RegStep = 1 | 2 | 3 | 4
+type RegStep = 1 | 2
 
 const COUNTRIES = [
   { code: 'IN', label: 'India' },
@@ -41,9 +35,8 @@ export default function Login() {
   const [activeTab, setActiveTab] = useState<Tab>('login')
 
   // ── LOGIN STATE ──────────────────────────────────────────────
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>('phone')
+  // Login is email-only — phone is never a login credential.
   const [loginStep, setLoginStep] = useState<LoginStep>(1)
-  const [loginPhone, setLoginPhone] = useState('')
   const [loginEmail, setLoginEmail] = useState('')
   const [loginOtp, setLoginOtp] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
@@ -52,23 +45,19 @@ export default function Login() {
 
   // ── REGISTER STATE ───────────────────────────────────────────
   const [regStep, setRegStep] = useState<RegStep>(1)
-  const [regPhone, setRegPhone] = useState('')
-  const [regOtp, setRegOtp] = useState('')
-  const [regPhoneToken, setRegPhoneToken] = useState('')
-  const [regDevBanner, setRegDevBanner] = useState('')
 
-  // Step 3 — details
+  // Step 1 — details
   const [regName, setRegName] = useState('')
   const [regEmail, setRegEmail] = useState('')
+  const [regPhone, setRegPhone] = useState('') // optional, plain contact info
   const [regAccountType, setRegAccountType] = useState<'parent' | 'child'>('parent')
   const [regCountry, setRegCountry] = useState('IN')
 
-  // Step 4 — email OTP verification
+  // Step 2 — email OTP verification (creates the account)
   const [regEmailOtp, setRegEmailOtp] = useState('')
-  const [regEmailToken, setRegEmailToken] = useState('')
   const [regEmailDevBanner, setRegEmailDevBanner] = useState('')
 
-  // Step 3 — touched state for live validation
+  // Step 1 — touched state for live validation
   const [nameTouched, setNameTouched] = useState(false)
   const [emailTouched, setEmailTouched] = useState(false)
 
@@ -82,7 +71,6 @@ export default function Login() {
 
   // OTP input ref for auto-focus
   const loginOtpRef = useRef<HTMLInputElement>(null)
-  const regOtpRef = useRef<HTMLInputElement>(null)
   const regEmailOtpRef = useRef<HTMLInputElement>(null)
 
   // ── REDIRECT IF ALREADY LOGGED IN ────────────────────────────
@@ -118,8 +106,7 @@ export default function Login() {
   }, [loginStep])
 
   useEffect(() => {
-    if (regStep === 2) setTimeout(() => regOtpRef.current?.focus(), 80)
-    if (regStep === 4) setTimeout(() => regEmailOtpRef.current?.focus(), 80)
+    if (regStep === 2) setTimeout(() => regEmailOtpRef.current?.focus(), 80)
   }, [regStep])
 
   // ── HELPERS ──────────────────────────────────────────────────
@@ -143,77 +130,10 @@ export default function Login() {
     setLoginOtp('')
     setLoginDevBanner('')
     setRegStep(1)
-    setRegOtp('')
-    setRegDevBanner('')
-    setRegPhoneToken('')
     setRegEmailOtp('')
-    setRegEmailToken('')
     setRegEmailDevBanner('')
     setNameTouched(false)
     setEmailTouched(false)
-  }
-
-  function switchLoginMethod(method: LoginMethod) {
-    setLoginMethod(method)
-    setLoginStep(1)
-    setLoginOtp('')
-    setLoginDevBanner('')
-    setLoginError('')
-  }
-
-  // ── LOGIN ACTIONS ────────────────────────────────────────────
-  async function doLoginSendOtp() {
-    setLoginError('')
-    const phone = loginPhone.trim()
-    if (!phone || !validatePhone(phone)) {
-      setLoginError('Please enter a valid phone number.')
-      return
-    }
-    setLoginLoading(true)
-    try {
-      const res = await fetch(API + '/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to send OTP')
-      if (data.dev_otp) {
-        const otp = String(data.dev_otp)
-        setLoginOtp(otp)
-        setLoginDevBanner(otp)
-      }
-      setLoginStep(2)
-    } catch (err: unknown) {
-      setLoginError(err instanceof Error ? err.message : 'Failed to send OTP')
-    } finally {
-      setLoginLoading(false)
-    }
-  }
-
-  async function doLoginVerify() {
-    setLoginError('')
-    const phone = loginPhone.trim()
-    const otp = loginOtp.trim()
-    if (!otp || otp.length < 6) {
-      setLoginError('Please enter the 6-digit OTP.')
-      return
-    }
-    setLoginLoading(true)
-    try {
-      const res = await fetch(API + '/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Login failed')
-      onLoginSuccess(data)
-    } catch (err: unknown) {
-      setLoginError(err instanceof Error ? err.message : 'Login failed')
-    } finally {
-      setLoginLoading(false)
-    }
   }
 
   // ── LOGIN (EMAIL) ACTIONS ────────────────────────────────────
@@ -272,73 +192,12 @@ export default function Login() {
   }
 
   // ── REGISTER ACTIONS ─────────────────────────────────────────
-  async function doRegSendOtp() {
-    setRegError('')
-    const phone = regPhone.trim()
-    if (!phone || !validatePhone(phone)) {
-      setRegError('Please enter a valid phone number.')
-      return
-    }
-    setRegLoading(true)
-    try {
-      const res = await fetch(API + '/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to send OTP')
-      if (data.dev_otp) {
-        const otp = String(data.dev_otp)
-        setRegOtp(otp)
-        setRegDevBanner(otp)
-      }
-      setRegStep(2)
-    } catch (err: unknown) {
-      setRegError(err instanceof Error ? err.message : 'Failed to send OTP')
-    } finally {
-      setRegLoading(false)
-    }
-  }
-
-  async function doRegVerifyPhone() {
-    setRegError('')
-    const phone = regPhone.trim()
-    const otp = regOtp.trim()
-    if (!otp || otp.length < 6) {
-      setRegError('Please enter the 6-digit OTP.')
-      return
-    }
-    setRegLoading(true)
-    try {
-      const res = await fetch(API + '/auth/verify-phone', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'OTP verification failed')
-      if (data.already_registered) {
-        // Switch to login tab
-        switchTab('login')
-        setLoginPhone(phone)
-        return
-      }
-      setRegPhoneToken(data.phone_token)
-      setRegStep(3)
-    } catch (err: unknown) {
-      setRegError(err instanceof Error ? err.message : 'OTP verification failed')
-    } finally {
-      setRegLoading(false)
-    }
-  }
-
   function doGoToPlan() {
     if (!detailsAllValid) return
     doRegSendEmailOtp()
   }
 
-  // Details → send email OTP, advance to step 4
+  // Details → send email OTP, advance to step 2
   async function doRegSendEmailOtp() {
     setRegError('')
     const email = regEmail.trim()
@@ -360,7 +219,7 @@ export default function Login() {
         setRegEmailOtp(otp)
         setRegEmailDevBanner(otp)
       }
-      setRegStep(4)
+      setRegStep(2)
     } catch (err: unknown) {
       setRegError(err instanceof Error ? err.message : 'Failed to send email OTP')
     } finally {
@@ -368,7 +227,7 @@ export default function Login() {
     }
   }
 
-  // Step 4 — verify email OTP, get email_token, then register
+  // Step 2 — verify email OTP, get email_token, then register
   async function doRegVerifyEmail() {
     setRegError('')
     const email = regEmail.trim()
@@ -389,13 +248,10 @@ export default function Login() {
       if (data.already_registered) {
         setRegError('This email is already registered. Please sign in instead.')
         switchTab('login')
-        switchLoginMethod('email')
         setLoginEmail(email)
         return
       }
-      const emailToken = data.email_token as string
-      setRegEmailToken(emailToken)
-      await doRegisterFree(emailToken)
+      await doRegisterFree(data.email_token as string)
     } catch (err: unknown) {
       setRegError(err instanceof Error ? err.message : 'Email verification failed')
     } finally {
@@ -403,7 +259,7 @@ export default function Login() {
     }
   }
 
-  async function doRegisterFree(emailToken?: string) {
+  async function doRegisterFree(emailToken: string) {
     setRegError('')
     setRegLoading(true)
     try {
@@ -411,11 +267,11 @@ export default function Login() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone_token: regPhoneToken,
-          email_token: emailToken ?? regEmailToken,
+          email_token: emailToken,
           name: regName.trim(),
           account_type: regAccountType,
           country_code: regCountry,
+          ...(regPhone.trim() ? { phone: regPhone.trim() } : {}),
         }),
       })
       const data = await res.json()
@@ -423,7 +279,7 @@ export default function Login() {
       onLoginSuccess(data)
     } catch (err: unknown) {
       setRegError(err instanceof Error ? err.message : 'Registration failed')
-      setRegStep(4)
+      setRegStep(2)
     } finally {
       setRegLoading(false)
     }
@@ -486,9 +342,8 @@ export default function Login() {
 
   // ── REGISTER PROGRESS DOTS ────────────────────────────────────
   function RegDots() {
-    // steps 2, 3, 4 show progress; step 1 = phone entry (no dots yet)
     if (regStep === 1) return null
-    const dots = [2, 3, 4] as RegStep[]
+    const dots = [1, 2] as RegStep[]
     return (
       <div className={styles.progressDots}>
         {dots.map((s) => (
@@ -503,10 +358,8 @@ export default function Login() {
 
   // ── REGISTRATION STEP LABELS ─────────────────────────────────
   const regStepLabel: Record<RegStep, string> = {
-    1: 'Phone Number',
-    2: 'Verify Phone',
-    3: 'Your Details',
-    4: 'Verify Email',
+    1: 'Your Details',
+    2: 'Verify Email',
   }
 
   return (
@@ -565,31 +418,6 @@ export default function Login() {
               <p className={styles.panelSub}>Sign in to keep your family connected</p>
             </div>
 
-            {/* METHOD TOGGLE — Phone / Email */}
-            <div className={styles.methodToggle}>
-              <button
-                type="button"
-                className={`${styles.methodBtn} ${loginMethod === 'phone' ? styles.methodBtnActive : ''}`}
-                onClick={() => switchLoginMethod('phone')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-                </svg>
-                Phone
-              </button>
-              <button
-                type="button"
-                className={`${styles.methodBtn} ${loginMethod === 'email' ? styles.methodBtnActive : ''}`}
-                onClick={() => switchLoginMethod('email')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                  <polyline points="22,6 12,13 2,6"/>
-                </svg>
-                Email
-              </button>
-            </div>
-
             {loginError && (
               <div className={styles.errorBanner}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -599,48 +427,8 @@ export default function Login() {
               </div>
             )}
 
-            {/* STEP 1 — Phone */}
-            {loginStep === 1 && loginMethod === 'phone' && (
-              <form onSubmit={(e) => { e.preventDefault(); doLoginSendOtp() }}>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel} htmlFor="login-phone">Phone Number</label>
-                  <div className={styles.fieldWrap}>
-                    <span className={styles.fieldIcon}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-                      </svg>
-                    </span>
-                    <input
-                      type="tel"
-                      id="login-phone"
-                      className={styles.fieldInput}
-                      placeholder="+91 98765 43210"
-                      autoComplete="tel"
-                      inputMode="tel"
-                      value={loginPhone}
-                      onChange={(e) => { setLoginPhone(e.target.value); setLoginError('') }}
-                    />
-                  </div>
-                </div>
-                <button
-                  className={`${styles.btnPrimary} ${loginLoading ? styles.btnLoading : ''}`}
-                  type="submit"
-                  disabled={loginLoading}
-                >
-                  {loginLoading ? <span className={styles.spinner} /> : (
-                    <>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-                      </svg>
-                      Send OTP
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
-
             {/* STEP 1 — Email */}
-            {loginStep === 1 && loginMethod === 'email' && (
+            {loginStep === 1 && (
               <form onSubmit={(e) => { e.preventDefault(); doLoginSendEmailOtp() }}>
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel} htmlFor="login-email">Email Address</label>
@@ -683,10 +471,10 @@ export default function Login() {
 
             {/* STEP 2 — OTP + Sign In */}
             {loginStep === 2 && (
-              <form onSubmit={(e) => { e.preventDefault(); loginMethod === 'email' ? doLoginVerifyEmail() : doLoginVerify() }}>
+              <form onSubmit={(e) => { e.preventDefault(); doLoginVerifyEmail() }}>
                 {loginDevBanner && <DevBanner otp={loginDevBanner} />}
                 <p className={styles.stepHint}>
-                  OTP sent to <strong>{loginMethod === 'email' ? loginEmail : loginPhone}</strong>
+                  OTP sent to <strong>{loginEmail}</strong>
                 </p>
                 <OtpInput
                   value={loginOtp}
@@ -752,92 +540,8 @@ export default function Login() {
               </div>
             )}
 
-            {/* REG STEP 1 — Phone */}
+            {/* REG STEP 1 — Details */}
             {regStep === 1 && (
-              <form onSubmit={(e) => { e.preventDefault(); doRegSendOtp() }}>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel} htmlFor="reg-phone">Phone Number</label>
-                  <div className={styles.fieldWrap}>
-                    <span className={styles.fieldIcon}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-                      </svg>
-                    </span>
-                    <input
-                      type="tel"
-                      id="reg-phone"
-                      className={styles.fieldInput}
-                      placeholder="+91 98765 43210"
-                      autoComplete="tel"
-                      inputMode="tel"
-                      value={regPhone}
-                      onChange={(e) => { setRegPhone(e.target.value); setRegError('') }}
-                    />
-                  </div>
-                </div>
-                <button
-                  className={`${styles.btnPrimary} ${regLoading ? styles.btnLoading : ''}`}
-                  type="submit"
-                  disabled={regLoading}
-                >
-                  {regLoading ? <span className={styles.spinner} /> : (
-                    <>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-                      </svg>
-                      Send OTP
-                    </>
-                  )}
-                </button>
-                <div className={styles.termsText}>
-                  By continuing you agree to our{' '}
-                  <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> and{' '}
-                  <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
-                </div>
-              </form>
-            )}
-
-            {/* REG STEP 2 — OTP Verify */}
-            {regStep === 2 && (
-              <form onSubmit={(e) => { e.preventDefault(); doRegVerifyPhone() }}>
-                {regDevBanner && <DevBanner otp={regDevBanner} />}
-                <p className={styles.stepHint}>
-                  OTP sent to <strong>{regPhone}</strong>
-                </p>
-                <OtpInput
-                  value={regOtp}
-                  onChange={(v) => { setRegOtp(v); setRegError('') }}
-                  inputRef={regOtpRef}
-                />
-                <button
-                  className={`${styles.btnPrimary} ${regLoading ? styles.btnLoading : ''}`}
-                  type="submit"
-                  disabled={regLoading || regOtp.length < 6}
-                >
-                  {regLoading ? <span className={styles.spinner} /> : (
-                    <>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                      Verify Phone
-                    </>
-                  )}
-                </button>
-                <div className={styles.resendRow}>
-                  Didn&apos;t receive it?{' '}
-                  <button
-                    type="button"
-                    className={styles.resendBtn}
-                    onClick={() => { setRegStep(1); setRegOtp(''); setRegDevBanner(''); setRegError('') }}
-                  >
-                    Resend OTP
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* REG STEP 3 — Details */}
-            {regStep === 3 && (
               <form onSubmit={(e) => { e.preventDefault(); doGoToPlan() }}>
 
                 {/* Full Name */}
@@ -894,6 +598,28 @@ export default function Login() {
                   )}
                 </div>
 
+                {/* Phone (optional, plain contact info — not used for login) */}
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel} htmlFor="reg-phone">Phone Number (optional)</label>
+                  <div className={styles.fieldWrap}>
+                    <span className={styles.fieldIcon}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.63a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                      </svg>
+                    </span>
+                    <input
+                      type="tel"
+                      id="reg-phone"
+                      className={styles.fieldInput}
+                      placeholder="+91 98765 43210"
+                      autoComplete="tel"
+                      inputMode="tel"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 {/* Account Type */}
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel}>Account Type</label>
@@ -947,11 +673,16 @@ export default function Login() {
                 >
                   {regLoading ? 'Sending Email OTP...' : 'Continue →'}
                 </button>
+                <div className={styles.termsText}>
+                  By continuing you agree to our{' '}
+                  <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> and{' '}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+                </div>
               </form>
             )}
 
-            {/* REG STEP 4 — Email OTP Verify */}
-            {regStep === 4 && (
+            {/* REG STEP 2 — Email OTP Verify */}
+            {regStep === 2 && (
               <form onSubmit={(e) => { e.preventDefault(); doRegVerifyEmail() }}>
                 {regEmailDevBanner && <DevBanner otp={regEmailDevBanner} />}
                 <p className={styles.stepHint}>
@@ -981,7 +712,7 @@ export default function Login() {
                   <button
                     type="button"
                     className={styles.resendBtn}
-                    onClick={() => { setRegStep(3); setRegEmailOtp(''); setRegEmailDevBanner(''); setRegError('') }}
+                    onClick={() => { setRegStep(1); setRegEmailOtp(''); setRegEmailDevBanner(''); setRegError('') }}
                   >
                     Change email / Resend
                   </button>

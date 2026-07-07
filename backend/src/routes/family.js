@@ -49,7 +49,9 @@ const createChildSchema = z.object({
   dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   avatar_url: z.string().url().optional(),
   phone: z.string().min(3).max(20).optional(),
-  email: z.string().email().optional(),
+  // Required: login is email-only now, so a child needs an email to ever
+  // log into their own account (phone is contact info only, not a credential).
+  email: z.string().email(),
 })
 
 const updateChildSchema = z.object({
