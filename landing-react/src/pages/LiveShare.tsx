@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { escapeHtml } from '../utils/escapeHtml'
 
 // Leaflet is loaded at runtime from unpkg (same pattern as ParentPanel/ChildPanel).
 // We deliberately avoid importing the npm package so this public page stays light.
@@ -123,7 +124,7 @@ export default function LiveShare() {
         })
         markerRef.current = LL.marker([lat, lng], { icon }).addTo(map!)
       }
-      markerRef.current.bindPopup(`<b>${info.name}</b><br/>Live location`)
+      markerRef.current.bindPopup(`<b>${escapeHtml(info.name)}</b><br/>Live location`)
       map!.setView([lat, lng], map!.getZoom() || 15)
     }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import styles from './ParentPanel.module.css'
+import { escapeHtml } from '../utils/escapeHtml'
 
 // ── TYPES ──
 interface Member {
@@ -370,13 +371,13 @@ export default function ParentPanel() {
       })
       const nz = nearestZone(m.lat!, m.lng!, zones, m.id)
       const distLine = nz
-        ? `<div style="font-size:10px;color:${nz.inside ? '#00E676' : '#5E8B6E'};margin-top:2px;">${nz.inside ? '🛡️ Inside ' + nz.name : '📍 ' + fmtDist(nz.dist) + ' from ' + nz.name}</div>`
+        ? `<div style="font-size:10px;color:${nz.inside ? '#00E676' : '#5E8B6E'};margin-top:2px;">${nz.inside ? '🛡️ Inside ' + escapeHtml(nz.name) : '📍 ' + fmtDist(nz.dist) + ' from ' + escapeHtml(nz.name)}</div>`
         : ''
       const marker = L2.marker([m.lat!, m.lng!], { icon }).addTo(leafletMapRef.current!)
       marker.bindPopup(
         `<div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border:1px solid rgba(0,230,118,0.2);border-radius:10px;padding:10px;min-width:140px;">
-          <div style="font-weight:800;font-size:13px;color:${color};margin-bottom:4px;">${m.name}</div>
-          <div style="font-size:11px;color:#5E8B6E;margin-bottom:2px;">${m.role}</div>
+          <div style="font-weight:800;font-size:13px;color:${color};margin-bottom:4px;">${escapeHtml(m.name)}</div>
+          <div style="font-size:11px;color:#5E8B6E;margin-bottom:2px;">${escapeHtml(m.role)}</div>
           <div style="font-size:10px;color:#5E8B6E;margin-top:4px;">🔋 ${m.battery}%</div>
           ${distLine}
         </div>`,
@@ -411,8 +412,8 @@ export default function ParentPanel() {
         }).addTo(leafletMapRef.current!)
         circle.bindPopup(
           `<div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border:1px solid rgba(0,230,118,0.2);border-radius:10px;padding:10px;min-width:140px;">
-            <div style="font-weight:800;font-size:13px;color:#00E676;margin-bottom:4px;">🛡️ ${z.name}</div>
-            <div style="font-size:10px;color:#5E8B6E;">Radius: ${z.radius} m · ${z.assigned_user_name ? 'For ' + z.assigned_user_name : 'Shared'} · ${z.category}</div>
+            <div style="font-weight:800;font-size:13px;color:#00E676;margin-bottom:4px;">🛡️ ${escapeHtml(z.name)}</div>
+            <div style="font-size:10px;color:#5E8B6E;">Radius: ${z.radius} m · ${z.assigned_user_name ? 'For ' + escapeHtml(z.assigned_user_name) : 'Shared'} · ${escapeHtml(z.category)}</div>
           </div>`,
           { className: 'custom-popup' }
         )

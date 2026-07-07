@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import styles from './ChildPanel.module.css'
+import { escapeHtml } from '../utils/escapeHtml'
 
 // Leaflet types
 declare global {
@@ -502,7 +503,7 @@ export default function ChildPanel() {
                style="width:${size}px;height:${size}px;border-radius:50%;border:2.5px solid ${m.color};object-fit:cover;box-shadow:0 0 14px ${m.color}90;display:block;margin:auto;position:relative;z-index:1;"
                loading="lazy">
           <div style="font-size:9px;font-weight:700;background:rgba(5,12,8,.92);color:${m.color};padding:2px 6px;border-radius:5px;margin-top:3px;border:1px solid ${m.color}40;font-family:'Plus Jakarta Sans',sans-serif;position:relative;z-index:1;">
-            ${m.isMe ? '📍 You' : m.name.split(' ')[0]}
+            ${m.isMe ? '📍 You' : escapeHtml(m.name.split(' ')[0])}
           </div>
         </div>
       `,
@@ -512,10 +513,10 @@ export default function ChildPanel() {
     const marker = L.marker([m.lat, m.lng], { icon }).addTo(leafletMapRef.current)
     marker.bindPopup(`
       <div style="font-family:'Plus Jakarta Sans',sans-serif;background:#0D1F13;color:#fff;border-radius:10px;padding:8px;min-width:120px;border:1px solid ${m.color}40;">
-        <strong style="color:${m.color};">${m.name}</strong><br>
-        <span style="font-size:11px;color:#5E8B6E;">${m.role || (m.isMe ? 'You' : 'Member')}</span><br>
+        <strong style="color:${m.color};">${escapeHtml(m.name)}</strong><br>
+        <span style="font-size:11px;color:#5E8B6E;">${escapeHtml(m.role || (m.isMe ? 'You' : 'Member'))}</span><br>
         <span style="font-size:11px;">🔋 ${m.battery}%</span><br>
-        <span style="font-size:11px;color:${m.color};">${m.status}</span>
+        <span style="font-size:11px;color:${m.color};">${escapeHtml(m.status)}</span>
       </div>
     `)
     memberMarkersRef.current[m.id] = marker
