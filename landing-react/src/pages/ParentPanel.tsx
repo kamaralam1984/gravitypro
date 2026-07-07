@@ -187,6 +187,7 @@ export default function ParentPanel() {
   // Add child
   const [showChildModal, setShowChildModal] = useState(false)
   const [childName, setChildName] = useState('')
+  const [childEmail, setChildEmail] = useState('')
   const [childDob, setChildDob] = useState('')
   const [childCircleId, setChildCircleId] = useState('')
   const [childSaving, setChildSaving] = useState(false)
@@ -205,6 +206,8 @@ export default function ParentPanel() {
   const [segmentVal, setSegmentVal] = useState('Exact')
   const [notifCount, setNotifCount] = useState(0)
   const [showCreateCircleModal, setShowCreateCircleModal] = useState(false)
+  const [showDeleteCircleModal, setShowDeleteCircleModal] = useState(false)
+  const [deletingCircle, setDeletingCircle] = useState(false)
   const [newCircleName, setNewCircleName] = useState('')
   const [inviteCodeInput, setInviteCodeInput] = useState('')
   const [circleInviteCode, setCircleInviteCode] = useState('')
@@ -591,22 +594,23 @@ export default function ParentPanel() {
   // ── ADD CHILD ──
   function openChildModal() {
     setChildName('')
+    setChildEmail('')
     setChildDob('')
     setChildCircleId(circleId || (allCircles[0]?.id ?? ''))
     setShowChildModal(true)
   }
 
   async function addChild() {
-    if (!childCircleId || !childName.trim()) { showToast('Pick a circle and enter a name', 'error'); return }
+    if (!childCircleId || !childName.trim() || !childEmail.trim()) { showToast('Pick a circle, name and email', 'error'); return }
     setChildSaving(true)
     try {
-      const body: Record<string, string> = { circle_id: childCircleId, name: childName.trim() }
+      const body: Record<string, string> = { circle_id: childCircleId, name: childName.trim(), email: childEmail.trim() }
       if (childDob) body.dob = childDob
       const res = await apiPost('/family/children', body)
       if (res?.child) {
         showToast('Child added!', 'success')
         setShowChildModal(false)
-        setChildName(''); setChildDob('')
+        setChildName(''); setChildEmail(''); setChildDob('')
         if (childCircleId === circleId) await loadMembers(childCircleId)
       } else {
         showToast(res?.error || 'Failed to add child', 'error')
@@ -981,6 +985,28 @@ export default function ParentPanel() {
       showToast('You have left the circle')
       setTimeout(() => { localStorage.removeItem('gravity_token'); localStorage.removeItem('gravity_user'); window.location.href = '/login' }, 1500)
     } catch(e: unknown) { showToast(e instanceof Error ? e.message : 'Error leaving circle', 'error') }
+  }
+  // Deletes the whole circle (not just leaving it) — only the circle's admin
+  // may do this (enforced server-side by DELETE /circles/:circleId). Uses an
+  // in-app modal rather than window.confirm(), which Chrome silently no-ops
+  // on once "Prevent this page from creating additional dialogs" has ever
+  // been checked in the tab — see the same fix already applied in AdminPanel.
+  async function doDeleteCircle() {
+    if (!circleId) return
+    setDeletingCircle(true)
+    try {
+      const token = getToken()
+      const res = await fetch(API_BASE + '/circles/' + circleId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Failed to delete circle')
+      showToast('Circle deleted', 'success')
+      setShowDeleteCircleModal(false)
+      await loadFamily()
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Error deleting circle', 'error')
+    } finally {
+      setDeletingCircle(false)
+    }
   }
   async function confirmDelete() {
     if (!confirm('Are you sure you want to permanently delete your account? This will delete ALL your data and cannot be undone.')) return
@@ -1759,6 +1785,18 @@ export default function ParentPanel() {
                   </div>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF5252" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
                 </div>
+                {circleId && (
+                  <div className={`${styles.settingsRow} ${styles.settingsDangerRow}`} onClick={() => setShowDeleteCircleModal(true)}>
+                    <div className={styles.settingsRowLeft}>
+                      <div className={styles.settingsRowIcon} style={{ background: 'rgba(255,82,82,0.15)' }}>💥</div>
+                      <div>
+                        <div className={styles.settingsRowLabel}>Delete This Circle</div>
+                        <div style={{ fontSize: 11, color: '#5E8B6E' }}>Removes it for every member — admins only</div>
+                      </div>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF5252" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+                  </div>
+                )}
                 <div className={`${styles.settingsRow} ${styles.settingsDangerRow}`} onClick={confirmDelete}>
                   <div className={styles.settingsRowLeft}>
                     <div className={styles.settingsRowIcon} style={{ background: 'rgba(255,82,82,0.15)' }}>🗑️</div>
@@ -1973,6 +2011,11 @@ export default function ParentPanel() {
                   type="text" placeholder="e.g. Aanya" value={childName} onChange={e => setChildName(e.target.value)} />
               </div>
               <div>
+                <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Child's Email (needed for them to log in)</div>
+                <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  type="email" placeholder="child@example.com" value={childEmail} onChange={e => setChildEmail(e.target.value)} />
+              </div>
+              <div>
                 <div style={{ fontSize: 11, color: '#5E8B6E', marginBottom: 4 }}>Date of Birth (optional)</div>
                 <input style={{ width: '100%', background: '#050C08', border: '1px solid rgba(0,230,118,0.12)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
                   type="date" value={childDob} onChange={e => setChildDob(e.target.value)} />
@@ -1994,6 +2037,30 @@ export default function ParentPanel() {
               <button onClick={addChild} disabled={childSaving}
                 style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: childSaving ? '#0D7A45' : '#00E676', color: '#020C05', fontSize: 13, fontWeight: 700, cursor: childSaving ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
                 {childSaving ? 'Adding...' : 'Add Child'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Circle Modal */}
+      {showDeleteCircleModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => !deletingCircle && setShowDeleteCircleModal(false)}>
+          <div style={{ background: '#0D1F13', border: '1px solid rgba(255,82,82,0.25)', borderRadius: 18, padding: 24, width: 'calc(100% - 48px)', maxWidth: 340 }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 8 }}>Delete this circle?</div>
+            <div style={{ fontSize: 12, color: '#5E8B6E', lineHeight: 1.5, marginBottom: 20 }}>
+              This permanently removes the circle for every member — all safe zones, alerts and history tied to it. This cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowDeleteCircleModal(false)} disabled={deletingCircle}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid rgba(0,230,118,0.12)', background: 'transparent', color: '#5E8B6E', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+              <button onClick={doDeleteCircle} disabled={deletingCircle}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: deletingCircle ? '#7A0D0D' : '#FF5252', color: '#fff', fontSize: 13, fontWeight: 700, cursor: deletingCircle ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                {deletingCircle ? 'Deleting...' : '🗑️ Delete Circle'}
               </button>
             </div>
           </div>
