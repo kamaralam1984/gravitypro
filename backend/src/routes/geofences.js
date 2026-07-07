@@ -42,7 +42,12 @@ router.get('/circle/:circleId', authenticate, async (req, res) => {
 
 // GET geofence events for a circle (for Alerts screen)
 router.get('/events/:circleId', authenticate, async (req, res) => {
-  const { limit = 50, offset = 0 } = req.query
+  let limit = parseInt(req.query.limit, 10)
+  if (!Number.isFinite(limit) || limit <= 0) limit = 50
+  if (limit > 200) limit = 200
+  let offset = parseInt(req.query.offset, 10)
+  if (!Number.isFinite(offset) || offset < 0) offset = 0
+
   const membership = await query(
     'SELECT id FROM circle_members WHERE circle_id = $1 AND user_id = $2',
     [req.params.circleId, req.user.id]
@@ -60,7 +65,7 @@ router.get('/events/:circleId', authenticate, async (req, res) => {
      WHERE sz.circle_id = $1
      ORDER BY ge.created_at DESC
      LIMIT $2 OFFSET $3`,
-    [req.params.circleId, parseInt(limit), parseInt(offset)]
+    [req.params.circleId, limit, offset]
   )
   res.json({ events: result.rows, total: result.rowCount })
 })
