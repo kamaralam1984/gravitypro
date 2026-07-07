@@ -251,19 +251,14 @@ router.post('/:userId/refresh', authenticate, async (req, res) => {
   res.json({ success: true })
 })
 
+// Disabled: this looked up any user by phone number with no check that they
+// share a circle with the caller, leaking any registered user's name/phone/
+// avatar to any other authenticated stranger. No client (mobile or web)
+// actually calls this — invites go through POST /circles/join with an
+// invite_code, not a phone lookup — so disabling has no effect on any real
+// flow. Rebuild scoped to circle members only if a real use case needs it.
 router.get('/search', authenticate, async (req, res) => {
-  const { phone } = req.query
-  if (!phone) return res.status(400).json({ error: 'phone query required' })
-  try {
-    const result = await query(
-      'SELECT id, name, phone, avatar_url FROM users WHERE phone = $1 AND id != $2',
-      [phone, req.user.id]
-    )
-    res.json({ user: result.rows[0] || null })
-  } catch (err) {
-    console.error('[GET /search]', err.message)
-    res.status(500).json({ error: 'Search failed' })
-  }
+  res.status(501).json({ error: 'User search is not available' })
 })
 
 // ─── New location routes ──────────────────────────────────────────────────────
