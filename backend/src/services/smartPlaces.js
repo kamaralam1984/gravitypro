@@ -170,10 +170,40 @@ const processStopForSmartPlaces = async (userId, stopId, lat, lng, arrivedAt, de
   )
   const placeId = insertResult.rows[0].id
 
-  for (const c of candidates.rows) {
-    await query('UPDATE timeline_stops SET smart_place_id = $1 WHERE id = $2', [placeId, c.id])
-    await updatePlaceStats(placeId, c.arrived_at, c.departed_at)
-  }
+  // Link every candidate stop in one batched UPDATE, and set the new place's
+  // stats directly from the full candidate set — instead of updatePlaceStats()
+  // once per candidate (2 sequential queries each: a per-row link + a
+  // read-modify-write running-average update). The incremental running-average
+  // formula updatePlaceStats() uses, applied N times from a fresh (zeroed)
+  // place, is mathematically identical to computing the aggregate directly
+  // from all N visits at once.
+  await query(
+    'UPDATE timeline_stops SET smart_place_id = $1 WHERE id = ANY($2)',
+    [placeId, candidates.rows.map((c) => c.id)]
+  )
+  const durationsSec = candidates.rows.map((c) =>
+    Math.max(0, Math.round((new Date(c.departed_at) - new Date(c.arrived_at)) / 1000))
+  )
+  const sumDurationSec = durationsSec.reduce((a, b) => a + b, 0)
+  const longestStaySec = Math.max(...durationsSec)
+  const avgArrivalSec = candidates.rows.reduce((s, c) => s + secondsSinceMidnight(c.arrived_at), 0) / visitCount
+  const avgDepartureSec = candidates.rows.reduce((s, c) => s + secondsSinceMidnight(c.departed_at), 0) / visitCount
+  const firstVisitAt = new Date(Math.min(...candidates.rows.map((c) => new Date(c.arrived_at).getTime())))
+  const lastVisitAt = new Date(Math.max(...candidates.rows.map((c) => new Date(c.departed_at).getTime())))
+
+  await query(
+    `UPDATE smart_places SET
+       visit_count         = $2,
+       total_duration_sec  = $3,
+       longest_stay_sec    = $4,
+       avg_arrival_sec     = $5,
+       avg_departure_sec   = $6,
+       first_visit_at      = $7,
+       last_visit_at       = $8,
+       updated_at          = NOW()
+     WHERE id = $1`,
+    [placeId, visitCount, sumDurationSec, longestStaySec, avgArrivalSec, avgDepartureSec, firstVisitAt, lastVisitAt]
+  )
 }
 
 module.exports = { processStopForSmartPlaces, inferCategory, MIN_VISITS, MIN_TOTAL_HOURS, CLUSTER_RADIUS_M }
