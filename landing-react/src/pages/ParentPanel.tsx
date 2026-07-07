@@ -456,9 +456,13 @@ export default function ParentPanel() {
       if (!data?.circles?.length) { setFamilyCount('No circle yet'); return }
       setAllCircles(data.circles)
       const cid = data.circles[0].id
-      setCircleId(cid)
       setCircleInviteCode(data.circles[0].invite_code || '')
-      await Promise.all([loadMembers(cid), loadAlerts(cid), loadGeofences(cid)])
+      // Members/alerts/geofences are loaded by the circleId-watcher effect
+      // below, which fires whenever setCircleId below actually changes the
+      // value (always true here — a freshly loaded/created/joined circle is
+      // never the same id as before) — calling those loaders here too would
+      // fetch each of them twice on every load.
+      setCircleId(cid)
       connectSSE(cid)
       // Auto-refresh member locations every 30 seconds as fallback
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current)
