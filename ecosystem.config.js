@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'gravity-api',
       script: 'src/app.js',
-      cwd: '/media/server/linux-part/Gravity/backend',
+      cwd: '/var/www/gravitypro/backend',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -32,7 +32,7 @@ module.exports = {
     {
       name: 'gravity-web',
       script: 'server.cjs',
-      cwd: '/media/server/linux-part/Gravity/landing-react',
+      cwd: '/var/www/gravitypro/landing-react',
       instances: 1,
       autorestart: true,
       watch: false,
