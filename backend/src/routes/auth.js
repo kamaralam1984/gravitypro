@@ -43,6 +43,11 @@ function getMailer() {
     port: parseInt(process.env.SMTP_PORT) || 587,
     secure: String(process.env.SMTP_SECURE) === 'true' || parseInt(process.env.SMTP_PORT) === 465,
     auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+    // Force IPv4 — this VPS resolves smtp.gmail.com to an IPv6 address by
+    // default, and its IPv6 route corrupts the TLS handshake ("wrong version
+    // number" from openssl, even though the plain TCP connect succeeds).
+    // IPv4 avoids that route entirely.
+    family: 4,
   })
   return _mailer
 }
