@@ -39,7 +39,7 @@ docker compose -f docker-compose.osrm.yml ps
 docker inspect --format '{{.State.Health.Status}}' gravity-osrm   # expect "healthy" within ~45s
 ```
 
-Then set `OSRM_BASE_URL=http://127.0.0.1:5000` in `/var/www/gravitypro/backend/.env`
+Then set `OSRM_BASE_URL=http://127.0.0.1:5050` in `/var/www/gravitypro/backend/.env`
 (see `backend/.env.example`) and restart the backend: `pm2 restart gravity-api --update-env`.
 
 ## Startup / restart
@@ -53,7 +53,7 @@ reboot automatically once started — no separate systemd unit needed.
 ## Verify it's working
 
 ```bash
-curl -s 'http://127.0.0.1:5000/route/v1/driving/85.1376,25.6093;85.1414,25.6127?overview=full&geometries=geojson' | jq '.code, .routes[0].distance'
+curl -s 'http://127.0.0.1:5050/route/v1/driving/85.1376,25.6093;85.1414,25.6127?overview=full&geometries=geojson' | jq '.code, .routes[0].distance'
 # (Patna Junction -> Gandhi Maidan) — expect "Ok" and a plausible distance in meters
 ```
 

@@ -3,7 +3,10 @@
 #
 # Bound to 127.0.0.1 only: never internet-exposed, never added to Caddy. The
 # backend (a bare PM2 process on the host) reaches it over loopback at
-# OSRM_BASE_URL=http://127.0.0.1:5000 (see backend/.env.example).
+# OSRM_BASE_URL=http://127.0.0.1:5050 (see backend/.env.example). Host port
+# 5050, not OSRM's default 5000 — port 5000 was already taken by an unrelated
+# app on this shared VPS. The container's internal port stays 5000 (only the
+# host-side mapping changed), so the healthcheck below still targets :5000.
 #
 # Data (osrm/data/*.osrm*) is produced by scripts/prepare-extract.sh and is
 # NOT part of this compose file — build it once before `docker compose up`.
@@ -23,7 +26,7 @@ services:
     volumes:
       - ./data:/data:ro
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:5050:5000"
     restart: unless-stopped
     mem_limit: 2g
     cpus: 1
