@@ -84,6 +84,18 @@ expect it to take longer here than on a dedicated machine. If this becomes a
 real problem, preprocess on a separate/beefier machine and copy only the
 finished `data/*.osrm*` files over instead of running extract on the VPS itself.
 
+**Swap is required.** `osrm-extract` on the full India extract peaked at
+~4.7GB RSS and got OOM-killed the first time this ran here — the VPS had
+**zero swap configured**, so the kernel killed it outright instead of paging.
+`prepare-extract.sh`/`swap-extract.sh` pass `--threads 1` to keep peak memory
+down, but that alone isn't a guarantee on a shared box; add a swapfile before
+running either script (one-time, survives reboots via `/etc/fstab`):
+```bash
+fallocate -l 8G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+free -h   # confirm Swap: 8.0Gi
+```
+
 Disk: the `.osm.pbf` is ~800MB-1GB, processed files ~2-4GB more — 25GB was
 free at last check, comfortably enough.
 

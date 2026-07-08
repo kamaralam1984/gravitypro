@@ -22,7 +22,9 @@ echo "[1/5] Downloading fresh India OSM extract into $STAGING/..."
 curl -L --fail -o "$STAGING/india-latest.osm.pbf" "$EXTRACT_URL"
 
 echo "[2/5] osrm-extract / osrm-partition / osrm-customize..."
-docker run --rm -v "$HERE/$STAGING:/data" "$IMAGE" osrm-extract -p /opt/car.lua /data/india-latest.osm.pbf
+# --threads 1: see prepare-extract.sh — keeps peak memory in budget on a
+# no-swap-by-default shared VPS.
+docker run --rm -v "$HERE/$STAGING:/data" "$IMAGE" osrm-extract --threads 1 -p /opt/car.lua /data/india-latest.osm.pbf
 docker run --rm -v "$HERE/$STAGING:/data" "$IMAGE" osrm-partition /data/india-latest.osrm
 docker run --rm -v "$HERE/$STAGING:/data" "$IMAGE" osrm-customize /data/india-latest.osrm
 
