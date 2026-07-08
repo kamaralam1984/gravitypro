@@ -70,16 +70,22 @@ If OSRM is ever fully lost, just re-run `prepare-extract.sh`.
 
 ## Resource notes (shared VPS)
 
-This VPS runs ~14 other PM2 apps for unrelated projects. `docker-compose.osrm.yml`
-sets `mem_limit: 3g` / `cpus: 1.5` as a starting point — check `free -h` on the
-VPS and adjust if it's too tight or unnecessarily generous. The one-off
-`prepare-extract.sh`/`swap-extract.sh` preprocessing steps use more RAM
-transiently than the steady-state serving container does; if the VPS is RAM-
-constrained, consider running preprocessing on a separate machine and copying
-only the finished `data/*.osrm*` files over instead.
+Measured on srv1569796: **7.8GB RAM (~4.3GB available), only 2 CPU cores
+total**, shared with ~14 other PM2 apps for unrelated projects. `mem_limit: 2g`
+/ `cpus: 1` in `docker-compose.osrm.yml` reflects that — leaves headroom for
+everything else once OSRM is steady-state.
 
-Disk: the `.osm.pbf` is ~800MB-1GB, processed files ~2-4GB more — budget ~5GB
-free before running `prepare-extract.sh`.
+**The one-off `prepare-extract.sh`/`swap-extract.sh` preprocessing (`osrm-extract`
+/ `osrm-partition` / `osrm-customize`) is NOT bound by that limit** (it runs as
+separate `docker run` commands, not the compose service) and is genuinely
+CPU-heavy — on a 2-core box this can peg both cores for a while and slow down
+every other app on the VPS for the duration. Run it at a low-traffic time, and
+expect it to take longer here than on a dedicated machine. If this becomes a
+real problem, preprocess on a separate/beefier machine and copy only the
+finished `data/*.osrm*` files over instead of running extract on the VPS itself.
+
+Disk: the `.osm.pbf` is ~800MB-1GB, processed files ~2-4GB more — 25GB was
+free at last check, comfortably enough.
 
 ## Algorithm choice: MLD, not CH
 

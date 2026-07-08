@@ -22,8 +22,8 @@ services:
     ports:
       - "127.0.0.1:5000:5000"
     restart: unless-stopped
-    mem_limit: 3g
-    cpus: 1.5
+    mem_limit: 2g
+    cpus: 1
     healthcheck:
       # osrm-routed has no literal /health route — a real route request is the
       # correct smoke test (coordinates: India Gate -> Connaught Place, Delhi).
