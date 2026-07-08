@@ -1,5 +1,6 @@
 import { Platform } from 'react-native'
 import * as Location from 'expo-location'
+import { getWatchOptions, getStoredPrecision } from '../utils/locationPrecision'
 
 const LOCATION_TASK_NAME = 'gravity-background-location'
 
@@ -129,13 +130,18 @@ export const startBackgroundTracking = async () => {
   if (status !== 'granted') throw new Error('Background location permission denied')
   const isRegistered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false)
   if (!isRegistered) {
+    // Precision preference (Profile > Location Precision) changes the
+    // accuracy/interval below — 'precise' matches the original hardcoded
+    // defaults exactly. startLocationUpdatesAsync only reads these at
+    // registration, so a preference change while already tracking requires
+    // an explicit stop+restart (handled in ProfileScreen.jsx).
+    const precision = await getStoredPrecision()
+    const watchOpts = getWatchOptions(precision, 'background')
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
       // Live tracking while MOVING, but no GPS churn when stationary (the 60s
       // presence heartbeat keeps a still device "online", so we don't need a fix
       // every few seconds when it isn't moving — that was a major battery drain).
-      accuracy: Location.Accuracy.High,
-      timeInterval: 5000,        // at most one fix per ~5s
-      distanceInterval: 12,      // only when moved ≥12m → near-zero drain when still
+      ...watchOpts,
       deferredUpdatesInterval: 0, // do not batch — deliver each fix immediately
       pausesUpdatesAutomatically: false, // iOS: never auto-pause when stationary
       activityType: Location.ActivityType.Other,

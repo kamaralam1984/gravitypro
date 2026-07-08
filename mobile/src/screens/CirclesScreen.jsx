@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, Animated, Pressable,
-  TextInput, Modal, ActivityIndicator, Alert, Platform, FlatList, RefreshControl,
+  TextInput, Modal, ActivityIndicator, Alert, Platform, FlatList, RefreshControl, Linking,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
@@ -76,6 +76,13 @@ function MemberRow({ member, isAdmin, onRemove }) {
   // Parent can remotely refresh a child's app (pull OTA + reload + come online).
   const canRefresh = !meIsChild && !isParent
   const [refreshing, setRefreshing] = useState(false)
+
+  // Call/message shortcuts — never shown on your own row, and only when the
+  // member actually has a phone number on file.
+  const myId = useAuthStore(s => s.user?.id)
+  const canContact = !!member.phone && member.id !== myId
+  const handleCall = () => Linking.openURL(`tel:${member.phone}`).catch(() => Alert.alert('Could not open dialer'))
+  const handleMessage = () => Linking.openURL(`sms:${member.phone}`).catch(() => Alert.alert('Could not open messages'))
   const handleRefresh = async () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setRefreshing(true)
@@ -106,6 +113,16 @@ function MemberRow({ member, isAdmin, onRemove }) {
         <View style={[styles.roleBadge, { borderColor: roleColor }]}>
           <Text style={[styles.roleText, { color: roleColor }]}>{roleLabel}</Text>
         </View>
+        {canContact && (
+          <Pressable onPress={handleCall} style={styles.iconBtn} hitSlop={8}>
+            <Ionicons name="call-outline" size={16} color={c.accent} />
+          </Pressable>
+        )}
+        {canContact && (
+          <Pressable onPress={handleMessage} style={styles.iconBtn} hitSlop={8}>
+            <Ionicons name="chatbubble-ellipses-outline" size={16} color={c.accentSoft} />
+          </Pressable>
+        )}
         {canRefresh && (
           <Pressable onPress={handleRefresh} disabled={refreshing} style={styles.removeBtn} hitSlop={8}>
             {refreshing
@@ -228,6 +245,32 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
               onLeft && onLeft(circle.id)
             } catch (e) {
               Alert.alert('Error', e.error || 'Failed to leave circle')
+            }
+          },
+        },
+      ]
+    )
+  }
+
+  const [deletingCircle, setDeletingCircle] = useState(false)
+  const handleDeleteCircle = () => {
+    Alert.alert(
+      'Delete Family Circle',
+      `This permanently deletes "${circle.name}" for every member — their location history, chats, and check-ins in this circle are removed too. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            setDeletingCircle(true)
+            try {
+              await circleAPI.remove(circle.id)
+              if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+              onToast('Circle deleted')
+              onLeft && onLeft(circle.id)
+            } catch (e) {
+              setDeletingCircle(false)
+              Alert.alert('Error', e.error || 'Failed to delete circle')
             }
           },
         },
@@ -358,6 +401,15 @@ function CircleCard({ circle, index, onCopy, onToast, onLeft, onRenamed }) {
             <Text style={styles.leaveBtnText}>Leave circle</Text>
           </Pressable>
         </View>
+
+        {isAdminOfCircle && (
+          <Pressable onPress={handleDeleteCircle} disabled={deletingCircle} style={styles.deleteCircleBtn}>
+            {deletingCircle
+              ? <ActivityIndicator size="small" color={c.danger} />
+              : <Ionicons name="trash-outline" size={16} color={c.danger} />}
+            <Text style={styles.deleteCircleBtnText}>Delete Family Circle</Text>
+          </Pressable>
+        )}
       </GradientCard>
     </Animated.View>
   )
@@ -916,6 +968,11 @@ const makeStyles = (c) => StyleSheet.create({
     backgroundColor: 'rgba(229,57,53,0.1)',
     borderRadius: 8,
   },
+  iconBtn: {
+    padding: 6,
+    backgroundColor: c.bgGlass,
+    borderRadius: 8,
+  },
 
   // Circle footer
   circleFooter: {
@@ -938,6 +995,8 @@ const makeStyles = (c) => StyleSheet.create({
     paddingVertical: 6,
   },
   leaveBtnText: { color: c.danger, fontSize: 12, fontWeight: '700' },
+  deleteCircleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, marginTop: 4 },
+  deleteCircleBtnText: { color: c.danger, fontSize: 14, fontWeight: '600', opacity: 0.85 },
 
   // FAB
   fab: {

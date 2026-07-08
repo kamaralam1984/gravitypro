@@ -25,7 +25,7 @@ const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesss
 // guess. Remove once the real cause is found and fixed.
 const DEBUG_OVERLAY = false
 
-export default function WebPanelScreen({ path }) {
+export default function WebPanelScreen({ path, route }) {
   const insets = useSafeAreaInsets()
   const webRef = useRef(null)
   const [inject, setInject] = useState(null)
@@ -73,7 +73,11 @@ export default function WebPanelScreen({ path }) {
 
   useEffect(() => {
     if (userKey === null) return
-    const resolvedPath = path || (accountType === 'child' ? '/child/panel' : '/parent/panel')
+    // A direct `path` prop wins (unused today — Panel tab mounts with none),
+    // then a path passed via navigation params (e.g. navigation.navigate('Panel',
+    // { path: '/child/panel?preview=1' }) from ProfileScreen's "View Child
+    // Panel"), then the normal account_type auto-select.
+    const resolvedPath = path || route?.params?.path || (accountType === 'child' ? '/child/panel' : '/parent/panel')
     // Seed the web app's auth so the panel is already logged in (SSO). Both
     // the routing decision above and this injected snapshot now read from the
     // SAME live store value — no second, independently-stale source.
@@ -85,7 +89,7 @@ export default function WebPanelScreen({ path }) {
     setInject(js)
     setUri(BASE + resolvedPath)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, accountType, token, userKey])
+  }, [path, route?.params?.path, accountType, token, userKey])
 
   const retry = () => { setError(false); setLoading(true); setReloadKey(k => k + 1) }
 

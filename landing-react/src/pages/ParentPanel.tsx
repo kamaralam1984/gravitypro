@@ -203,7 +203,9 @@ export default function ParentPanel() {
     days: { date: string; distanceMeters: number; placesVisited: number; timeAtHomeSec: number; timeAtSchoolSec: number }[]
   } | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
-  const [segmentVal, setSegmentVal] = useState('Exact')
+  // 'precise' | 'fast' — real, persisted (PATCH /users/me), drives actual GPS
+  // accuracy/interval on mobile. UI copy stays "Exact"/"Approx".
+  const [segmentVal, setSegmentVal] = useState('precise')
   const [notifCount, setNotifCount] = useState(0)
   const [showCreateCircleModal, setShowCreateCircleModal] = useState(false)
   const [showDeleteCircleModal, setShowDeleteCircleModal] = useState(false)
@@ -299,7 +301,23 @@ export default function ParentPanel() {
       setProfileName(user.name || '')
       if (user.avatar_url) setUserAvatar(user.avatar_url)
     }
+    // Cached localStorage user can be stale (or precision didn't exist yet
+    // when it was cached) — fetch the current persisted value.
+    apiGet('/users/me').then((res) => {
+      if (res?.user?.location_precision === 'fast') setSegmentVal('fast')
+    })
   }, [])
+
+  async function setLocationPrecision(value: 'precise' | 'fast') {
+    if (value === segmentVal) return
+    const prev = segmentVal
+    setSegmentVal(value)
+    const res = await apiPatch('/users/me', { location_precision: value })
+    if (!res?.user) {
+      setSegmentVal(prev)
+      showToast('Could not save location precision', 'error')
+    }
+  }
 
   // ── LEAFLET MAP ──
   useEffect(() => {
@@ -1557,7 +1575,7 @@ export default function ParentPanel() {
               </div>
             </div>
 
-            <Link to="/child/panel" className={styles.childPanelLink}>
+            <Link to="/child/panel?preview=1" className={styles.childPanelLink}>
               <div>
                 <div className={styles.childPanelLinkText}>View Child Panel</div>
                 <div className={styles.childPanelLinkSub}>Switch to child view</div>
@@ -1608,8 +1626,8 @@ export default function ParentPanel() {
                     <div className={styles.settingsRowLabel}>Location precision</div>
                   </div>
                   <div className={styles.segmentedControl}>
-                    <button className={`${styles.segBtn} ${segmentVal === 'Exact' ? styles.segBtnActive : ''}`} onClick={() => setSegmentVal('Exact')}>Exact</button>
-                    <button className={`${styles.segBtn} ${segmentVal === 'Approx' ? styles.segBtnActive : ''}`} onClick={() => setSegmentVal('Approx')}>Approx</button>
+                    <button className={`${styles.segBtn} ${segmentVal === 'precise' ? styles.segBtnActive : ''}`} onClick={() => setLocationPrecision('precise')}>Exact</button>
+                    <button className={`${styles.segBtn} ${segmentVal === 'fast' ? styles.segBtnActive : ''}`} onClick={() => setLocationPrecision('fast')}>Approx</button>
                   </div>
                 </div>
               </div>

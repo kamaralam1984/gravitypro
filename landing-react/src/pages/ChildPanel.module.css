@@ -830,3 +830,24 @@
 .joinCircleBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.previewBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: rgba(255,193,7,0.12);
+  border-bottom: 1px solid rgba(255,193,7,0.3);
+  color: #FFC107;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 16px;
+  text-align: center;
+}
+.previewBanner a {
+  color: #00E676;
+  font-weight: 700;
+  text-decoration: underline;
+  white-space: nowrap;
+}

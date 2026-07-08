@@ -32,6 +32,7 @@ import { storage } from '../utils/storage'
 import { useTheme } from '../theme/ThemeContext'
 import { speedToMode } from '../services/location'
 import { routeSegmentTracker } from '../utils/routeSegmentTracker'
+import { getWatchOptions } from '../utils/locationPrecision'
 
 const getBatteryLevel = async () => {
   try {
@@ -272,12 +273,11 @@ export default function MapScreen() {
         return
       }
 
+      // Read synchronously from the live store (this screen only runs inside
+      // an already-hydrated app, unlike the background task in services/location.js).
+      const precision = useAuthStore.getState().user?.location_precision || 'precise'
       const sub = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000,
-          distanceInterval: 10,
-        },
+        getWatchOptions(precision, 'foreground'),
         (loc) => {
           // Only update the on-screen "my location" marker. The background
           // foreground-service (services/location.js) already posts to the server
@@ -432,6 +432,22 @@ export default function MapScreen() {
       if (toastTimer.current) clearTimeout(toastTimer.current)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── lifecycle: location precision changed ────────────────────────────────
+  // MapScreen stays mounted across tab switches, so a precision change made
+  // in ProfileScreen while this screen is alive needs to actually re-register
+  // the watch — Location.watchPositionAsync (unlike the background task) has
+  // no separate stop/start step, so just tear down + re-run initLocation.
+  const locationPrecision = useAuthStore((s) => s.user?.location_precision)
+  const isFirstPrecisionRender = useRef(true)
+  useEffect(() => {
+    if (isFirstPrecisionRender.current) { isFirstPrecisionRender.current = false; return }
+    if (locationSubRef.current) {
+      locationSubRef.current.remove()
+      locationSubRef.current = null
+    }
+    initLocation()
+  }, [locationPrecision]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── lifecycle: active circle changed ─────────────────────────────────────
   useEffect(() => {

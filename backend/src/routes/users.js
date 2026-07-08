@@ -43,6 +43,7 @@ const updateSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   email: z.string().email().optional(),
   push_token: z.string().optional(),
+  location_precision: z.enum(['precise', 'fast']).optional(),
 })
 
 const locationSchema = z.object({
@@ -167,17 +168,18 @@ router.delete("/me/push-token", authenticate, async (req, res) => {
 })
 
 router.patch('/me', authenticate, validate(updateSchema), async (req, res) => {
-  const { name, email, push_token } = req.body
+  const { name, email, push_token, location_precision } = req.body
   try {
     const result = await query(
       `UPDATE users
-         SET name       = COALESCE($1, name),
-             email      = COALESCE($2, email),
-             push_token = COALESCE($3, push_token),
+         SET name               = COALESCE($1, name),
+             email              = COALESCE($2, email),
+             push_token         = COALESCE($3, push_token),
+             location_precision = COALESCE($4, location_precision),
              updated_at = NOW()
-       WHERE id = $4
-       RETURNING id, name, phone, email, avatar_url, push_token, country_code`,
-      [name, email, push_token, req.user.id]
+       WHERE id = $5
+       RETURNING id, name, phone, email, avatar_url, push_token, country_code, location_precision`,
+      [name, email, push_token, location_precision, req.user.id]
     )
     res.json({ user: result.rows[0] })
   } catch (err) {

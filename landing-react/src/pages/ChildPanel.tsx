@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import styles from './ChildPanel.module.css'
 import { escapeHtml } from '../utils/escapeHtml'
 
@@ -86,7 +86,9 @@ export default function ChildPanel() {
       return { shareLocation: true, autoSos: true, familyArrivals: true, sosAlerts: true, geofence: true }
     }
   })
-  const [precision, setPrecisionState] = useState<string>('exact')
+  // 'precise' | 'fast' — real, persisted (PATCH /users/me), drives actual GPS
+  // accuracy/interval on mobile. UI copy stays "Exact"/"Approximate".
+  const [precision, setPrecisionState] = useState<'precise' | 'fast'>('precise')
   // Mirror of `toggles` for use inside long-lived geolocation callbacks (avoids stale closures).
   const togglesRef = useRef(toggles)
   useEffect(() => { togglesRef.current = toggles }, [toggles])
@@ -153,6 +155,11 @@ export default function ChildPanel() {
   // Auth check
   const gravityToken = useMemo(() => localStorage.getItem('gravity_token'), [])
   const gravityUser = useMemo(() => { try { return JSON.parse(localStorage.getItem('gravity_user') || 'null') } catch { return null } }, [])
+  // A parent can preview what the child experience looks like — this renders
+  // THEIR OWN account's data in the child-styled layout, it does not fetch or
+  // impersonate any specific child's live data.
+  const [searchParams] = useSearchParams()
+  const isPreview = searchParams.get('preview') === '1'
 
   useEffect(() => {
     if (!gravityToken) {
@@ -160,13 +167,14 @@ export default function ChildPanel() {
       navigate('/login?redirect=/child/panel')
       return
     }
-    // Role guard: only children may use the child panel.
+    // Role guard: only children may use the child panel — unless a parent is
+    // explicitly previewing it (?preview=1, set by the "View Child Panel" link).
     if (!gravityUser || !gravityUser.account_type) {
       navigate('/login')
-    } else if (gravityUser.account_type !== 'child') {
+    } else if (gravityUser.account_type !== 'child' && !isPreview) {
       navigate('/parent/panel')
     }
-  }, [gravityToken, gravityUser, navigate])
+  }, [gravityToken, gravityUser, isPreview, navigate])
 
   // Show toast
   const showToast = useCallback((message: string, type = 'success') => {
@@ -250,6 +258,28 @@ export default function ChildPanel() {
       })
     }).catch(() => { /* keep local defaults */ })
   }, [gravityToken, apiGet])
+
+  // location_precision lives on the user row (PATCH /users/me), not the
+  // settings endpoint above — load it separately.
+  useEffect(() => {
+    if (!gravityToken) return
+    apiGet('/users/me').then(data => {
+      if (data?.user?.location_precision === 'fast') setPrecisionState('fast')
+    }).catch(() => { /* keep local default */ })
+  }, [gravityToken, apiGet])
+
+  const setLocationPrecision = useCallback(async (value: 'precise' | 'fast') => {
+    const prev = precision
+    setPrecisionState(value)
+    showToast(value === 'precise' ? '🎯 Precision: Exact' : '🎯 Precision: Approximate')
+    try {
+      const res = await apiPatch('/users/me', { location_precision: value })
+      if (!res?.user) throw new Error('save failed')
+    } catch {
+      setPrecisionState(prev)
+      showToast('Could not save precision', 'error')
+    }
+  }, [precision, apiPatch, showToast])
 
   // Load location history
   const loadLocationHistory = useCallback(async () => {
@@ -923,6 +953,13 @@ export default function ChildPanel() {
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.appFrame} id="appFrame">
+
+        {isPreview && gravityUser?.account_type !== 'child' && (
+          <div className={styles.previewBanner}>
+            <span>Previewing child view — this shows your own account in the child layout, not live child data.</span>
+            <Link to="/parent/panel">Back to Parent Panel</Link>
+          </div>
+        )}
 
         {/* HEADER */}
         <div className={styles.appHeader}>
@@ -1670,12 +1707,12 @@ export default function ChildPanel() {
                   </div>
                   <div className={styles.precWrap} style={{width:'100%',paddingLeft:'40px'}}>
                     <button
-                      className={`${styles.precBtn} ${precision === 'exact' ? styles.precBtnActive : ''}`}
-                      onClick={() => { setPrecisionState('exact'); showToast('🎯 Precision: Exact') }}
+                      className={`${styles.precBtn} ${precision === 'precise' ? styles.precBtnActive : ''}`}
+                      onClick={() => setLocationPrecision('precise')}
                     >Exact</button>
                     <button
-                      className={`${styles.precBtn} ${precision === 'approximate' ? styles.precBtnActive : ''}`}
-                      onClick={() => { setPrecisionState('approximate'); showToast('🎯 Precision: Approximate') }}
+                      className={`${styles.precBtn} ${precision === 'fast' ? styles.precBtnActive : ''}`}
+                      onClick={() => setLocationPrecision('fast')}
                     >Approximate</button>
                   </div>
                 </div>

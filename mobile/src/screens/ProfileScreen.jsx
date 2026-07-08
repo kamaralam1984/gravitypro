@@ -44,6 +44,7 @@ export default function ProfileScreen() {
   // Settings toggles
   const [trackingEnabled, setTrackingEnabled] = useState(true)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [locationPrecision, setLocationPrecisionState] = useState(user?.location_precision || 'precise')
 
   // Location history
   const [historyVisible, setHistoryVisible] = useState(false)
@@ -93,6 +94,30 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!editingEmail) setEmailValue(user?.email || '')
   }, [user?.email, editingEmail])
+
+  useEffect(() => {
+    setLocationPrecisionState(user?.location_precision || 'precise')
+  }, [user?.location_precision])
+
+  const handlePrecisionChange = async (value) => {
+    if (value === locationPrecision) return
+    const prev = locationPrecision
+    setLocationPrecisionState(value)
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    try {
+      const { user: updated } = await userAPI.updateMe({ location_precision: value })
+      updateUser(updated)
+      // startLocationUpdatesAsync only reads accuracy/interval at registration
+      // time — re-register the background task so the change actually applies.
+      if (trackingEnabled) {
+        await stopBackgroundTracking()
+        await startBackgroundTracking()
+      }
+    } catch (e) {
+      setLocationPrecisionState(prev)
+      Alert.alert('Save failed', 'Could not update location precision. Please try again.')
+    }
+  }
 
   const handlePickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -371,6 +396,29 @@ export default function ProfileScreen() {
               }}
               toggle
             />
+
+            {/* Location precision — 2-option pill, not a Switch (binary On/Off
+                reads wrong for a choice between two accuracy modes) */}
+            <View style={styles.settingRow}>
+              <View style={styles.settingIcon}>
+                <Ionicons name="locate-outline" size={20} color={c.accentSoft} />
+              </View>
+              <Text style={styles.settingLabel}>Location Precision</Text>
+              <View style={styles.themeToggle}>
+                {[['precise', 'Precise'], ['fast', 'Battery Saver']].map(([value, label]) => {
+                  const selected = locationPrecision === value
+                  return (
+                    <Pressable
+                      key={value}
+                      onPress={() => handlePrecisionChange(value)}
+                      style={[styles.themeOption, selected && styles.themeOptionSelected]}>
+                      <Text style={[styles.themeOptionText, selected && styles.themeOptionTextSelected]}>{label}</Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            </View>
+
             <SettingRow
               icon="notifications"
               label="Push Notifications"
@@ -412,6 +460,15 @@ export default function ProfileScreen() {
                 })}
               </View>
             </View>
+
+            {/* Language — display only, no i18n behind it yet */}
+            <View style={styles.settingRow}>
+              <View style={styles.settingIcon}>
+                <Ionicons name="globe-outline" size={20} color={c.accentSoft} />
+              </View>
+              <Text style={styles.settingLabel}>Language</Text>
+              <Text style={styles.settingStaticValue}>English</Text>
+            </View>
           </GradientCard>
 
           {/* ── Privacy ── */}
@@ -440,6 +497,12 @@ export default function ProfileScreen() {
                 label="Emergency Contacts"
                 chevron
                 onPress={() => navigation.navigate('EmergencyContacts')}
+              />
+              <SettingRow
+                icon="eye-outline"
+                label="View Child Panel"
+                chevron
+                onPress={() => navigation.navigate('Panel', { path: '/child/panel?preview=1' })}
               />
             </GradientCard>
           )}
@@ -616,6 +679,7 @@ const makeStyles = (c) => StyleSheet.create({
   themeOptionSelected: { backgroundColor: c.accent },
   themeOptionText: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
   themeOptionTextSelected: { color: '#fff' },
+  settingStaticValue: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
 
   // Sign out
   updateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(10,92,53,0.15)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(10,92,53,0.4)', marginBottom: 10 },
