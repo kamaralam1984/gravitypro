@@ -63,11 +63,13 @@
         "UIBackgroundModes": [
           "location",
           "fetch",
-          "remote-notification"
+          "remote-notification",
+          "processing"
         ]
       }
     },
     "plugins": [
+      "expo-background-task",
       [
         "expo-location",
         {

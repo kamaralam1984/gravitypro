@@ -18,6 +18,7 @@ import { startBackgroundTracking, stopBackgroundTracking } from '../services/loc
 import { registerForPushNotifications } from '../services/notifications'
 import { promptAndUpdate } from '../services/appUpdates'
 import { ensureReliableTracking } from '../services/reliability'
+import { startHeartbeatTask, stopHeartbeatTask } from '../services/backgroundHeartbeat'
 import { GradientCard } from '../components/ui/GradientCard'
 import { useTheme, useThemeMode } from '../theme/ThemeContext'
 
@@ -113,6 +114,8 @@ export default function ProfileScreen() {
       if (trackingEnabled) {
         await stopBackgroundTracking()
         await startBackgroundTracking()
+        await stopHeartbeatTask()
+        await startHeartbeatTask()
       }
     } catch (e) {
       setLocationPrecisionState(prev)
@@ -189,6 +192,7 @@ export default function ProfileScreen() {
       {
         text: 'Sign Out', style: 'destructive', onPress: async () => {
           await stopBackgroundTracking()
+          await stopHeartbeatTask()
           await logout()
         },
       },
@@ -208,6 +212,7 @@ export default function ProfileScreen() {
             try {
               await userAPI.deleteAccount()
               await stopBackgroundTracking()
+              await stopHeartbeatTask()
               await logout()
             } catch (e) {
               setDeletingAccount(false)
@@ -387,8 +392,13 @@ export default function ProfileScreen() {
               onToggle={async (v) => {
                 setTrackingEnabled(v)
                 try {
-                  if (v) await startBackgroundTracking()
-                  else await stopBackgroundTracking()
+                  if (v) {
+                    await startBackgroundTracking()
+                    await startHeartbeatTask()
+                  } else {
+                    await stopBackgroundTracking()
+                    await stopHeartbeatTask()
+                  }
                 } catch (e) {
                   setTrackingEnabled(!v)
                   Alert.alert('Location permission needed', 'Please allow location access "Always" so your family can see you even when the app is closed.')

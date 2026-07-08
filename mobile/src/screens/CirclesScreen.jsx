@@ -65,7 +65,9 @@ function MemberRow({ member, isAdmin, onRemove }) {
   const roleLabel = isParent ? 'Parent' : 'Child'
   const roleColor = isParent ? c.accent : c.accentSoft
   const lastSeen = member.location_updated_at
-  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 10 * 60 * 1000) : false
+  // 20 min — matches MapScreen.jsx's isOnlineMember and the background
+  // heartbeat's ~15min floor + buffer (see services/backgroundHeartbeat.js).
+  const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 20 * 60 * 1000) : false
   const battery = member.battery_level
   // Parental controls (ChildHub) are parent-only. A child viewer never gets to open them,
   // even on another child's row.

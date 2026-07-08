@@ -67,11 +67,13 @@ const formatLastSeen = (ts) => {
 }
 
 // A connected member counts as "online" if we've heard from them within the
-// last 10 min (consistent with Home/Circles). A missing timestamp is treated as
+// last 20 min (consistent with Home/Circles) — matches the background
+// heartbeat's ~15min floor + a buffer for OS scheduling slop (see
+// services/backgroundHeartbeat.js). A missing timestamp is treated as
 // offline — never "always online" — so stale rows don't read as connected.
 const isOnlineMember = (loc) => {
   if (!loc || !loc.timestamp) return false
-  return Date.now() - new Date(loc.timestamp).getTime() < 10 * 60 * 1000
+  return Date.now() - new Date(loc.timestamp).getTime() < 20 * 60 * 1000
 }
 
 // Soft "last seen" label so a connected member never shows a bare "Offline".

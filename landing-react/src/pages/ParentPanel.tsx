@@ -19,9 +19,11 @@ interface Member {
 }
 
 // A member is ONLINE if their location/heartbeat is fresh within this window.
-// Matches the mobile app + the 60s presence heartbeat (which keeps a stationary
-// phone-on child fresh well inside the window).
-const ONLINE_WINDOW_MS = 10 * 60 * 1000
+// Matches the mobile app's MapScreen.jsx/CirclesScreen.jsx — 20min, sized to
+// the background heartbeat's ~15min floor + buffer for OS scheduling slop
+// (mobile/src/services/backgroundHeartbeat.js), not just the 60s foreground
+// presence heartbeat.
+const ONLINE_WINDOW_MS = 20 * 60 * 1000
 const freshStatus = (lastSeenAt: number | null): 'active' | 'offline' =>
   lastSeenAt != null && Date.now() - lastSeenAt < ONLINE_WINDOW_MS ? 'active' : 'offline'
 

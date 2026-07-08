@@ -16,6 +16,7 @@ import { checkAndApplyOTA, checkAndFetchOTA } from '../src/services/ota'
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext'
 import gpsWatch from '../src/services/gpsWatch'
 import { ensureReliableTracking } from '../src/services/reliability'
+import { startHeartbeatTask } from '../src/services/backgroundHeartbeat'
 import { storage } from '../src/utils/storage'
 
 const queryClient = new QueryClient()
@@ -84,6 +85,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isAuthenticated) return
     startBackgroundTracking().catch(e => console.warn('Background tracking not started', e?.message))
+    // Periodic presence ping independent of GPS movement — keeps "online"
+    // alive even when the phone is stationary and the app is fully closed
+    // (the 60s foreground heartbeat below only runs while the JS engine is
+    // alive). See services/backgroundHeartbeat.js for platform caveats.
+    startHeartbeatTask().catch(e => console.warn('Heartbeat task not started', e?.message))
     // Watch for GPS/location-services being turned off → alerts the family.
     try { gpsWatch.start() } catch (e) { console.warn('gpsWatch not started', e?.message) }
     // One-time prompt to whitelist battery optimisation / auto-start (reliability).
