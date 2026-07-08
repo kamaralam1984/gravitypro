@@ -1,0 +1,40 @@
+# Self-hosted OSRM routing engine — fully isolated from the main app stack
+# (separate compose project, own network, not managed by PM2/ecosystem.config.js).
+#
+# Bound to 127.0.0.1 only: never internet-exposed, never added to Caddy. The
+# backend (a bare PM2 process on the host) reaches it over loopback at
+# OSRM_BASE_URL=http://127.0.0.1:5000 (see backend/.env.example).
+#
+# Data (osrm/data/*.osrm*) is produced by scripts/prepare-extract.sh and is
+# NOT part of this compose file — build it once before `docker compose up`.
+#
+# Usage:
+#   cd osrm && docker compose -f docker-compose.osrm.yml up -d
+#   docker compose -f docker-compose.osrm.yml ps
+#   docker inspect --format '{{.State.Health.Status}}' gravity-osrm
+services:
+  osrm:
+    image: osrm/osrm-backend:v5.27.1
+    container_name: gravity-osrm
+    command: osrm-routed --algorithm mld --max-table-size 100 /data/india-latest.osrm
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "127.0.0.1:5000:5000"
+    restart: unless-stopped
+    mem_limit: 3g
+    cpus: 1.5
+    healthcheck:
+      # osrm-routed has no literal /health route — a real route request is the
+      # correct smoke test (coordinates: India Gate -> Connaught Place, Delhi).
+      test: ["CMD-SHELL", "curl -sf 'http://localhost:5000/route/v1/driving/77.2295,28.6129;77.2167,28.6315?overview=false' | grep -q '\"Ok\"' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    networks:
+      - osrm_net
+
+networks:
+  osrm_net:
+    driver: bridge

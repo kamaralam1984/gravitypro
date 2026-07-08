@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import styles from './RouteReplay.module.css'
 
 export interface RoutePoint {
@@ -22,13 +22,20 @@ interface Props {
   // in rather than fetched here, since Timeline.tsx already has stop/geocode
   // context and this keeps RouteReplay a pure animation component.
   resolveAddress?: (lat: number, lng: number) => string
+  // Optional road-snapped path (from /api/v1/routing/path). When present, the
+  // marker walks THIS sequence between raw-point timestamps instead of
+  // lerping straight between the raw (off-road) GPS fixes. Raw `points`
+  // still drive playback timing/HUD either way — this only changes where the
+  // marker visually sits between two timestamps. Absent -> identical to the
+  // original raw-lerp behavior.
+  snappedPath?: [number, number][]
 }
 
 type PlayState = 'idle' | 'playing' | 'paused'
 
 const SPEED_OPTIONS = [1, 2, 4] as const
 
-export default function RouteReplay({ map, points = [], resolveAddress }: Props) {
+export default function RouteReplay({ map, points = [], resolveAddress, snappedPath }: Props) {
   const [playState, setPlayState] = useState<PlayState>('idle')
   const [speedMultiplier, setSpeedMultiplier] = useState<1 | 2 | 4>(1)
   const [elapsedMs, setElapsedMs] = useState(0)
@@ -56,6 +63,26 @@ export default function RouteReplay({ map, points = [], resolveAddress }: Props)
     return () => { marker.remove(); markerRef.current = null }
   }, [map, points])
 
+  // Maps each raw point to its nearest vertex on snappedPath (nearest-neighbor
+  // by squared lat/lng distance — proportional to real distance at this local
+  // scale, cheap enough for a day's points x a few hundred snapped vertices).
+  // null when no snappedPath is given -> applyElapsed falls back to the
+  // original raw-to-raw lerp untouched.
+  const pointToSnappedIdx = useMemo(() => {
+    if (!snappedPath || snappedPath.length < 2 || !points.length) return null
+    return points.map((p) => {
+      let bestIdx = 0
+      let bestD = Infinity
+      for (let k = 0; k < snappedPath.length; k++) {
+        const dLat = p.lat - snappedPath[k][0]
+        const dLng = p.lng - snappedPath[k][1]
+        const d = dLat * dLat + dLng * dLng
+        if (d < bestD) { bestD = d; bestIdx = k }
+      }
+      return bestIdx
+    })
+  }, [snappedPath, points])
+
   const applyElapsed = useCallback((ms: number) => {
     if (!points.length) return
     const clamped = Math.max(0, Math.min(ms, totalDurationMs))
@@ -72,11 +99,35 @@ export default function RouteReplay({ map, points = [], resolveAddress }: Props)
     const aTs = new Date(a.ts).getTime()
     const bTs = new Date(b.ts).getTime()
     const frac = bTs > aTs ? (targetTs - aTs) / (bTs - aTs) : 0
-    const lat = a.lat + (b.lat - a.lat) * frac
-    const lng = a.lng + (b.lng - a.lng) * frac
+
+    let lat: number
+    let lng: number
+    if (snappedPath && pointToSnappedIdx) {
+      // Walk the road-snapped vertex range between this raw point-pair
+      // instead of lerping the raw (off-road) GPS fixes directly.
+      const sa = pointToSnappedIdx[i]
+      const sb = pointToSnappedIdx[Math.min(i + 1, points.length - 1)]
+      const lo = Math.min(sa, sb)
+      const hi = Math.max(sa, sb)
+      if (hi > lo) {
+        const vertexFrac = lo + frac * (hi - lo)
+        const v0 = snappedPath[Math.floor(vertexFrac)]
+        const v1 = snappedPath[Math.min(Math.ceil(vertexFrac), snappedPath.length - 1)]
+        const vf = vertexFrac - Math.floor(vertexFrac)
+        lat = v0[0] + (v1[0] - v0[0]) * vf
+        lng = v0[1] + (v1[1] - v0[1]) * vf
+      } else {
+        const v = snappedPath[lo]
+        lat = v[0]
+        lng = v[1]
+      }
+    } else {
+      lat = a.lat + (b.lat - a.lat) * frac
+      lng = a.lng + (b.lng - a.lng) * frac
+    }
     markerRef.current?.setLatLng([lat, lng])
     setElapsedMs(clamped)
-  }, [points, totalDurationMs])
+  }, [points, totalDurationMs, snappedPath, pointToSnappedIdx])
 
   const elapsedMsRef = useRef(0)
   useEffect(() => { elapsedMsRef.current = elapsedMs }, [elapsedMs])

@@ -21,6 +21,10 @@ const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.p
  *   members  : [{ id, name, latitude, longitude, battery_level, account_type }]
  *   zones    : [{ id, name, center_lat, center_lng, radius_meters }]
  *   me       : { latitude, longitude } | null   (the logged-in user's location)
+ *   memberPaths : { 'me' | memberId: [[lat,lng],...] } | null — road-snapped
+ *                 live trails from mobile/src/utils/routeSegmentTracker.js,
+ *                 drawn as a polyline per member (Phase A: full-HTML-rebuild
+ *                 model, no incremental marker animation yet — see plan).
  *   height   : number (default 220)
  *   interactive : boolean (default true) — allow pan/zoom
  */
@@ -40,19 +44,24 @@ export function formatDistance(m) {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10000 ? 2 : 1)} km`
 }
 
-function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset) {
+function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset, memberPaths) {
   const tileUrl = isLight ? TILE_LIGHT : TILE_DARK
   const bg = isLight ? '#eef2f0' : '#0b0f0d'
   const data = {
     members: (members || [])
       .filter(m => m.latitude != null && m.longitude != null)
       .map(m => ({
+        id: m.id ?? null,
         name: m.name || '?',
         lat: Number(m.latitude),
         lng: Number(m.longitude),
         battery: m.battery_level ?? null,
         type: m.account_type || 'member',
       })),
+    // Road-snapped live trails — { 'me' | memberId: [[lat,lng],...] }, built
+    // incrementally by mobile/src/utils/routeSegmentTracker.js. Missing/empty
+    // for a member just means no trail is drawn yet (first fix, or gated out).
+    memberPaths: memberPaths || {},
     zones: (zones || [])
       .filter(z => z.center_lat != null && z.center_lng != null)
       .map(z => ({
@@ -112,6 +121,9 @@ function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset) {
   // Self (only draw the generic self marker when it is not effectively the same
   // point as the parent marker — compare by distance, not exact float equality).
   if(D.me && !(parent && hav(parent.lat,parent.lng,D.me.lat,D.me.lng) < 30)){
+    if(D.memberPaths.me && D.memberPaths.me.length > 1){
+      L.polyline(D.memberPaths.me,{color:'#2196F3',weight:3,opacity:.6}).addTo(map);
+    }
     L.circleMarker([D.me.lat,D.me.lng],{radius:7,color:'#fff',weight:2,fillColor:'#2196F3',fillOpacity:1}).addTo(map).bindTooltip('You',{permanent:false});
     bounds.push([D.me.lat,D.me.lng]);
   }
@@ -135,6 +147,13 @@ function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset) {
 
     // The parent member already has its own distinct marker drawn above.
     if(isParent) return;
+
+    // Road-snapped live trail (routeSegmentTracker.js), colored to match this
+    // member's current inside/outside-zone marker color.
+    var mpath = m.id!=null ? D.memberPaths[m.id] : null;
+    if(mpath && mpath.length > 1){
+      L.polyline(mpath,{color:color,weight:3,opacity:.55}).addTo(map);
+    }
 
     var pd = parent ? hav(m.lat,m.lng,parent.lat,parent.lng) : null;
     L.circleMarker([m.lat,m.lng],{radius:8,color:'#fff',weight:2,fillColor:color,fillOpacity:1}).addTo(map)
@@ -187,6 +206,7 @@ const FamilyMap = forwardRef(function FamilyMap({
   members = [],
   zones = [],
   me = null,
+  memberPaths = null,
   height = 220,
   interactive = true,
   pickMode = false,
@@ -203,8 +223,8 @@ const FamilyMap = forwardRef(function FamilyMap({
   const styles = useMemo(() => makeStyles(c, isLight), [c, isLight])
   const webRef = useRef(null)
   const html = useMemo(
-    () => buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset),
-    [members, zones, me, pickMode, pick, isLight, zoomTopOffset]
+    () => buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset, memberPaths),
+    [members, zones, me, pickMode, pick, isLight, zoomTopOffset, memberPaths]
   )
 
   // ── Imperative pan/zoom handle ────────────────────────────────────────────

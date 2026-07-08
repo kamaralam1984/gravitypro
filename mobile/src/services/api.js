@@ -118,4 +118,14 @@ export const timelineAPI = {
   getSummary: (userId, date) => api.get(`/timeline/${userId}/summary?date=${encodeURIComponent(date)}`),
 }
 
+// ── Routing (self-hosted OSRM, see osrm/README.md) ──────────────────────────
+// Road-snapped routes — never call any routing engine directly from the app,
+// always go through our own backend (which proxies to the self-hosted OSRM
+// instance and gracefully falls back to a straight line if it's down).
+//   getSegment(origin, dest) -> { coordinates:[[lat,lng],...], distanceMeters, durationSec, snapped }
+export const routingAPI = {
+  getSegment: (originLat, originLng, destLat, destLng) =>
+    api.post('/routing/segment', { originLat, originLng, destLat, destLng }),
+}
+
 export default api

@@ -43,6 +43,19 @@ async function apiGet(path: string) {
   return res.json()
 }
 
+async function apiPost(path: string, body: unknown) {
+  const token = getToken()
+  if (!token) return null
+  const res = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) { localStorage.clear(); return null }
+  if (!res.ok) return null
+  return res.json()
+}
+
 interface Member { id: string; name: string; avatar_url?: string; role: string }
 
 interface RouteResponse {
@@ -62,6 +75,13 @@ interface RouteSegment {
   maxSpeedKmh: number
   durationSec: number
   distanceMeters: number
+}
+
+interface SnappedRoute {
+  coordinates: [number, number][]
+  distanceMeters: number
+  durationSec: number | null
+  snapped: boolean
 }
 
 interface SummaryResponse {
@@ -117,6 +137,10 @@ export default function Timeline() {
   })
   const [stops, setStops] = useState<TimelineStop[]>([])
   const [route, setRoute] = useState<RouteResponse | null>(null)
+  const [snappedRoute, setSnappedRoute] = useState<SnappedRoute | null>(null)
+  // In-session cache so toggling between already-viewed date ranges doesn't
+  // re-hit /routing/path — cleared implicitly on page reload (not persisted).
+  const snappedRouteCacheRef = useRef<Map<string, SnappedRoute>>(new Map())
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
   const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null)
   const [loading, setLoading] = useState(false)
@@ -159,6 +183,29 @@ export default function Timeline() {
       if (requestId !== timelineRequestIdRef.current) return
       setStops(stopsData?.stops || [])
       setRoute(routeData || null)
+
+      // Road-snap only single-day, non-simplified routes — multi-day/simplified
+      // overviews use PostGIS ST_Simplify for a zoomed-out shape where
+      // turn-by-turn snapping adds no visible value (see plan §5).
+      if (isSingleDay && !routeData?.simplified && (routeData?.points?.length ?? 0) >= 2) {
+        const cacheKey = `${userId}:${range.from}:${range.to}`
+        const cached = snappedRouteCacheRef.current.get(cacheKey)
+        if (cached) {
+          setSnappedRoute(cached)
+        } else {
+          const snapped = await apiPost('/routing/path', { points: routeData.points })
+          if (requestId !== timelineRequestIdRef.current) return
+          if (snapped) {
+            snappedRouteCacheRef.current.set(cacheKey, snapped)
+            setSnappedRoute(snapped)
+          } else {
+            setSnappedRoute(null)
+          }
+        }
+      } else {
+        setSnappedRoute(null)
+      }
+
       if (isSingleDay) {
         const summaryData = await apiGet(`/timeline/${userId}/summary?date=${range.to}`)
         if (requestId !== timelineRequestIdRef.current) return
@@ -203,6 +250,14 @@ export default function Timeline() {
     if (!route?.points?.length) return
     const latlngs = route.points.map((p) => [p.lat, p.lng] as [number, number])
 
+    // Road-snapped base line, drawn under the (still mode-colored) segment
+    // overlay below — gives the "follows roads" look without losing the
+    // walking/cycling/vehicle color-coding. Falls back to nothing extra when
+    // OSRM was unavailable (snapped:false) or snapping wasn't requested.
+    if (snappedRoute?.snapped && snappedRoute.coordinates.length >= 2) {
+      L.polyline(snappedRoute.coordinates, { color: '#00E676', weight: 6, opacity: 0.35 }).addTo(polylineLayerRef.current)
+    }
+
     if (route.simplified || !route.segments.length) {
       L.polyline(latlngs, { color: '#00E676', weight: 4, opacity: 0.85 }).addTo(polylineLayerRef.current)
     } else {
@@ -246,7 +301,7 @@ export default function Timeline() {
 
     if (latlngs.length >= 2) map.fitBounds(latlngs, { padding: [40, 40] })
     else if (latlngs.length === 1) map.setView(latlngs[0], 15)
-  }, [route, isSingleDay, range.to])
+  }, [route, snappedRoute, isSingleDay, range.to])
 
   useEffect(() => {
     const map = leafletMapRef.current
@@ -326,7 +381,12 @@ export default function Timeline() {
 
         {isSingleDay && route && !route.simplified && (
           <div className={styles.section}>
-            <RouteReplay map={mapInstance} points={route.points} resolveAddress={resolveAddressForPoint} />
+            <RouteReplay
+              map={mapInstance}
+              points={route.points}
+              resolveAddress={resolveAddressForPoint}
+              snappedPath={snappedRoute?.snapped ? snappedRoute.coordinates : undefined}
+            />
           </div>
         )}
 

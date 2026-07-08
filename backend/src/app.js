@@ -61,6 +61,7 @@ app.use('/api/v1/device', require('./routes/deviceStatus'))
 app.use('/api/v1/reports', require('./routes/reports'))
 app.use('/api/v1/devices', require('./routes/devices'))
 app.use('/api/v1/smart-places', require('./routes/smartPlaces'))
+app.use('/api/v1/routing', require('./routes/routing'))
 app.use('/webhooks/traccar', traccarWebhook)
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'gravity-backend', timestamp: new Date().toISOString() }))

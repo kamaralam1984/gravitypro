@@ -31,6 +31,7 @@ import FamilyMap, { haversineMeters, formatDistance } from '../components/Family
 import { storage } from '../utils/storage'
 import { useTheme } from '../theme/ThemeContext'
 import { speedToMode } from '../services/location'
+import { routeSegmentTracker } from '../utils/routeSegmentTracker'
 
 const getBatteryLevel = async () => {
   try {
@@ -106,6 +107,7 @@ export default function MapScreen() {
   const [activeCircle, setActiveCircle] = useState(null)
   const [members, setMembers] = useState([])
   const [memberLocations, setMemberLocations] = useState({})  // { [userId]: { latitude, longitude, battery, timestamp } }
+  const [memberPaths, setMemberPaths] = useState({})  // { 'me' | userId: [[lat,lng],...] } — road-snapped live trails
   const [safeZones, setSafeZones] = useState([])
   const [selectedMember, setSelectedMember] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -177,6 +179,18 @@ export default function MapScreen() {
   }, [cardAnim, cardOpacity])
 
   // ── SSE ───────────────────────────────────────────────────────────────────
+  // ── road-snapped live trail tracking ─────────────────────────────────────
+  // Feeds a new fix into routeSegmentTracker (which gates on significant
+  // movement/direction-change and calls /routing/segment only when needed),
+  // then syncs the resulting per-member paths into state so FamilyMap
+  // re-renders with the updated polyline. Fire-and-forget — a failed/slow
+  // routing call never blocks the location-marker update itself.
+  const trackRoute = useCallback((memberId, lat, lng) => {
+    routeSegmentTracker.update(memberId, lat, lng).then(() => {
+      setMemberPaths(routeSegmentTracker.getAllPaths())
+    })
+  }, [])
+
   const connectSSE = useCallback(async () => {
     // tear down existing connection
     if (esRef.current) {
@@ -198,6 +212,7 @@ export default function MapScreen() {
           const data = JSON.parse(e.data)
           const { userId, latitude, longitude, battery_level, speed, mode, timestamp } = data
           if (!userId || latitude == null || longitude == null) return
+          trackRoute(userId, Number(latitude), Number(longitude))
           setMemberLocations((prev) => ({
             ...prev,
             [userId]: {
@@ -246,7 +261,7 @@ export default function MapScreen() {
     } catch (err) {
       console.error('[MapScreen] SSE connect error:', err)
     }
-  }, [showToast])
+  }, [showToast, trackRoute])
 
   // ── own location tracking ─────────────────────────────────────────────────
   const initLocation = useCallback(async () => {
@@ -268,6 +283,7 @@ export default function MapScreen() {
           // foreground-service (services/location.js) already posts to the server
           // every few seconds (with speed/mode/battery) — posting here too would
           // double the network writes and battery use.
+          trackRoute('me', loc.coords.latitude, loc.coords.longitude)
           setMyLocation({
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
@@ -279,7 +295,7 @@ export default function MapScreen() {
     } catch (e) {
       console.error('[MapScreen] initLocation:', e)
     }
-  }, [])
+  }, [trackRoute])
 
   // ── circles ───────────────────────────────────────────────────────────────
   const loadCircles = useCallback(async () => {
@@ -501,6 +517,7 @@ export default function MapScreen() {
         zoomTopOffset={220}
         me={myLocation}
         zones={safeZones}
+        memberPaths={memberPaths}
         members={members
           .filter((m) => m.id !== user?.id && memberLocations[m.id])
           .map((m) => ({
