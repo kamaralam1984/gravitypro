@@ -16,7 +16,9 @@ services:
   osrm:
     image: ghcr.io/project-osrm/osrm-backend:26.4.0
     container_name: gravity-osrm
-    command: osrm-routed --algorithm mld --max-table-size 100 /data/india-latest.osrm
+    # india-filtered.osrm, not india-latest.osrm — prepare-extract.sh filters
+    # the raw India extract to routing-relevant data first (see its comments).
+    command: osrm-routed --algorithm mld --max-table-size 100 /data/india-filtered.osrm
     volumes:
       - ./data:/data:ro
     ports:

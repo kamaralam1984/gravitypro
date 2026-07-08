@@ -87,17 +87,28 @@ finished `data/*.osrm*` files over instead of running extract on the VPS itself.
 **Swap is required.** `osrm-extract` on the full India extract peaked at
 ~4.7GB RSS and got OOM-killed the first time this ran here — the VPS had
 **zero swap configured**, so the kernel killed it outright instead of paging.
-`prepare-extract.sh`/`swap-extract.sh` pass `--threads 1` to keep peak memory
-down, but that alone isn't a guarantee on a shared box; add a swapfile before
-running either script (one-time, survives reboots via `/etc/fstab`):
+Add a swapfile before running either script (one-time, survives reboots via
+`/etc/fstab`):
 ```bash
 fallocate -l 8G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
 echo '/swapfile none swap sw 0 0' >> /etc/fstab
 free -h   # confirm Swap: 8.0Gi
 ```
 
-Disk: the `.osm.pbf` is ~800MB-1GB, processed files ~2-4GB more — 25GB was
-free at last check, comfortably enough.
+**Osmium pre-filter is required too.** Even single-threaded (`--threads 1`)
+with 8GB swap, `osrm-extract` on the RAW India `.pbf` still peaked at ~6.7GB
+RSS and got OOM-killed again — India's full extract carries a huge amount of
+non-routing data (buildings, land use polygons, POIs) that `osrm-extract`
+loads into memory regardless of thread count. `prepare-extract.sh`/
+`swap-extract.sh` now run `osmium tags-filter` first (auto-installs
+`osmium-tool` via apt if missing) to strip everything except highway ways,
+ferry routes, turn restrictions, and barrier nodes — osmium keeps each kept
+way's referenced nodes automatically, so full-India road coverage is
+unaffected, just the non-routing bulk is gone. This is the standard technique
+for large-country OSRM extracts on constrained hardware.
+
+Disk: the `.osm.pbf` is ~800MB-1GB, the filtered `.pbf` + processed files a
+few GB more — budget ~5GB free, on top of the 8GB swapfile.
 
 ## Algorithm choice: MLD, not CH
 
