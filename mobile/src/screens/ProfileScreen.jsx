@@ -17,6 +17,7 @@ import { mediaAPI, userAPI } from '../services/api'
 import { startBackgroundTracking, stopBackgroundTracking } from '../services/location'
 import { registerForPushNotifications } from '../services/notifications'
 import { promptAndUpdate } from '../services/appUpdates'
+import { ensureReliableTracking } from '../services/reliability'
 import { GradientCard } from '../components/ui/GradientCard'
 import { useTheme, useThemeMode } from '../theme/ThemeContext'
 
@@ -396,6 +397,30 @@ export default function ProfileScreen() {
               }}
               toggle
             />
+
+            {/* Manual re-trigger for the battery-optimization/auto-start OS
+                prompts — app/_layout.jsx only shows these ONCE automatically
+                after first login (storage 'reliability_prompted' flag), so a
+                user who skipped/missed it the first time had no way back in
+                except reinstalling. Android-only (reliability.js no-ops
+                elsewhere). */}
+            {Platform.OS === 'android' && (
+              <SettingRow
+                icon="shield-checkmark-outline"
+                label="Improve Tracking Reliability"
+                chevron
+                onPress={() => {
+                  Alert.alert(
+                    'Improve Tracking Reliability',
+                    "This opens your phone's battery and auto-start settings so Gravity can keep sharing location even when the app is closed. On some phones (Xiaomi, Vivo, Oppo, etc.) these must be turned on manually — please allow/enable everything the settings screens ask for.",
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Continue', onPress: () => ensureReliableTracking() },
+                    ]
+                  )
+                }}
+              />
+            )}
 
             {/* Location precision — 2-option pill, not a Switch (binary On/Off
                 reads wrong for a choice between two accuracy modes) */}
