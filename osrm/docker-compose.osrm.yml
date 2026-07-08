@@ -34,8 +34,12 @@ services:
       # osrm-routed has no literal /health route — a real route request is the
       # correct smoke test (coordinates: Patna Junction -> Gandhi Maidan, Patna
       # — must be inside whatever REGION currently covers). wget, not curl —
-      # this minimal image doesn't ship curl, only busybox's wget/nc.
-      test: ["CMD-SHELL", "wget -qO- 'http://localhost:5000/route/v1/driving/85.1376,25.6093;85.1414,25.6127?overview=false' | grep -q '\"Ok\"' || exit 1"]
+      # this minimal image doesn't ship curl, only busybox's wget/nc. 127.0.0.1,
+      # not localhost — osrm-routed binds IPv4-only (0.0.0.0), but "localhost"
+      # resolved to the IPv6 loopback (::1) first in this image, which nothing
+      # was listening on, so wget got "Connection refused" even though the
+      # server was healthy and serving real routes on the IPv4 side.
+      test: ["CMD-SHELL", "wget -qO- 'http://127.0.0.1:5000/route/v1/driving/85.1376,25.6093;85.1414,25.6127?overview=false' | grep -q '\"Ok\"' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
