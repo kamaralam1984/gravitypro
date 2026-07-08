@@ -16,9 +16,10 @@ services:
   osrm:
     image: ghcr.io/project-osrm/osrm-backend:26.4.0
     container_name: gravity-osrm
-    # india-filtered.osrm, not india-latest.osrm — prepare-extract.sh filters
-    # the raw India extract to routing-relevant data first (see its comments).
-    command: osrm-routed --algorithm mld --max-table-size 100 /data/india-filtered.osrm
+    # eastern-zone-filtered.osrm — see prepare-extract.sh's REGION comment for
+    # why this is currently a region (Bihar/Jharkhand/Odisha/West Bengal), not
+    # the full India extract, and how to widen it later.
+    command: osrm-routed --algorithm mld --max-table-size 100 /data/eastern-zone-filtered.osrm
     volumes:
       - ./data:/data:ro
     ports:
@@ -28,8 +29,9 @@ services:
     cpus: 1
     healthcheck:
       # osrm-routed has no literal /health route — a real route request is the
-      # correct smoke test (coordinates: India Gate -> Connaught Place, Delhi).
-      test: ["CMD-SHELL", "curl -sf 'http://localhost:5000/route/v1/driving/77.2295,28.6129;77.2167,28.6315?overview=false' | grep -q '\"Ok\"' || exit 1"]
+      # correct smoke test (coordinates: Patna Junction -> Gandhi Maidan, Patna
+      # — must be inside whatever REGION currently covers).
+      test: ["CMD-SHELL", "curl -sf 'http://localhost:5000/route/v1/driving/85.1376,25.6093;85.1414,25.6127?overview=false' | grep -q '\"Ok\"' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -9,13 +9,30 @@ server** (`router.project-osrm.org`) — that server explicitly prohibits
 production use and `routing.js` refuses to start if `OSRM_BASE_URL` ever
 points at it.
 
+## Current coverage: Eastern Zone, not all of India yet
+
+Starting scope is Geofabrik's India "Eastern Zone" (Bihar, Jharkhand, Odisha,
+West Bengal — ~233MB), **not** the full India extract (~1.6GB). The full
+India road network alone (124M nodes, 10.7M ways) consistently OOM-killed
+`osrm-extract` at ~7GB RSS on this 7.8GB shared VPS — even with 8GB swap,
+single-threaded, and non-routing data filtered out via osmium first, there
+was no more fat to trim; the road graph itself was just too big for this box.
+
+**To expand later** (bigger VPS, or preprocess on a separate/beefier machine
+and copy only the finished `data/*.osrm*` files over): change `REGION` in
+`scripts/prepare-extract.sh` and `scripts/swap-extract.sh`, update the
+`VERIFY_COORDS`/healthcheck coordinates to somewhere inside the new region,
+and update `docker-compose.osrm.yml`'s `command` filename to match — then
+re-run `prepare-extract.sh`. No other code changes needed; `backend/src/services/routing.js`
+and everything downstream is region-agnostic.
+
 ## First-time setup
 
 Requires Docker + Docker Compose on the VPS (`docker --version` to confirm).
 
 ```bash
 cd osrm
-bash scripts/prepare-extract.sh      # downloads India OSM extract (~1GB) +
+bash scripts/prepare-extract.sh      # downloads the Eastern Zone OSM extract (~233MB) +
                                       # preprocesses it (osrm-extract/partition/customize)
 docker compose -f docker-compose.osrm.yml up -d
 docker compose -f docker-compose.osrm.yml ps
@@ -36,14 +53,14 @@ reboot automatically once started — no separate systemd unit needed.
 ## Verify it's working
 
 ```bash
-curl -s 'http://127.0.0.1:5000/route/v1/driving/77.2295,28.6129;77.2167,28.6315?overview=full&geometries=geojson' | jq '.code, .routes[0].distance'
-# expect "Ok" and a plausible distance in meters
+curl -s 'http://127.0.0.1:5000/route/v1/driving/85.1376,25.6093;85.1414,25.6127?overview=full&geometries=geojson' | jq '.code, .routes[0].distance'
+# (Patna Junction -> Gandhi Maidan) — expect "Ok" and a plausible distance in meters
 ```
 
 ## Updating to a newer OSM extract
 
-India's map data changes over time; re-run periodically (monthly/quarterly is
-plenty — OSRM's own preprocessing is the slow part, not how often OSM changes).
+Map data changes over time; re-run periodically (monthly/quarterly is plenty
+— OSRM's own preprocessing is the slow part, not how often OSM changes).
 
 ```bash
 cd osrm
@@ -54,10 +71,6 @@ route on a throwaway container before touching anything live, then swaps it
 in and restarts the real service. If verification fails, the live service is
 untouched. Old data lands in `data-old/` — delete it once you've confirmed
 the new one is healthy: `rm -rf osrm/data-old`.
-
-To expand beyond India later (other Geofabrik regions, or a combined extract),
-edit `EXTRACT_URL` in both scripts and the `osrm-routed` command's filename in
-`docker-compose.osrm.yml` to match.
 
 ## Backup strategy: none needed
 
@@ -84,31 +97,25 @@ expect it to take longer here than on a dedicated machine. If this becomes a
 real problem, preprocess on a separate/beefier machine and copy only the
 finished `data/*.osrm*` files over instead of running extract on the VPS itself.
 
-**Swap is required.** `osrm-extract` on the full India extract peaked at
-~4.7GB RSS and got OOM-killed the first time this ran here — the VPS had
-**zero swap configured**, so the kernel killed it outright instead of paging.
-Add a swapfile before running either script (one-time, survives reboots via
-`/etc/fstab`):
+**Swap is required regardless of region size.** The full-India extract's
+`osrm-extract` OOM-killed three times on this VPS — first at ~4.7GB RSS
+(zero swap configured at the time), then ~7GB RSS twice more even with 8GB
+swap, `--threads 1`, and non-routing data (buildings, land use, POIs)
+filtered out via `osmium tags-filter` first. India's road network alone
+(124M nodes, 10.7M ways) was simply too large for a 7.8GB box — hence the
+switch to Eastern Zone as the starting scope (see above). Keep the swapfile
+and `--threads 1`/osmium-filter steps regardless — they're needed again the
+moment `REGION` is widened, and cost nothing at the current smaller scope.
+One-time setup (survives reboots via `/etc/fstab`):
 ```bash
 fallocate -l 8G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
 echo '/swapfile none swap sw 0 0' >> /etc/fstab
 free -h   # confirm Swap: 8.0Gi
 ```
 
-**Osmium pre-filter is required too.** Even single-threaded (`--threads 1`)
-with 8GB swap, `osrm-extract` on the RAW India `.pbf` still peaked at ~6.7GB
-RSS and got OOM-killed again — India's full extract carries a huge amount of
-non-routing data (buildings, land use polygons, POIs) that `osrm-extract`
-loads into memory regardless of thread count. `prepare-extract.sh`/
-`swap-extract.sh` now run `osmium tags-filter` first (auto-installs
-`osmium-tool` via apt if missing) to strip everything except highway ways,
-ferry routes, turn restrictions, and barrier nodes — osmium keeps each kept
-way's referenced nodes automatically, so full-India road coverage is
-unaffected, just the non-routing bulk is gone. This is the standard technique
-for large-country OSRM extracts on constrained hardware.
-
-Disk: the `.osm.pbf` is ~800MB-1GB, the filtered `.pbf` + processed files a
-few GB more — budget ~5GB free, on top of the 8GB swapfile.
+Disk: Eastern Zone's `.osm.pbf` is ~233MB, filtered + processed files well
+under 1GB more — comfortably fits current free disk. Re-check `df -h /`
+before widening `REGION`, since a full-India run needs several GB more.
 
 ## Algorithm choice: MLD, not CH
 
