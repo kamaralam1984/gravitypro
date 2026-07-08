@@ -62,7 +62,7 @@ edit `EXTRACT_URL` in both scripts and the `osrm-routed` command's filename in
 ## Backup strategy: none needed
 
 The processed `.osrm*` files in `osrm/data/` are 100% reproducible from the
-pinned `osrm/osrm-backend` image version + the source `.osm.pbf` (itself
+pinned `ghcr.io/project-osrm/osrm-backend` image version + the source `.osm.pbf` (itself
 re-downloadable from Geofabrik) + `scripts/prepare-extract.sh`. This data is
 **deliberately excluded** from `scripts/backup-daily.sh` and the R2 offsite
 backup — don't waste backup storage/time on disposable, easily-rebuilt data.

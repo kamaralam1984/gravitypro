@@ -14,7 +14,7 @@
 #   docker inspect --format '{{.State.Health.Status}}' gravity-osrm
 services:
   osrm:
-    image: osrm/osrm-backend:v5.27.1
+    image: ghcr.io/project-osrm/osrm-backend:26.4.0
     container_name: gravity-osrm
     command: osrm-routed --algorithm mld --max-table-size 100 /data/india-latest.osrm
     volumes:

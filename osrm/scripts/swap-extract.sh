@@ -10,7 +10,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$HERE"
 
-IMAGE="osrm/osrm-backend:v5.27.1"
+IMAGE="ghcr.io/project-osrm/osrm-backend:26.4.0"
 EXTRACT_URL="https://download.geofabrik.de/asia/india-latest.osm.pbf"
 STAGING="data-new"
 VERIFY_PORT=5001
