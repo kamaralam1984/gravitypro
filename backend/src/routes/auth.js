@@ -95,9 +95,12 @@ router.post('/send-email-otp', async (req, res) => {
     return res.status(429).json({ error: 'Too many OTP requests. Wait 5 minutes.' })
   }
 
-  // Invalidate old OTPs
-  await query(`UPDATE email_otps SET used = TRUE WHERE email = $1 AND used = FALSE`, [cleanEmail])
-
+  // Note: previous unused OTPs for this email are deliberately left valid (not
+  // invalidated here). A resend before the first email arrives — common with
+  // slow child-account inboxes — used to invalidate the still-unread first
+  // code, so entering it later than the resend then failed with "Invalid or
+  // expired OTP" even though it hadn't actually expired. Each code still
+  // expires after 10 min and is marked used on successful verification.
   const otp = generateOTP()
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 min
   await query(
