@@ -3,7 +3,8 @@
 Family safety / location-tracking product. **100% FREE — koi paid/subscription/billing nahi.**
 Do hisse hain: **Website (web app)** aur **Mobile App (React Native / Expo)** + ek **Backend API** (Node/Express + PostgreSQL/PostGIS) + ek **self-hosted routing engine** (OSRM).
 
-> Last updated: 2026-07-08 · Mobile APK: **v1.0.3** (naya native build queue mein — background-heartbeat feature ke saath) · Live: gravitypro.kvlbusinesssolutions.com
+> Last updated: 2026-07-09 · Mobile APK: **v1.0.3** (naya native build queue mein — background-heartbeat feature ke saath) · Live: gravitypro.kvlbusinesssolutions.com
+> Aaj ke fixes: Child Hub Timeline ab road-snapped map + Route Replay dikhata hai · mobile mein naya **Alert Preferences** (family arrivals/SOS/safe-zone toggles) · **battery-low alert** ab live tracking path par bhi reliably fire hota hai (pehle sirf offline-sync ke baad fire hota tha)
 
 ---
 
@@ -42,17 +43,17 @@ Do hisse hain: **Website (web app)** aur **Mobile App (React Native / Expo)** + 
 3. **Circles** — family circles, member roster, add circle, tap child → Child Hub; **Call/Message member ko seedhe**, **Delete Family Circle (admin-only)**
 4. **Alerts** — All / SOS / Geofence / Device tabs (battery-low, GPS-off, offline), SSE live
 5. **Dashboard (Panel)** — WebView of web panel (SSO), OTA-updatable; **"View Child Panel"** entry point Profile se
-6. **Profile** — edit name/email, avatar upload, location history, logout; **Family section → Add Child + Emergency Contacts + View Child Panel**; **Settings → Location Precision (Exact/Battery Saver), Improve Tracking Reliability, Language**
+6. **Profile** — edit name/email, avatar upload, location history, logout; **Family section → Add Child + Emergency Contacts + View Child Panel**; **Settings → Location Precision (Exact/Battery Saver), Improve Tracking Reliability, Language**; **Alert Preferences → Family Arrivals / SOS Alerts / Safe Zone Entry-Exit toggles** (naya — pehle mobile par ye settings dikhti hi nahi thi)
 
 ### Child Hub (parent → child tap)
-- **Location Timeline** (stays & trips by day, road-snapped route) · **Safe Zones** (per-child create + category) · **Weekly Report** (distance, home/school time, CSV)
+- **Location Timeline** (stays & trips by day) — header se ek tap mein **road-snapped route map + Route Replay** (1x/2x/4x) bhi khulta hai us specific child ke liye (naya — pehle sirf self-view mein milta tha) · **Safe Zones** (per-child create + category) · **Weekly Report** (distance, home/school time, CSV)
 
 ### Native capabilities
 - **Background location** — Android foreground service + iOS background mode, **offline queue** (net off → records locally → syncs on reconnect)
 - **Online/Offline status** — 60-second foreground heartbeat + **naya periodic background heartbeat (~15 min, phone band/stationary hone par bhi Online dikhta hai)** — Android par near-guaranteed (battery-optimization permission ke saath), iOS par best-effort (Apple ki OS-level limitation, koi bhi app 100% guarantee nahi de sakti)
 - **Location Precision** — Exact (default) ya Battery Saver mode, GPS accuracy/interval actually badalta hai
 - **Reliability** — battery-optimization-ignore prompt + OEM auto-start deep-links (Xiaomi/Oppo/Vivo/Realme/Huawei), **ab Settings se dobara bhi trigger kar sakte ho** ("Improve Tracking Reliability")
-- **Device alerts** — battery-low / GPS-off / device-offline (server-side monitor)
+- **Device alerts** — battery-low / GPS-off / device-offline (server-side monitor); **battery-low ab live-tracking path par bhi fire hota hai** (bug fix — pehle sirf offline-queue sync ke baad hi fire hota tha, normal online use mein kabhi nahi)
 - **Transport mode** derived from GPS speed
 - Push notifications, camera/photo (avatar), haptics, **OTA updates** (JS changes turant, native changes ke liye naya build chahiye)
 
@@ -108,6 +109,7 @@ Do hisse hain: **Website (web app)** aur **Mobile App (React Native / Expo)** + 
 | Delete Family Circle | ✅ | ✅ |
 | Location Precision (real setting) | ✅ | ✅ |
 | View Child Panel preview | ✅ | ✅ |
+| Alert Preferences (arrivals/SOS/safe-zone toggles) | ✅ (ChildPanel) | ✅ |
 | Admin panel | ✅ | ❌ |
 | Background location / offline queue / reliability | ❌ | ✅ native |
 | Background heartbeat (app closed → still online) | ❌ (n/a) | ✅ native |
