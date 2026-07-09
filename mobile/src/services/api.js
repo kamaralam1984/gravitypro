@@ -53,6 +53,8 @@ export const userAPI = {
   heartbeat: () => api.post('/users/heartbeat', {}),               // keep "online" while phone is on (stationary)
   refreshMember: (id) => api.post(`/users/${id}/refresh`, {}),     // parent → remote-refresh a child's app
   getLocationHistory: () => api.get('/users/me/location-history'),
+  getSettings: () => api.get('/users/me/settings'),
+  updateSettings: (data) => api.patch('/users/me/settings', data),
   clearPushToken: () => api.delete('/users/me/push-token'),
   // Backend reads `req.body.token` (POST /users/me/push-token) — send as { token }.
   registerPushToken: (push_token) => api.post('/users/me/push-token', { token: push_token }),

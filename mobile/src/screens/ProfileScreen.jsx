@@ -48,6 +48,33 @@ export default function ProfileScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [locationPrecision, setLocationPrecisionState] = useState(user?.location_precision || 'precise')
 
+  // Alert preferences (share_location/notif_* — same fields ChildPanel.tsx
+  // already exposes on web via GET/PATCH /users/me/settings; mobile had no
+  // UI for these at all).
+  const [alertSettings, setAlertSettings] = useState({
+    notif_arrivals: true,
+    notif_sos: true,
+    notif_geofence: true,
+  })
+
+  useEffect(() => {
+    userAPI.getSettings()
+      .then(res => { if (res?.settings) setAlertSettings(res.settings) })
+      .catch(() => {})
+  }, [])
+
+  const handleToggleAlertSetting = async (key, value) => {
+    const prev = alertSettings[key]
+    setAlertSettings(s => ({ ...s, [key]: value }))
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    try {
+      await userAPI.updateSettings({ [key]: value })
+    } catch (e) {
+      setAlertSettings(s => ({ ...s, [key]: prev }))
+      Alert.alert('Save failed', 'Could not update this setting. Please try again.')
+    }
+  }
+
   // Location history
   const [historyVisible, setHistoryVisible] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -514,6 +541,33 @@ export default function ProfileScreen() {
               label="Location History"
               chevron
               onPress={openHistory}
+            />
+          </GradientCard>
+
+          {/* ── Alert Preferences (same settings ChildPanel.tsx exposes on
+              web, via GET/PATCH /users/me/settings) ── */}
+          <GradientCard style={styles.section}>
+            <Text style={styles.sectionTitle}>Alert Preferences</Text>
+            <SettingRow
+              icon="walk-outline"
+              label="Family Arrivals"
+              value={alertSettings.notif_arrivals !== false}
+              onToggle={(v) => handleToggleAlertSetting('notif_arrivals', v)}
+              toggle
+            />
+            <SettingRow
+              icon="warning-outline"
+              label="SOS Alerts"
+              value={alertSettings.notif_sos !== false}
+              onToggle={(v) => handleToggleAlertSetting('notif_sos', v)}
+              toggle
+            />
+            <SettingRow
+              icon="shield-checkmark-outline"
+              label="Safe Zone Entry/Exit"
+              value={alertSettings.notif_geofence !== false}
+              onToggle={(v) => handleToggleAlertSetting('notif_geofence', v)}
+              toggle
             />
           </GradientCard>
 
