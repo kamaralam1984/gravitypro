@@ -344,7 +344,12 @@ export default function ChildTimelineScreen({ route, navigation }) {
             </Text>
             <Text style={styles.headerSub}>{formatHeaderDate(selectedKey)}</Text>
           </View>
-          <View style={styles.backBtn} />
+          <Pressable
+            hitSlop={12}
+            onPress={() => navigation?.navigate?.('MyRouteHistory', { member })}
+            style={styles.backBtn}>
+            <Ionicons name="map-outline" size={22} color={c.textPrimary} />
+          </Pressable>
         </View>
       </LinearGradient>
 

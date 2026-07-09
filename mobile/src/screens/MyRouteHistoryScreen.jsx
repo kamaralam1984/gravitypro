@@ -9,22 +9,30 @@ import { Colors } from '../theme/colors'
 const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
 
 /**
- * MyRouteHistoryScreen — a child's own Travel Route History (polyline, start/
- * end/current markers, distance, travel time, Route Replay, zoom-to-route).
+ * MyRouteHistoryScreen — Travel Route History (polyline, start/end/current
+ * markers, distance, travel time, Route Replay, zoom-to-route).
  *
  * Rather than rebuilding this natively, it embeds the existing web Travel
  * Timeline page (landing-react `Timeline.tsx`) in a WebView — same SSO
  * pattern as WebPanelScreen.jsx — reusing the map/polyline/replay work
  * already built there instead of duplicating it for mobile.
  *
- * Hardcoded to the LOGGED-IN user's own id (?userId=<self>): a child must
- * never be able to browse another family member's route. The web page also
- * hides its member-switcher for child viewers as defense in depth, but the
- * real enforcement is server-side (routes/timeline.js canView).
+ * Two entry points:
+ *  - Self view (no route param): a user opens their own route history.
+ *  - Parent view (route.params.member passed, e.g. from ChildTimelineScreen):
+ *    a parent opens a specific child's route history.
+ *
+ * A child account can only ever see its own id here regardless of any
+ * passed param — that lock is enforced below AND server-side
+ * (routes/timeline.js canView), so this is defense in depth, not the only
+ * guard.
  */
-export default function MyRouteHistoryScreen() {
+export default function MyRouteHistoryScreen({ route }) {
   const insets = useSafeAreaInsets()
   const user = useAuthStore(s => s.user)
+  const isChildAccount = user?.account_type === 'child'
+  const requestedMember = route?.params?.member
+  const targetId = !isChildAccount && requestedMember?.id ? requestedMember.id : user?.id
   const webRef = useRef(null)
   const [inject, setInject] = useState(null)
   const [uri, setUri] = useState(null)
@@ -41,12 +49,12 @@ export default function MyRouteHistoryScreen() {
         ${token ? `localStorage.setItem('gravity_token', ${JSON.stringify(token)});` : ''}
         ${userRaw ? `localStorage.setItem('gravity_user', ${JSON.stringify(userRaw)});` : ''}
       }catch(e){}})(); true;`
-      if (!alive || !user?.id) return
+      if (!alive || !targetId) return
       setInject(js)
-      setUri(`${BASE}/parent/timeline?userId=${encodeURIComponent(user.id)}`)
+      setUri(`${BASE}/parent/timeline?userId=${encodeURIComponent(targetId)}`)
     })()
     return () => { alive = false }
-  }, [user?.id, reloadKey])
+  }, [targetId, reloadKey])
 
   const retry = () => { setError(false); setLoading(true); setReloadKey(k => k + 1) }
 
