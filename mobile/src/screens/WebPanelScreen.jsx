@@ -23,7 +23,7 @@ const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesss
 // WebView's actual load/navigation events visible on-screen (no DevTools
 // needed) so the next report can include real evidence instead of another
 // guess. Remove once the real cause is found and fixed.
-const DEBUG_OVERLAY = false
+const DEBUG_OVERLAY = true
 
 export default function WebPanelScreen({ path, route }) {
   const insets = useSafeAreaInsets()
