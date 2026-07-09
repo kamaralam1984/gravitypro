@@ -7,6 +7,11 @@ const { checkGeofenceStatus } = require('../services/geofence')
 const { sendToCircleMembers } = require('../services/sse')
 const { sendDeviceAlert, sendPushNotifications } = require('../services/alerts')
 const { trackStopForLocation } = require('../services/timelineStops')
+// Reuse the battery-low threshold check already written for the offline-queue
+// ingest path (routes/locations.js) instead of duplicating it here — this is
+// the only path mobile's live foreground/background tracking actually posts
+// to (POST /api/v1/users/location), so without this the check never ran.
+const { updateDeviceStatus } = require('./locations')
 
 // Send a "speeding" alert to the user's circles when their GPS speed crosses the
 // configured threshold, with hysteresis (device_status.speeding_alerted) so it
@@ -144,6 +149,14 @@ const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery
     if (user) await checkSpeeding(userId, speed, user)
   } catch (spErr) {
     console.error('[users/location] speeding error:', spErr.message)
+  }
+
+  // Device health — battery-low alert + keep device_status.last_location_at
+  // fresh (non-fatal, mirrors routes/locations.js saveLocation).
+  try {
+    await updateDeviceStatus(userId, { battery_level }, recordedAt)
+  } catch (devErr) {
+    console.error('[users/location] updateDeviceStatus failed:', devErr.message)
   }
 }
 
