@@ -2,7 +2,7 @@
   "expo": {
     "name": "Gravity",
     "slug": "gravity",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -27,7 +27,7 @@
         "backgroundColor": "#050F08"
       },
       "package": "com.trackalways.gravity",
-      "versionCode": 12,
+      "versionCode": 13,
       "minSdkVersion": 24,
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
