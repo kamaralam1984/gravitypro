@@ -53,8 +53,14 @@ export default function WebPanelScreen({ path, route }) {
   // opaque full-screen overlay: doing so is exactly the "Timeline/Smart Places
   // goes blank" symptom (the content is still there, hidden behind our spinner).
   const revealedRef = useRef(false)
+  // `revealed` is STATE (not just the ref) so the overlay's render is gated on
+  // it reactively: once the panel has painted once, the full-screen overlay can
+  // NEVER be shown again — no matter what a later load/nav event does with
+  // `loading`. This is what keeps Timeline / Smart Places (client-side routes)
+  // from being hidden behind a spinner that never clears.
+  const [revealed, setRevealed] = useState(false)
   const clearWatchdog = () => { if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null } }
-  const reveal = () => { revealedRef.current = true; setLoading(false); clearWatchdog() }
+  const reveal = () => { revealedRef.current = true; setRevealed(true); setLoading(false); clearWatchdog() }
   const armWatchdog = () => {
     clearWatchdog()
     watchdogRef.current = setTimeout(() => { logEvent('watchdog fired -> revealing WebView'); reveal() }, 6000)
@@ -185,7 +191,7 @@ export default function WebPanelScreen({ path, route }) {
         startInLoadingState
         style={styles.web}
       />
-      {loading && !error && (
+      {loading && !error && !revealed && (
         <View style={styles.overlay} pointerEvents="none">
           <ActivityIndicator size="large" color={Colors.accent} />
         </View>
