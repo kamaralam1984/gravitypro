@@ -911,8 +911,19 @@ export default function MapScreen() {
             <Text style={styles.sosAlertMessage}>
               {sosAlert?.message || 'Needs help!'}
             </Text>
+            {/* Row layout: sosSendBtn/sosCancelBtn carry flex:1 which is meant for
+                side-by-side buttons. Stacking them in the column card made flex:1
+                (flexBasis 0%) collapse/clip them to an empty sliver — the reported
+                "empty SOS button". A row wrapper is what these styles expect. */}
+            <View style={{ flexDirection: 'row', gap: 10, alignSelf: 'stretch', marginTop: 22 }}>
             <TouchableOpacity
-              style={[styles.sosSendBtn, { marginTop: 20 }]}
+              style={[styles.sosCancelBtn, { minHeight: 50 }]}
+              onPress={() => setSosAlert(null)}
+              activeOpacity={0.75}>
+              <Text style={styles.sosCancelText}>DISMISS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sosSendBtn, { minHeight: 50 }]}
               onPress={() => {
                 if (sosAlert?.latitude && sosAlert?.longitude) {
                   panMapTo(sosAlert.latitude, sosAlert.longitude, 16)
@@ -920,17 +931,12 @@ export default function MapScreen() {
                 setSosAlert(null)
               }}
               activeOpacity={0.8}>
-              <LinearGradient colors={['#FF1744', '#B71C1C']} style={styles.sosSendGrad}>
+              <LinearGradient colors={['#FF1744', '#B71C1C']} style={[styles.sosSendGrad, { minHeight: 50 }]}>
                 <Ionicons name="navigate" size={16} color="#fff" />
                 <Text style={styles.sosSendText}>VIEW ON MAP</Text>
               </LinearGradient>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sosCancelBtn, { marginTop: 10 }]}
-              onPress={() => setSosAlert(null)}
-              activeOpacity={0.75}>
-              <Text style={styles.sosCancelText}>DISMISS</Text>
-            </TouchableOpacity>
+            </View>
           </View>
         </Pressable>
       </Modal>
