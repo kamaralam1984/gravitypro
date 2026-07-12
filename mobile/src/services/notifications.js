@@ -37,9 +37,15 @@ export const registerForPushNotifications = async () => {
     finalStatus = status
   }
 
+  // On Android an FCM push token can be obtained (and used for silent/data
+  // wake-refresh from the parent) WITHOUT the POST_NOTIFICATIONS permission —
+  // that permission only governs DISPLAYING banners. So do NOT bail here on
+  // Android: register the token anyway so the parent's "Refresh" (remote wake
+  // to bring the child online) works even if the child declined notifications.
+  // iOS needs the permission to mint an APNs token, so there we can't continue.
   if (finalStatus !== 'granted') {
     console.warn('Push notification permission not granted')
-    return null
+    if (Platform.OS !== 'android') return null
   }
 
   if (Platform.OS === 'android') {
