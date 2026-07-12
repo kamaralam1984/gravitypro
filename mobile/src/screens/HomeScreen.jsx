@@ -118,7 +118,7 @@ function MemberChip({ member, memberLocations }) {
         {member.name?.split(' ')[0] || '?'}
       </Text>
       {loc?.battery != null && (
-        <BatteryIndicator level={loc.battery} showText size="sm" />
+        <BatteryIndicator level={loc.battery} charging={loc.charging} showText size="sm" />
       )}
       {isOnline && mode.key !== 'unknown' && (
         <View style={styles.modeChip}>
@@ -212,6 +212,7 @@ export default function HomeScreen() {
             latitude: m.latitude,
             longitude: m.longitude,
             battery: m.battery_level,
+            charging: m.is_charging === true,
             speed: m.speed != null ? Number(m.speed) : null,
             timestamp: m.location_updated_at || m.updated_at,
           }

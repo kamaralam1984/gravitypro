@@ -213,7 +213,7 @@ export default function MapScreen() {
       es.addEventListener('location_update', (e) => {
         try {
           const data = JSON.parse(e.data)
-          const { userId, latitude, longitude, battery_level, speed, mode, timestamp } = data
+          const { userId, latitude, longitude, battery_level, is_charging, speed, mode, timestamp } = data
           if (!userId || latitude == null || longitude == null) return
           trackRoute(userId, Number(latitude), Number(longitude))
           setMemberLocations((prev) => ({
@@ -222,6 +222,7 @@ export default function MapScreen() {
               latitude: Number(latitude),
               longitude: Number(longitude),
               battery: battery_level ?? prev[userId]?.battery ?? null,
+              charging: is_charging != null ? is_charging === true : (prev[userId]?.charging ?? false),
               speed: speed != null ? Number(speed) : (prev[userId]?.speed ?? null),
               mode: mode ?? prev[userId]?.mode ?? null,
               timestamp: timestamp || new Date().toISOString(),
@@ -328,6 +329,7 @@ export default function MapScreen() {
               latitude: Number(m.latitude),
               longitude: Number(m.longitude),
               battery: m.battery_level ?? null,
+              charging: m.is_charging === true,
               speed: m.speed != null ? Number(m.speed) : (prev[m.id]?.speed ?? null),
               mode: m.mode ?? prev[m.id]?.mode ?? null,
               timestamp: m.location_updated_at || m.updated_at || null,
@@ -752,7 +754,7 @@ export default function MapScreen() {
                 <Ionicons name="battery-half" size={16} color={c.textMuted} />
                 <Text style={styles.cardStatLabel}>Battery</Text>
                 {selectedLoc?.battery != null ? (
-                  <BatteryIndicator level={selectedLoc.battery} showText size="sm" />
+                  <BatteryIndicator level={selectedLoc.battery} charging={selectedLoc.charging} showText size="sm" />
                 ) : (
                   <Text style={styles.cardStatValue}>—</Text>
                 )}

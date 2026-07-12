@@ -99,7 +99,7 @@ router.get('/:circleId/members', authenticate, async (req, res) => {
     `SELECT u.id, u.name, u.phone, u.avatar_url, u.account_type, cm.role, cm.joined_at,
       ull.updated_at as location_updated_at,
       ST_X(ull.geom) as longitude, ST_Y(ull.geom) as latitude,
-      ull.battery_level, ull.speed, ull.bearing,
+      ull.battery_level, ull.is_charging, ull.speed, ull.bearing,
       zone.name as safe_zone_name,
       gc.resolved_name as geocoded_name, gc.resolved_type as geocoded_type
      FROM circle_members cm

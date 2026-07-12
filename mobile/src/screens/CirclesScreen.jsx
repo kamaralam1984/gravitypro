@@ -69,6 +69,7 @@ function MemberRow({ member, isAdmin, onRemove }) {
   // heartbeat's ~15min floor + buffer (see services/backgroundHeartbeat.js).
   const isOnline = lastSeen ? (Date.now() - new Date(lastSeen).getTime() < 20 * 60 * 1000) : false
   const battery = member.battery_level
+  const isCharging = member.is_charging === true
   // Parental controls (ChildHub) are parent-only. A child viewer never gets to open them,
   // even on another child's row.
   const meIsChild = useAuthStore(s => s.user?.account_type) === 'child'
@@ -107,7 +108,7 @@ function MemberRow({ member, isAdmin, onRemove }) {
           <View style={[styles.statusDot, { backgroundColor: isOnline ? c.accent : c.textMuted }]} />
           <Text style={styles.memberMeta} numberOfLines={1}>
             {isOnline ? 'Online' : (lastSeen ? `Last seen ${relativeTime(lastSeen)}` : 'No location yet')}
-            {battery != null ? `  ·  🔋 ${battery}%` : ''}
+            {battery != null ? `  ·  ${isCharging ? '⚡' : '🔋'} ${battery}%` : ''}
           </Text>
         </View>
       </View>

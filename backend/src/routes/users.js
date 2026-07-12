@@ -56,6 +56,7 @@ const locationSchema = z.object({
   longitude: z.number(),
   accuracy: z.number().optional(),
   battery_level: z.number().min(0).max(100).optional(),
+  is_charging: z.boolean().optional(),
   speed: z.number().nullable().optional(),   // m/s from GPS; used for speeding alerts
   mode: z.string().optional(),
   bearing: z.number().nullable().optional(), // heading in degrees; Travel Timeline route direction arrows
@@ -64,6 +65,7 @@ const locationSchema = z.object({
 
 const batterySchema = z.object({
   battery_level: z.number().min(0).max(100),
+  is_charging: z.boolean().optional(),
 })
 
 const settingsSchema = z.object({
@@ -81,31 +83,32 @@ const settingsSchema = z.object({
  * Mirrors locations.js saveLocation but also accepts battery_level and uses
  * latitude/longitude field names (as sent by ChildPanel).
  */
-const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery_level, speed, bearing, altitude }, user = null) => {
+const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery_level, is_charging, speed, bearing, altitude }, user = null) => {
   if (latitude == null || longitude == null || isNaN(latitude) || isNaN(longitude)) return
   const locationWKT = `POINT(${parseFloat(longitude)} ${parseFloat(latitude)})`
   const recordedAt = new Date()
 
   // Insert into device_locations (battery_level/speed/bearing/altitude columns exist per schema)
   await query(
-    `INSERT INTO device_locations (user_id, geom, accuracy, speed, bearing, altitude, battery_level, recorded_at)
-     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6, $7, $8)`,
-    [userId, locationWKT, accuracy ?? null, speed ?? null, bearing ?? null, altitude ?? null, battery_level ?? null, recordedAt]
+    `INSERT INTO device_locations (user_id, geom, accuracy, speed, bearing, altitude, battery_level, is_charging, recorded_at)
+     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6, $7, $8, $9)`,
+    [userId, locationWKT, accuracy ?? null, speed ?? null, bearing ?? null, altitude ?? null, battery_level ?? null, is_charging ?? false, recordedAt]
   )
 
   // Upsert into user_latest_locations — only update if newer
   await query(
-    `INSERT INTO user_latest_locations (user_id, geom, accuracy, speed, bearing, battery_level, updated_at)
-     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6, $7)
+    `INSERT INTO user_latest_locations (user_id, geom, accuracy, speed, bearing, battery_level, is_charging, updated_at)
+     VALUES ($1, ST_SetSRID(ST_GeomFromText($2), 4326), $3, $4, $5, $6, $7, $8)
      ON CONFLICT (user_id) DO UPDATE
        SET geom         = EXCLUDED.geom,
            accuracy     = EXCLUDED.accuracy,
            speed        = EXCLUDED.speed,
            bearing      = EXCLUDED.bearing,
            battery_level = EXCLUDED.battery_level,
+           is_charging   = EXCLUDED.is_charging,
            updated_at   = EXCLUDED.updated_at
        WHERE user_latest_locations.updated_at < EXCLUDED.updated_at`,
-    [userId, locationWKT, accuracy ?? null, speed ?? null, bearing ?? null, battery_level ?? null, recordedAt]
+    [userId, locationWKT, accuracy ?? null, speed ?? null, bearing ?? null, battery_level ?? null, is_charging ?? false, recordedAt]
   )
 
   // Incremental Smart Timeline stop detection (see services/timelineStops.js)
@@ -129,6 +132,7 @@ const saveUserLocation = async (userId, { latitude, longitude, accuracy, battery
         longitude,
         accuracy,
         battery_level,
+        is_charging: is_charging ?? false,
         timestamp: recordedAt.toISOString(),
       })
     }
@@ -284,12 +288,12 @@ router.get('/search', authenticate, async (req, res) => {
  * Called by ChildPanel when the app is in the foreground.
  */
 router.post('/location', authenticate, validate(locationSchema), async (req, res) => {
-  const { latitude, longitude, accuracy, battery_level, speed, bearing, altitude } = req.body
+  const { latitude, longitude, accuracy, battery_level, is_charging, speed, bearing, altitude } = req.body
   try {
     // Privacy: if the user turned OFF "Share my location", do not store or
     // broadcast their position. Respond OK so the client doesn't error/retry.
     if (req.user.share_location === false) return res.json({ success: true, shared: false })
-    await saveUserLocation(req.user.id, { latitude, longitude, accuracy, battery_level, speed, bearing, altitude }, req.user)
+    await saveUserLocation(req.user.id, { latitude, longitude, accuracy, battery_level, is_charging, speed, bearing, altitude }, req.user)
     res.json({ success: true })
   } catch (err) {
     console.error('[POST /users/location]', err.message)
@@ -303,13 +307,13 @@ router.post('/location', authenticate, validate(locationSchema), async (req, res
  * Lightweight update — only refreshes battery level without a new GPS point.
  */
 router.patch('/location', authenticate, validate(batterySchema), async (req, res) => {
-  const { battery_level } = req.body
+  const { battery_level, is_charging } = req.body
   try {
     await query(
       `UPDATE user_latest_locations
-         SET battery_level = $1, updated_at = NOW()
-       WHERE user_id = $2`,
-      [battery_level, req.user.id]
+         SET battery_level = $1, is_charging = COALESCE($2, is_charging), updated_at = NOW()
+       WHERE user_id = $3`,
+      [battery_level, is_charging ?? null, req.user.id]
     )
     res.json({ success: true })
   } catch (err) {

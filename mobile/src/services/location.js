@@ -26,6 +26,17 @@ const getBatteryLevel = async () => {
   }
 }
 
+// true if the device is plugged in / charging (or full), false otherwise.
+const getIsCharging = async () => {
+  try {
+    const Battery = require('expo-battery')
+    const state = await Battery.getBatteryStateAsync()
+    return state === Battery.BatteryState.CHARGING || state === Battery.BatteryState.FULL
+  } catch {
+    return false
+  }
+}
+
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesssolutions.com'
 const TRACCAR_ENDPOINT = `${API_BASE}/telemetry`
 
@@ -85,13 +96,14 @@ if (Platform.OS !== 'web') {
           const token = await storage.getItem('auth_token')
           if (token) {
             const battery_level = await getBatteryLevel()
+            const is_charging = await getIsCharging()
             const res = await fetchWithTimeout(`${API_BASE}/api/v1/users/location`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + token,
               },
-              body: JSON.stringify({ latitude, longitude, accuracy, battery_level, speed, mode, bearing: heading, altitude }),
+              body: JSON.stringify({ latitude, longitude, accuracy, battery_level, is_charging, speed, mode, bearing: heading, altitude }),
             })
             if (res.ok) online = true
           }
@@ -201,8 +213,13 @@ export const reportBatteryLevel = async () => {
     const level = await Battery.getBatteryLevelAsync() // 0..1, -1 if unknown
     if (level == null || level < 0) return
     const battery_level = Math.round(level * 100)
+    let is_charging = false
+    try {
+      const state = await Battery.getBatteryStateAsync()
+      is_charging = state === Battery.BatteryState.CHARGING || state === Battery.BatteryState.FULL
+    } catch {}
     const { userAPI } = require('./api')
-    await userAPI.updateBattery({ battery_level })
+    await userAPI.updateBattery({ battery_level, is_charging })
   } catch (e) {
     // best-effort; ignore failures
   }
