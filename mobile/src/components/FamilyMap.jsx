@@ -165,7 +165,11 @@ function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset, m
       .bindTooltip('<b>'+m.name+'</b>'+(m.battery!=null?(' · '+m.battery+'%'):'')
         +(nearest?('<br>'+fmt(nd)+' from '+nearest.name):'')
         +(pd!=null?('<br>'+fmt(pd)+' from '+parentName):''),{permanent:false});
-    L.marker([m.lat,m.lng],{icon:L.divIcon({className:'',html:'<div class="lbl" style="margin-top:10px;color:'+color+';border-color:'+color+'">'+m.name+'</div>',iconSize:[0,0]})}).addTo(map);
+    // Label centered under the marker (translateX -50% — a [0,0] divIcon anchors
+    // at its top-left, which otherwise pushes the pill off to the right) and now
+    // showing LIVE battery % right on the map, not just in the tap tooltip.
+    var blabel = m.name + (m.battery!=null ? ' · '+m.battery+'%' : '');
+    L.marker([m.lat,m.lng],{icon:L.divIcon({className:'',html:'<div class="lbl" style="margin-top:12px;transform:translateX(-50%);color:'+color+';border-color:'+color+'">'+blabel+'</div>',iconSize:[0,0]})}).addTo(map);
 
     // Child → nearest-zone (existing dashed line + label)
     if(nearest){
