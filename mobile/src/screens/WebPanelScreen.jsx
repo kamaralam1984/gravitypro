@@ -156,6 +156,29 @@ export default function WebPanelScreen({ path, route }) {
         ref={webRef}
         source={source}
         injectedJavaScriptBeforeContentLoaded={inject}
+        injectedJavaScript={`(function(){
+          // Workaround (until the web deploy lands): raise the Dashboard map's
+          // +/- zoom control so it clears the bottom map-style + History row.
+          // The CSS-module class is hashed, so target by the +/- buttons and
+          // bump their absolutely-positioned parent. Re-applies via observer so
+          // it survives SPA re-renders/route changes.
+          function fixZoom(){
+            try{
+              var b=document.querySelectorAll('button');
+              for(var i=0;i<b.length;i++){
+                var t=(b[i].textContent||'').trim();
+                if(t==='+'||t==='\\u2212'||t==='-'){
+                  var p=b[i].parentElement;
+                  if(p&&getComputedStyle(p).position==='absolute'&&parseInt(getComputedStyle(p).bottom)<60){
+                    p.style.setProperty('bottom','76px','important');
+                  }
+                }
+              }
+            }catch(e){}
+          }
+          try{ new MutationObserver(fixZoom).observe(document.documentElement,{childList:true,subtree:true}); }catch(e){}
+          var n=0,iv=setInterval(function(){fixZoom(); if(++n>40)clearInterval(iv);},500);
+        })();true;`}
         onLoadStart={(e) => {
           logEvent(`onLoadStart ${e?.nativeEvent?.url?.slice(-40) || ''}`)
           setError(false)
