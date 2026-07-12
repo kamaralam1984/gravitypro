@@ -23,7 +23,7 @@ const BASE = process.env.EXPO_PUBLIC_API_URL || 'https://gravitypro.kvlbusinesss
 // WebView's actual load/navigation events visible on-screen (no DevTools
 // needed) so the next report can include real evidence instead of another
 // guess. Remove once the real cause is found and fixed.
-const DEBUG_OVERLAY = true
+const DEBUG_OVERLAY = false
 
 export default function WebPanelScreen({ path, route }) {
   const insets = useSafeAreaInsets()
@@ -39,6 +39,28 @@ export default function WebPanelScreen({ path, route }) {
     const time = new Date().toLocaleTimeString()
     setDebugLog((prev) => [...prev.slice(-4), `${time} ${label}`])
   }
+  // Watchdog: the live panel's <head> pulls Leaflet + markercluster from unpkg
+  // via BLOCKING <script src> tags. react-native-webview only fires onLoadEnd
+  // on full onPageFinished — i.e. after those CDN scripts resolve. If the CDN
+  // is slow/unreachable, onPageFinished never fires and the opaque loading
+  // overlay hides the (already-rendered) SPA forever — an eternal spinner.
+  // So we ALSO reveal the WebView on load progress and on a hard timeout, and
+  // never let the overlay outlive that timeout.
+  const watchdogRef = useRef(null)
+  // Once the panel has painted even once, the SPA owns all further navigation
+  // (Timeline / Smart Places are CLIENT-SIDE routes — no full page reload). Its
+  // own in-page loading UI takes over, so we must NEVER cover it again with the
+  // opaque full-screen overlay: doing so is exactly the "Timeline/Smart Places
+  // goes blank" symptom (the content is still there, hidden behind our spinner).
+  const revealedRef = useRef(false)
+  const clearWatchdog = () => { if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null } }
+  const reveal = () => { revealedRef.current = true; setLoading(false); clearWatchdog() }
+  const armWatchdog = () => {
+    clearWatchdog()
+    watchdogRef.current = setTimeout(() => { logEvent('watchdog fired -> revealing WebView'); reveal() }, 6000)
+  }
+  useEffect(() => () => clearWatchdog(), [])
+
   const token = useAuthStore(s => s.token)
   const user = useAuthStore(s => s.user)
   const updateUser = useAuthStore(s => s.updateUser)
@@ -128,10 +150,22 @@ export default function WebPanelScreen({ path, route }) {
         ref={webRef}
         source={source}
         injectedJavaScriptBeforeContentLoaded={inject}
-        onLoadStart={(e) => { logEvent(`onLoadStart ${e?.nativeEvent?.url?.slice(-40) || ''}`); setLoading(true); setError(false) }}
-        onLoadEnd={(e) => { logEvent(`onLoadEnd ${e?.nativeEvent?.url?.slice(-40) || ''}`); setLoading(false) }}
-        onError={(e) => { logEvent(`onError ${e?.nativeEvent?.description || ''}`); setError(true); setLoading(false) }}
-        onNavigationStateChange={(nav) => logEvent(`nav -> ${(nav?.url || '').slice(-40)} (loading:${nav?.loading})`)}
+        onLoadStart={(e) => {
+          logEvent(`onLoadStart ${e?.nativeEvent?.url?.slice(-40) || ''}`)
+          setError(false)
+          // Only ever show the full-screen overlay for the FIRST paint. After
+          // that the SPA's own loading UI handles client-side route changes.
+          if (!revealedRef.current) { setLoading(true); armWatchdog() }
+        }}
+        onLoadProgress={(e) => {
+          // Reveal the WebView as soon as the document is mostly parsed — the
+          // SPA renders its own login/dashboard well before the blocking unpkg
+          // <head> scripts (and thus onLoadEnd) resolve.
+          if ((e?.nativeEvent?.progress ?? 0) >= 0.6) reveal()
+        }}
+        onLoadEnd={(e) => { logEvent(`onLoadEnd ${e?.nativeEvent?.url?.slice(-40) || ''}`); reveal() }}
+        onNavigationStateChange={(nav) => { logEvent(`nav -> ${(nav?.url || '').slice(-40)} (loading:${nav?.loading})`); if (nav && nav.loading === false) reveal() }}
+        onError={(e) => { logEvent(`onError ${e?.nativeEvent?.description || ''}`); setError(true); setLoading(false); clearWatchdog() }}
         onContentProcessDidTerminate={() => { logEvent('CONTENT PROCESS TERMINATED (iOS crash) -> reloading'); webRef.current?.reload() }}
         onRenderProcessGone={onRenderProcessGone}
         domStorageEnabled
