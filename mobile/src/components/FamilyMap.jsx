@@ -204,9 +204,21 @@ function buildHtml(members, zones, me, pickMode, pick, isLight, zoomTopOffset, m
     });
   }
 
-  if(bounds.length){ map.fitBounds(bounds,{padding:[40,40],maxZoom:15}); }
-  else if(D.me){ map.setView([D.me.lat,D.me.lng],14); }
+  // The WebView is reloaded whenever member/path data changes (frequent, on
+  // every location update). To stop the map jumping/re-fitting on each reload,
+  // remember the user's view in localStorage (persists — same baseUrl origin
+  // across reloads) and RESTORE it. Only auto-fit the very FIRST time.
+  var savedView=null;
+  try{ savedView=JSON.parse(localStorage.getItem('gv_mapView')||'null'); }catch(e){}
+  if(savedView && savedView.c){
+    map.setView([savedView.c.lat,savedView.c.lng], savedView.z);
+  } else if(bounds.length){
+    map.fitBounds(bounds,{padding:[40,40],maxZoom:15});
+  } else if(D.me){ map.setView([D.me.lat,D.me.lng],14); }
   else { map.setView([20.59,78.96],4); }
+  // Persist wherever the user leaves the map (pan/zoom) so the next reload
+  // restores it instead of snapping back — no more auto aage-piche.
+  map.on('moveend',function(){ try{ var ctr=map.getCenter(); localStorage.setItem('gv_mapView',JSON.stringify({c:{lat:ctr.lat,lng:ctr.lng},z:map.getZoom()})); }catch(e){} });
   setTimeout(function(){map.invalidateSize();},250);
 </script></body></html>`
 }
