@@ -150,9 +150,11 @@ export const startBackgroundTracking = async () => {
     const precision = await getStoredPrecision()
     const watchOpts = getWatchOptions(precision, 'background')
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      // Live tracking while MOVING, but no GPS churn when stationary (the 60s
-      // presence heartbeat keeps a still device "online", so we don't need a fix
-      // every few seconds when it isn't moving — that was a major battery drain).
+      // Time-based updates (distanceInterval:0 in getWatchOptions) so the
+      // foreground service keeps reporting even when the phone is STATIONARY and
+      // the app has been force-killed — that's what keeps the child ONLINE and
+      // the Timeline/route fed. (The old distance-based config only fired on
+      // movement, so a still + closed app went offline once the JS heartbeat died.)
       ...watchOpts,
       deferredUpdatesInterval: 0, // do not batch — deliver each fix immediately
       pausesUpdatesAutomatically: false, // iOS: never auto-pause when stationary

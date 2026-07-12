@@ -14,9 +14,18 @@ export const DEFAULT_PRECISION = PRECISION.PRECISE
 export function getWatchOptions(precision, context) {
   const fast = precision === PRECISION.FAST
   if (context === 'background') {
+    // distanceInterval MUST be 0 for background tracking. A non-zero value makes
+    // Android FusedLocation fire ONLY on movement, so a stationary phone (esp.
+    // after the app is force-killed, when the 60s JS heartbeat is dead) never
+    // reports and the parent sees the child go OFFLINE within the 20-min window.
+    // distanceInterval:0 + a time interval means the still-alive foreground
+    // service delivers a "still here" fix every timeInterval regardless of
+    // movement, keeping the child online AND feeding the Timeline/route even
+    // when the app is closed. timeInterval is the freshness/battery tradeoff:
+    // ~20s (precise) gives a smooth road-snappable track; ~45s (fast) is lighter.
     return fast
-      ? { accuracy: Location.Accuracy.Balanced, timeInterval: 15000, distanceInterval: 50 }
-      : { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 12 }
+      ? { accuracy: Location.Accuracy.Balanced, timeInterval: 45000, distanceInterval: 0 }
+      : { accuracy: Location.Accuracy.High, timeInterval: 20000, distanceInterval: 0 }
   }
   return fast
     ? { accuracy: Location.Accuracy.Balanced, timeInterval: 15000, distanceInterval: 40 }
