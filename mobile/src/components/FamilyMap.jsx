@@ -3,8 +3,13 @@ import { View, StyleSheet, useColorScheme } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { useTheme, useThemeMode } from '../theme/ThemeContext'
 
-const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+// CARTO "Voyager" — a detailed, Google-Maps-style STREET map: named roads,
+// gali-level streets, parks (green) and water (blue), colored like a real
+// navigation map. dark_all/light_all were deliberately minimal (few roads/
+// labels) which is why streets weren't visible. Voyager is used for both themes
+// so the street detail is always there.
+const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
 
 /**
  * FamilyMap — a self-contained Leaflet/OSM map rendered inside a WebView.
