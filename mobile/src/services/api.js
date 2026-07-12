@@ -118,6 +118,8 @@ export const timelineAPI = {
   getDay: (userId, date) => api.get(`/timeline/${userId}?date=${encodeURIComponent(date)}`),
   // Daily Summary: { date, totalDistanceMeters, travelSec, stoppedSec, stopsCount, placesVisited }
   getSummary: (userId, date) => api.get(`/timeline/${userId}/summary?date=${encodeURIComponent(date)}`),
+  // Raw GPS route points for a date range: { points:[{lat,lng},...], simplified }
+  getRoute: (userId, from, to) => api.get(`/timeline/${userId}/route?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
 }
 
 // ── Routing (self-hosted OSRM, see osrm/README.md) ──────────────────────────
@@ -128,6 +130,8 @@ export const timelineAPI = {
 export const routingAPI = {
   getSegment: (originLat, originLng, destLat, destLng) =>
     api.post('/routing/segment', { originLat, originLng, destLat, destLng }),
+  // Road-snap a whole polyline: points [{lat,lng}] -> { coordinates:[[lat,lng],...], snapped }
+  getPath: (points) => api.post('/routing/path', { points }),
 }
 
 export default api

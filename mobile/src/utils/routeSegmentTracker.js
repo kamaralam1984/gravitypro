@@ -60,6 +60,21 @@ class RouteSegmentTracker {
     }
   }
 
+  // Seed a member's trail with a pre-snapped HISTORICAL route (from the backend
+  // timeline route + /routing/path) so the road-following line shows IMMEDIATELY
+  // on the live map — before any live movement. Live SSE fixes then append to it.
+  // Skips if a live trail has already started, so we never clobber fresher data.
+  seed(memberId, coords) {
+    if (!Array.isArray(coords) || coords.length < 2) return
+    const existing = this.members.get(memberId)
+    if (existing && existing.path.length > 1) return
+    const last = coords[coords.length - 1]
+    this.members.set(memberId, {
+      lastRoutedPoint: { lat: last[0], lng: last[1], bearing: null },
+      path: coords.slice(-MAX_PATH_POINTS),
+    })
+  }
+
   reset(memberId) {
     this.members.delete(memberId)
   }

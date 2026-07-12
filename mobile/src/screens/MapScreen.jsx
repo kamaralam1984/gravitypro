@@ -26,7 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuthStore } from '../store/authStore'
 import { MemberAvatar } from '../components/MemberAvatar'
 import { BatteryIndicator } from '../components/BatteryIndicator'
-import { circleAPI, sosAPI, geofenceAPI, userAPI } from '../services/api'
+import { circleAPI, sosAPI, geofenceAPI, userAPI, timelineAPI, routingAPI } from '../services/api'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 import { storage } from '../utils/storage'
 import { useTheme } from '../theme/ThemeContext'
@@ -338,6 +338,26 @@ export default function MapScreen() {
         }
         return locs
       })
+      // Seed each member's road-snapped trail with TODAY's past route so the
+      // road-following line shows on the live map IMMEDIATELY (before any live
+      // movement). Best-effort + non-blocking; live SSE fixes then extend it.
+      const today = new Date().toISOString().slice(0, 10)
+      for (const m of list) {
+        timelineAPI.getRoute(m.id, today, today).then(async (r) => {
+          const pts = r?.points || []
+          if (pts.length < 2) return
+          // Cap to ~100 points to keep the road-snap request light.
+          const step = pts.length > 100 ? Math.ceil(pts.length / 100) : 1
+          const capped = pts.filter((_, i) => i % step === 0).map((p) => ({ lat: p.lat, lng: p.lng }))
+          let coords = capped.map((p) => [p.lat, p.lng])
+          try {
+            const snap = await routingAPI.getPath(capped)
+            if (snap?.coordinates?.length >= 2) coords = snap.coordinates
+          } catch (_) { /* OSRM down — fall back to raw points */ }
+          routeSegmentTracker.seed(m.id, coords)
+          setMemberPaths(routeSegmentTracker.getAllPaths())
+        }).catch(() => {})
+      }
     } catch (e) {
       console.error('[MapScreen] loadMembers:', e)
     }
