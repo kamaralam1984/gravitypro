@@ -4,6 +4,7 @@ const router = require('express').Router()
 const { query } = require('../config/db')
 const { authenticate } = require('../middleware/auth')
 const { classifyRoute } = require('../services/speedClassifier')
+const { filterTrack } = require('../services/gpsFilter')
 
 // ---- Tunable clustering params ----
 const STAY_RADIUS_M = 150 // points within this distance are part of same stay cluster
@@ -441,17 +442,21 @@ router.get('/:userId/route', authenticate, async (req, res) => {
     accuracy: r.accuracy, speed: r.speed, bearing: r.bearing, altitude: r.altitude,
     ts: Number(r.ts), recordedAt: r.recorded_at,
   }))
-  const segments = classifyRoute(points)
+  // Drop GPS noise (bad-accuracy fixes, teleport glitches, stationary jitter)
+  // so the drawn route follows real travel instead of a crisscross web.
+  // nextCursor stays based on the RAW fetch so pagination is unaffected.
   const nextCursor = points.length === limit ? points[points.length - 1].recordedAt : null
+  const clean = filterTrack(points.map((p) => Object.assign({}, p, { recorded_at: p.recordedAt }))).points
+  const segments = classifyRoute(clean)
 
   res.json({
     from, to, simplified: false,
-    points: points.map((p) => ({
+    points: clean.map((p) => ({
       lat: p.lat, lng: p.lng, ts: p.recordedAt,
       speed: p.speed, bearing: p.bearing, altitude: p.altitude, accuracy: p.accuracy,
     })),
-    start: points[0] ? { lat: points[0].lat, lng: points[0].lng, ts: points[0].recordedAt } : null,
-    end: points[points.length - 1] ? { lat: points[points.length - 1].lat, lng: points[points.length - 1].lng, ts: points[points.length - 1].recordedAt } : null,
+    start: clean[0] ? { lat: clean[0].lat, lng: clean[0].lng, ts: clean[0].recordedAt } : null,
+    end: clean[clean.length - 1] ? { lat: clean[clean.length - 1].lat, lng: clean[clean.length - 1].lng, ts: clean[clean.length - 1].recordedAt } : null,
     segments,
     nextCursor,
   })
@@ -497,17 +502,22 @@ router.get('/:userId/summary', authenticate, async (req, res) => {
     return { name: r.place_name || r.safe_zone_name || 'Unknown', arrivedAt: r.arrived_at, departedAt: r.departed_at }
   })
 
-  const distanceResult = await query(
-    `SELECT COALESCE(ST_Length(ST_MakeLine(geom ORDER BY recorded_at)::geography), 0) as distance_m,
-            MIN(recorded_at) as first_ts, MAX(recorded_at) as last_ts
+  // Distance from FILTERED fixes, not raw ST_MakeLine — a stationary phone's GPS
+  // jitter otherwise inflates this to absurd values (e.g. 74 km "walked" in an
+  // hour). Fetch the day's points and let gpsFilter drop noise + sum real travel.
+  const ptsResult = await query(
+    `SELECT ST_Y(geom) as lat, ST_X(geom) as lng, accuracy, recorded_at
        FROM device_locations
-      WHERE user_id = $1 AND recorded_at >= $2::date AND recorded_at < ($2::date + INTERVAL '1 day')`,
+      WHERE user_id = $1 AND recorded_at >= $2::date AND recorded_at < ($2::date + INTERVAL '1 day')
+      ORDER BY recorded_at ASC`,
     [userId, date]
   )
-  const row = distanceResult.rows[0]
-  const totalDistanceMeters = Math.round(parseFloat(row.distance_m) || 0)
-  const spanSec = row.first_ts && row.last_ts
-    ? Math.round((new Date(row.last_ts) - new Date(row.first_ts)) / 1000)
+  const dayPts = ptsResult.rows.map((r) => ({ lat: Number(r.lat), lng: Number(r.lng), accuracy: r.accuracy, recorded_at: r.recorded_at }))
+  const totalDistanceMeters = filterTrack(dayPts).distanceMeters
+  const firstTs = dayPts.length ? dayPts[0].recorded_at : null
+  const lastTs = dayPts.length ? dayPts[dayPts.length - 1].recorded_at : null
+  const spanSec = firstTs && lastTs
+    ? Math.round((new Date(lastTs) - new Date(firstTs)) / 1000)
     : 0
   const travelSec = Math.max(0, spanSec - stoppedSec)
 
