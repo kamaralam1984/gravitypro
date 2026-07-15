@@ -32,12 +32,26 @@ jobs:
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # Passed via env, never interpolated straight into `run:`. A commit
+          # message is attacker-controllable text and ${{ }} is substituted
+          # before bash ever sees the script, so a message containing a quote
+          # breaks the command and one containing $(...) executes it — on a
+          # runner holding EXPO_TOKEN, which can push JS to every installed app.
+          #
+          # The fallback covers manual runs: workflow_dispatch has no
+          # head_commit, and eas-cli rejects an empty --message outright
+          # ("--channel and --message are required ... in non-interactive mode").
+          UPDATE_MESSAGE: ${{ github.event.head_commit.message || format('Manual OTA run ({0})', github.sha) }}
         run: |
+          # eas wants a short one-liner; commit bodies here run to paragraphs.
+          MSG=$(printf '%s' "$UPDATE_MESSAGE" | head -1 | cut -c1-180)
+          [ -n "$MSG" ] || MSG="OTA update ${GITHUB_SHA}"
+          echo "Publishing: $MSG"
           npx --yes eas-cli update \
             --channel preview \
-            --message "${{ github.event.head_commit.message }}" \
+            --message "$MSG" \
             --non-interactive
           npx --yes eas-cli update \
             --channel production \
-            --message "${{ github.event.head_commit.message }}" \
+            --message "$MSG" \
             --non-interactive
