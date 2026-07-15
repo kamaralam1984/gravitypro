@@ -105,10 +105,21 @@ const closeStaleStops = async () => {
   return stale.rows.length
 }
 
+// The caller checks for an open stop and then inserts one, which is a race: two
+// location ingests for the same user arriving together (background task and
+// foreground, or a retry) both see no open stop and both insert, and one loses
+// to idx_timeline_stops_open_per_user. That surfaced in prod as recurring
+// "duplicate key value violates unique constraint" errors from the ingest path.
+//
+// Losing that race is not an error worth failing on — the winner opened a stop
+// at the same place a moment earlier, which is exactly what this one wanted. Let
+// the loser no-op. ON CONFLICT has to restate the index's WHERE clause for
+// Postgres to infer the partial index.
 const openNewStop = async (userId, lat, lng, at) => {
   await query(
     `INSERT INTO timeline_stops (user_id, center_geom, arrived_at, last_point_at, point_count, radius_m)
-     VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $4, $4, 1, $5)`,
+     VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $4, $4, 1, $5)
+     ON CONFLICT (user_id) WHERE departed_at IS NULL DO NOTHING`,
     [userId, lng, lat, at, STOP_RADIUS_M]
   )
 }
