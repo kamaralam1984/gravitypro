@@ -179,6 +179,15 @@ export const stopBackgroundTracking = async () => {
   if (isRegistered) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME)
 }
 
+// Is the background location task actually running right now? Note this answers
+// "is it registered", which is not the same as "is it delivering" — an OEM that
+// kills the foreground service can leave the registration behind. Treated as the
+// weakest signal in services/trackingHealth.js for exactly that reason.
+export const isBackgroundTrackingRunning = async () => {
+  if (Platform.OS === 'web') return false
+  return Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false)
+}
+
 export const getCurrentLocation = async () => {
   if (Platform.OS === 'web') {
     return new Promise((resolve, reject) => {

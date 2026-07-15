@@ -9,18 +9,21 @@ import {
   FlatList,
   Alert,
   Platform,
+  Linking,
+  ActivityIndicator,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { useAuthStore } from '../store/authStore'
 import { MemberAvatar } from '../components/MemberAvatar'
 import { BatteryIndicator } from '../components/BatteryIndicator'
 import { userAPI, circleAPI, sosAPI, geofenceAPI } from '../services/api'
 import { useTheme } from '../theme/ThemeContext'
 import { getCurrentLocation, speedToMode } from '../services/location'
+import { checkTrackingHealth, tryFixTracking } from '../services/trackingHealth'
 import FamilyMap, { haversineMeters, formatDistance } from '../components/FamilyMap'
 import { Share as RNShare } from 'react-native'
 import CheckInSheet from '../components/CheckInSheet'
@@ -152,6 +155,8 @@ export default function HomeScreen() {
   const [sosActive, setSosActive]           = useState(false)
   const [safeSending, setSafeSending]       = useState(false)
   const [now, setNow]                       = useState(new Date())
+  const [health, setHealth]                 = useState({ ok: true, issue: null })
+  const [fixing, setFixing]                 = useState(false)
 
   const fadeAnim = useRef(new Animated.Value(0)).current
   const mapRef   = useRef(null)
@@ -161,6 +166,33 @@ export default function HomeScreen() {
     const timer = setInterval(() => setNow(new Date()), 60_000)
     return () => clearInterval(timer)
   }, [])
+
+  // Is this phone actually reporting? Re-checked whenever the screen regains
+  // focus, because the usual fix happens in system settings — the user leaves,
+  // toggles a permission, and comes back, and the banner has to notice.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      checkTrackingHealth().then((h) => { if (!cancelled) setHealth(h) })
+      return () => { cancelled = true }
+    }, [])
+  )
+
+  const onFixTracking = async () => {
+    if (fixing || !health.issue) return
+    setFixing(true)
+    try {
+      if (health.fixable) {
+        setHealth(await tryFixTracking(health.issue))
+      } else {
+        // Nothing we can grant ourselves — hand off to the OS and re-check on
+        // return via the focus effect above.
+        await Linking.openSettings()
+      }
+    } finally {
+      setFixing(false)
+    }
+  }
 
   // ── Mount ──────────────────────────────────────────────────────────────────
 
@@ -405,6 +437,33 @@ export default function HomeScreen() {
             )}
           </View>
         </LinearGradient>
+
+        {/* ── Tracking health ──
+            Shown only when this phone is NOT reporting. It used to fail in
+            silence: the child saw a normal app while the family saw them
+            offline, with no way to tell "permission was never granted" from
+            "phone is off". Placed above everything else because nothing else on
+            this screen matters if the family cannot see you. */}
+        {!health.ok && (
+          <View style={styles.section}>
+            <Pressable
+              onPress={onFixTracking}
+              disabled={fixing}
+              style={({ pressed }) => [styles.healthCard, pressed && { opacity: 0.85 }]}
+            >
+              <View style={styles.healthIconWrap}>
+                <Ionicons name="warning" size={20} color="#FFB300" />
+              </View>
+              <View style={styles.healthInfo}>
+                <Text style={styles.healthTitle}>{health.title}</Text>
+                <Text style={styles.healthMsg}>{health.message}</Text>
+              </View>
+              {fixing
+                ? <ActivityIndicator size="small" color="#FFB300" />
+                : <Ionicons name="chevron-forward" size={18} color="#FFB300" />}
+            </Pressable>
+          </View>
+        )}
 
         {/* ── Today's Activity ── */}
         <View style={styles.section}>
@@ -709,6 +768,23 @@ const makeStyles = (c) => StyleSheet.create({
   distParentVal: { fontSize: 12, fontWeight: '600', color: c.textMuted },
   distPlaceRow:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
   distPlaceVal:  { flex: 1, fontSize: 12, fontWeight: '600', color: c.textMuted },
+
+  // Amber, not red: this is "your family cannot see you", which is urgent but
+  // fixable — it is not an emergency, and SOS on this screen owns red.
+  healthCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(255,179,0,0.10)',
+    borderWidth: 1, borderColor: 'rgba(255,179,0,0.35)',
+    borderRadius: 14, padding: 14,
+  },
+  healthIconWrap: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,179,0,0.15)',
+  },
+  healthInfo:  { flex: 1, gap: 2 },
+  healthTitle: { color: '#FFB300', fontSize: 14, fontWeight: '700' },
+  healthMsg:   { color: c.textMuted, fontSize: 12, fontWeight: '500', lineHeight: 16 },
 
   // Map markers
   myDot:        { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
