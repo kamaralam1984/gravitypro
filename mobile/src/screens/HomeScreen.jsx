@@ -215,6 +215,10 @@ export default function HomeScreen() {
             charging: m.is_charging === true,
             speed: m.speed != null ? Number(m.speed) : null,
             timestamp: m.location_updated_at || m.updated_at,
+            // Locality/POI the member is currently in. Null until the backend's
+            // geocode cache has this ~150m cell — it fills in on a later poll.
+            placeName: m.place_name || null,
+            placeType: m.place_type || null,
           }
         }
       }
@@ -345,14 +349,20 @@ export default function HomeScreen() {
         ? haversineMeters(cLat, cLng, parentLoc.latitude, parentLoc.longitude)
         : null
 
+      const inside = hasZone && nd <= Number(nearest.radius_meters)
+
       return {
         id: m.id,
         name: m.name?.split(' ')[0] || '?',
         hasZone,
         dist: nd,
         zone: nearest?.name,
-        inside: hasZone && nd <= Number(nearest.radius_meters),
+        inside,
         parentDist,
+        // Only worth a line when it says something the zone line does not. The
+        // backend returns the safe zone's own name as place_name when the member
+        // is inside one, which the zone line below already shows.
+        place: loc.placeType !== 'safe_zone' ? loc.placeName : null,
       }
     })
     .sort((a, b) => {
@@ -469,6 +479,14 @@ export default function HomeScreen() {
                   <View style={[styles.distDot, { backgroundColor: d.inside ? c.accent : '#FFB300' }]} />
                   <View style={styles.distInfo}>
                     <Text style={styles.distName} numberOfLines={1}>{d.name}</Text>
+
+                    {/* Locality — omitted until the geocode cache has this spot */}
+                    {d.place && (
+                      <View style={styles.distPlaceRow}>
+                        <Ionicons name="location" size={11} color={c.textMuted} />
+                        <Text style={styles.distPlaceVal} numberOfLines={1}>{d.place}</Text>
+                      </View>
+                    )}
 
                     {/* Zone distance line */}
                     <Text style={[styles.distZoneVal, { color: d.inside ? c.accent : '#FFB300' }]}>
@@ -689,6 +707,8 @@ const makeStyles = (c) => StyleSheet.create({
   distVal:   { fontSize: 13, fontWeight: '700' },
   distZoneVal:   { fontSize: 13, fontWeight: '700' },
   distParentVal: { fontSize: 12, fontWeight: '600', color: c.textMuted },
+  distPlaceRow:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  distPlaceVal:  { flex: 1, fontSize: 12, fontWeight: '600', color: c.textMuted },
 
   // Map markers
   myDot:        { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },

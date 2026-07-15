@@ -45,9 +45,13 @@ const parseAddress = (data) => {
 
 /**
  * Resolves a human-readable place name for (lat, lng), backed by a
- * geohash-7-keyed cache (geocode_cache). Only ever called once per confirmed
- * stop-close (see timelineStops.js) — never per raw GPS point — and shared
- * across every user/stop that falls in the same ~150m cell.
+ * geohash-7-keyed cache (geocode_cache), shared across every user/stop that
+ * falls in the same ~150m cell.
+ *
+ * Callers: timelineStops.js on a confirmed stop-close (awaited — the stop needs
+ * the name), and warmPlaceName() below (fire-and-forget). Never call this per
+ * raw GPS point, and never from a request a client is waiting on: on a cache
+ * miss it makes a metered API call.
  */
 const resolvePlaceName = async (lat, lng) => {
   const hash = encodeGeohash(lat, lng, 7)
@@ -91,4 +95,91 @@ const resolvePlaceName = async (lat, lng) => {
   }
 }
 
-module.exports = { resolvePlaceName, parseAddress }
+// ─── Live "current place" cache warming ──────────────────────────────────────
+// GET /circles/:id/members reads place names straight out of geocode_cache and
+// never calls the API — it is polled constantly, so a miss must stay cheap. But
+// the only thing that ever filled that cache was timelineStops geocoding a
+// CLOSED stop, so a child somewhere they had not already stopped at showed no
+// place name at all. Warming fills the cache out-of-band: the miss still returns
+// null to this poll, and the name is there on a later one.
+//
+// Guards, because this hangs off a hot polling path onto a metered API:
+//  - the key's quota is shared with timelineStops — the feature that genuinely
+//    needs it — so warming takes a small slice of the free tier and then yields.
+//    Timeline stop names must never break to make a live label appear.
+//  - misses are DROPPED, not queued. A skipped warm costs nothing but a later
+//    poll; a queue would outlive the request that filled it and stampede.
+//  - one in-flight call per cell, so several parents polling the same child
+//    collapse into one API call rather than N identical ones.
+//  - a cell that fails, or that the provider has no name for, is left alone for
+//    a while instead of being retried on every single poll.
+const WARM_MIN_INTERVAL_MS = 1100          // free tier allows 2 req/s; stay under 1
+const WARM_DAILY_BUDGET = 1500             // of a ~5000/day free tier
+const WARM_FAILURE_COOLDOWN_MS = 30 * 60 * 1000
+const WARM_FAILED_MAX = 5000               // bound the failure map; it is process-lifetime
+
+const warmInFlight = new Set()
+const warmFailedAt = new Map()
+let warmNextSlotAt = 0
+let warmSpentToday = 0
+let warmBudgetDay = ''
+
+const utcDay = () => new Date().toISOString().slice(0, 10)
+
+// Number(null) and Number('') are both 0 — finite, and a perfectly plausible
+// coordinate — so a bare Number.isFinite() check waves null coordinates through
+// and geocodes Null Island. Reject the empty values first, then bound-check.
+const isCoord = (v, limit) =>
+  v != null && v !== '' && Number.isFinite(Number(v)) && Math.abs(Number(v)) <= limit
+
+/**
+ * Fire-and-forget: ensure (lat, lng) has a geocode_cache entry soon. Returns
+ * immediately and never throws — callers must not await it. Safe to call on
+ * every poll; the guards above decide whether anything actually happens.
+ */
+const warmPlaceName = (lat, lng) => {
+  if (!process.env.LOCATIONIQ_API_KEY) return
+  if (!isCoord(lat, 90) || !isCoord(lng, 180)) return
+
+  const today = utcDay()
+  if (today !== warmBudgetDay) {
+    warmBudgetDay = today
+    warmSpentToday = 0
+  }
+  if (warmSpentToday >= WARM_DAILY_BUDGET) return
+
+  const now = Date.now()
+  if (now < warmNextSlotAt) return
+
+  const hash = encodeGeohash(Number(lat), Number(lng), 7)
+  if (warmInFlight.has(hash)) return
+  const failedAt = warmFailedAt.get(hash)
+  if (failedAt != null && now - failedAt < WARM_FAILURE_COOLDOWN_MS) return
+
+  warmNextSlotAt = now + WARM_MIN_INTERVAL_MS
+  warmSpentToday++
+  warmInFlight.add(hash)
+
+  resolvePlaceName(lat, lng)
+    .then((r) => {
+      // 'unknown' is what resolvePlaceName returns when the provider gave us
+      // nothing usable — treat it as a failure so we stop asking about this cell.
+      if (!r || r.type === 'unknown') warmFailedAt.set(hash, Date.now())
+      else warmFailedAt.delete(hash)
+    })
+    .catch(() => warmFailedAt.set(hash, Date.now()))
+    .finally(() => {
+      warmInFlight.delete(hash)
+      if (warmFailedAt.size > WARM_FAILED_MAX) {
+        const cutoff = Date.now() - WARM_FAILURE_COOLDOWN_MS
+        for (const [k, t] of warmFailedAt) if (t < cutoff) warmFailedAt.delete(k)
+      }
+    })
+}
+
+module.exports = {
+  resolvePlaceName,
+  parseAddress,
+  warmPlaceName,
+  WARM_MIN_INTERVAL_MS, // exported so tests can wait out the rate limiter
+}

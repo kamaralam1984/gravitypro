@@ -3,6 +3,7 @@ const { z } = require('zod')
 const { query } = require('../config/db')
 const { authenticate } = require('../middleware/auth')
 const { validate } = require('../middleware/validate')
+const { warmPlaceName } = require('../services/geocoding')
 const { v4: uuidv4 } = require('uuid')
 const crypto = require('crypto')
 
@@ -126,6 +127,17 @@ router.get('/:circleId/members', authenticate, async (req, res) => {
     place_type: r.safe_zone_name ? 'safe_zone' : (r.geocoded_type || null),
   }))
   res.json({ members })
+
+  // After res.json, so a slow geocode can never delay the response — this is a
+  // polling path. Only for members the cache missed AND who are not already
+  // inside a named safe zone (that name wins anyway, so a geocode would be
+  // bought and never shown). Deliberately not awaited; warmPlaceName drops the
+  // call rather than queueing it if it is out of rate limit or daily budget.
+  for (const m of members) {
+    if (m.place_name == null && m.latitude != null && m.longitude != null) {
+      warmPlaceName(m.latitude, m.longitude)
+    }
+  }
 })
 
 // DELETE /api/v1/circles/:circleId/members/:userId — remove member (admin only)

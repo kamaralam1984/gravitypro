@@ -333,6 +333,14 @@ export default function MapScreen() {
               speed: m.speed != null ? Number(m.speed) : (prev[m.id]?.speed ?? null),
               mode: m.mode ?? prev[m.id]?.mode ?? null,
               timestamp: m.location_updated_at || m.updated_at || null,
+              // Locality/POI the member is currently in. Null until the backend's
+              // geocode cache has this ~150m cell, which fills in on a later
+              // poll. Deliberately NOT carried over from the previous fix like
+              // speed/mode are: the cache misses precisely when the member has
+              // moved somewhere new, so the old name is the one thing it cannot
+              // be. Blank for a poll beats naming the place they just left.
+              placeName: m.place_name || null,
+              placeType: m.place_type || null,
             }
           }
         }
@@ -767,6 +775,15 @@ export default function MapScreen() {
                 </View>
               </View>
             </View>
+
+            {/* Locality — hidden until the geocode cache has this spot, and when
+                inside a safe zone, where the zone readout below says it better. */}
+            {selectedLoc?.placeName && selectedLoc.placeType !== 'safe_zone' && (
+              <View style={styles.cardPlaceRow}>
+                <Ionicons name="location" size={13} color={c.accent} />
+                <Text style={styles.cardPlaceText} numberOfLines={1}>{selectedLoc.placeName}</Text>
+              </View>
+            )}
 
             {/* Stats row */}
             <View style={styles.cardStats}>
@@ -1267,6 +1284,9 @@ const makeStyles = (c) => StyleSheet.create({
   cardStatLabel: { fontSize: 10, color: c.textMuted, fontWeight: '600', letterSpacing: 0.5 },
   cardStatValue: { fontSize: 13, color: c.textSecondary, fontWeight: '700' },
   cardDivider: { width: 1, height: 32, backgroundColor: c.divider },
+
+  cardPlaceRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
+  cardPlaceText: { flex: 1, fontSize: 13, fontWeight: '600', color: c.textSecondary },
 
   // distance readouts
   distanceRow: {
