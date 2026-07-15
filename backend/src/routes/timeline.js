@@ -5,6 +5,7 @@ const { query } = require('../config/db')
 const { authenticate } = require('../middleware/auth')
 const { classifyRoute } = require('../services/speedClassifier')
 const { filterTrack } = require('../services/gpsFilter')
+const { snapDistanceMeters } = require('../services/routing')
 
 // ---- Tunable clustering params ----
 const STAY_RADIUS_M = 150 // points within this distance are part of same stay cluster
@@ -22,6 +23,65 @@ function haversine(lat1, lng1, lat2, lng2) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
+}
+
+// ---- Road-snapped daily distance ----
+// Summing haversine between fixes measures the CHORDS of a path, so every bend
+// on a road is cut across and a drive always reads short. For travel that was
+// actually on roads, OSRM's own road length is the better number.
+//
+// Only vehicle-class segments are snapped. A walk must NOT be: someone cutting
+// through a park or a gali is not on the road graph, and a driving-profile snap
+// would reroute them the long way round and invent distance. Cycling is left
+// alone for the same reason — cycles use paths the car network does not have.
+const SNAPPABLE_MODES = new Set(['vehicle', 'highspeed'])
+
+/**
+ * Total distance for a day's already-filtered track, road-snapping the parts
+ * that were driven. Falls back to the chord sum per-segment, so a dead OSRM (or
+ * a region outside the extract) just reproduces the old number rather than
+ * failing the request.
+ */
+const snappedDistanceForTrack = async (clean) => {
+  if (!clean || clean.length < 2) return 0
+
+  const forClassify = clean.map((p) => ({
+    lat: p.lat, lng: p.lng, speed: p.speed,
+    ts: new Date(p.recorded_at).getTime(),
+  }))
+  const segments = classifyRoute(forClassify)
+  // classifyRoute needs >=2 points to produce anything; with none, the chord sum
+  // over the whole track is all we have.
+  if (!segments.length) return Math.round(chordSum(clean, 0, clean.length - 1))
+
+  let total = 0
+  // Once OSRM has failed on this request, stop asking. Every further attempt
+  // would pay the same timeout for the same answer while the user waits.
+  let osrmUsable = true
+
+  for (const seg of segments) {
+    const chord = chordSum(clean, seg.fromIdx, seg.toIdx)
+    if (!SNAPPABLE_MODES.has(seg.mode) || !osrmUsable) {
+      total += chord
+      continue
+    }
+    const snapped = await snapDistanceMeters(clean.slice(seg.fromIdx, seg.toIdx + 1))
+    if (snapped == null) {
+      osrmUsable = false
+      total += chord
+    } else {
+      total += snapped
+    }
+  }
+  return Math.round(total)
+}
+
+const chordSum = (pts, fromIdx, toIdx) => {
+  let d = 0
+  for (let i = fromIdx + 1; i <= toIdx && i < pts.length; i++) {
+    d += haversine(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng)
+  }
+  return d
 }
 
 // Authorization: a user can always view their own data. Viewing someone
@@ -506,14 +566,19 @@ router.get('/:userId/summary', authenticate, async (req, res) => {
   // jitter otherwise inflates this to absurd values (e.g. 74 km "walked" in an
   // hour). Fetch the day's points and let gpsFilter drop noise + sum real travel.
   const ptsResult = await query(
-    `SELECT ST_Y(geom) as lat, ST_X(geom) as lng, accuracy, recorded_at
+    `SELECT ST_Y(geom) as lat, ST_X(geom) as lng, accuracy, speed, recorded_at
        FROM device_locations
       WHERE user_id = $1 AND recorded_at >= $2::date AND recorded_at < ($2::date + INTERVAL '1 day')
       ORDER BY recorded_at ASC`,
     [userId, date]
   )
-  const dayPts = ptsResult.rows.map((r) => ({ lat: Number(r.lat), lng: Number(r.lng), accuracy: r.accuracy, recorded_at: r.recorded_at }))
-  const totalDistanceMeters = filterTrack(dayPts).distanceMeters
+  const dayPts = ptsResult.rows.map((r) => ({
+    lat: Number(r.lat), lng: Number(r.lng), accuracy: r.accuracy,
+    speed: r.speed != null ? Number(r.speed) : null,
+    recorded_at: r.recorded_at,
+  }))
+  const clean = filterTrack(dayPts).points
+  const totalDistanceMeters = await snappedDistanceForTrack(clean)
   const firstTs = dayPts.length ? dayPts[0].recorded_at : null
   const lastTs = dayPts.length ? dayPts[dayPts.length - 1].recorded_at : null
   const spanSec = firstTs && lastTs

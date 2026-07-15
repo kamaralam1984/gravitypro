@@ -27,6 +27,16 @@ const fetchWithTimeout = (url, ms = ROUTE_TIMEOUT_MS) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const fetchOsrmOnce = async (url) => {
+  const res = await fetchWithTimeout(url)
+  if (res.status >= 500) throw new Error(`OSRM ${res.status}`)
+  if (!res.ok) {
+    // 4xx — bad request, not a transient failure — don't retry.
+    throw Object.assign(new Error(`OSRM ${res.status}`), { noRetry: true })
+  }
+  return res.json()
+}
+
 /**
  * Calls OSRM with retry-with-backoff on network error/timeout/5xx (a 4xx —
  * bad coordinates — fails straight through, no point retrying that). Throws
@@ -36,13 +46,7 @@ const fetchOsrmWithRetry = async (url) => {
   let lastErr
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
     try {
-      const res = await fetchWithTimeout(url)
-      if (res.status >= 500) throw new Error(`OSRM ${res.status}`)
-      if (!res.ok) {
-        // 4xx — bad request, not a transient failure — don't retry.
-        throw Object.assign(new Error(`OSRM ${res.status}`), { noRetry: true })
-      }
-      return res.json()
+      return await fetchOsrmOnce(url)
     } catch (err) {
       lastErr = err
       if (err.noRetry || attempt === RETRY_DELAYS_MS.length) break
@@ -74,10 +78,10 @@ const straightLineFallback = (points) => {
  * — note the lng,lat order, opposite of every other coordinate pair in this
  * codebase (timeline.js, device_locations, etc. are all lat,lng).
  */
-const callOsrmRoute = async (waypoints) => {
+const callOsrmRoute = async (waypoints, { retry = true } = {}) => {
   const coordsParam = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
   const url = `${OSRM_BASE_URL}/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`
-  const data = await fetchOsrmWithRetry(url)
+  const data = retry ? await fetchOsrmWithRetry(url) : await fetchOsrmOnce(url)
   if (data.code !== 'Ok' || !data.routes?.length) {
     throw new Error(`OSRM response code: ${data.code || 'unknown'}`)
   }
@@ -184,4 +188,63 @@ const getRouteMultiWaypoint = async (points, { maxWaypoints = MAX_WAYPOINTS_DEFA
   }
 }
 
-module.exports = { getRoute, getRouteMultiWaypoint }
+// ─── Road-snapped distance ───────────────────────────────────────────────────
+// Summing haversine between GPS fixes measures the CHORDS of a path, not the
+// path: every bend is cut across, so a drive on a curving road always reads
+// short. Asking OSRM to match the fixes to the road network and reporting the
+// road's own length removes that, and is the last real accuracy gain available
+// on the distance number.
+//
+// Only worth doing for travel that is actually ON roads. Snapping a walk would
+// make it WORSE — someone cutting through a park or a gali gets rerouted the
+// long way round by car, inventing distance they never travelled. Callers pick;
+// see routes/timeline.js, which snaps vehicle segments only.
+
+// A road is never shorter than the straight line between its ends, so a snap
+// materially under the chord means OSRM matched the wrong roads. Far over it
+// means it invented a detour to reconcile fixes it could not match (common when
+// the GPS gaps are large). Neither is trustworthy — fall back rather than
+// silently report it.
+const SNAP_MIN_RATIO = 0.9
+const SNAP_MAX_RATIO = 2.5
+
+const chordDistanceMeters = (points) => {
+  let d = 0
+  for (let i = 1; i < points.length; i++) {
+    d += haversineMeters(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng)
+  }
+  return d
+}
+
+/**
+ * Road-snapped length of one travel segment in metres, or null if it could not
+ * be snapped trustworthily — OSRM down, region not in the extract (it covers
+ * one zone, not all of India — see osrm/README.md), or an implausible result.
+ * Never throws. A null means "use your own chord sum", not "no distance".
+ *
+ * Single attempt, no retry: this runs inside a request the user is waiting on,
+ * and a stale-but-instant chord sum beats making them wait out a backoff.
+ */
+const snapDistanceMeters = async (points, { maxWaypoints = MAX_WAYPOINTS_DEFAULT } = {}) => {
+  if (!points || points.length < 2) return null
+
+  const chord = chordDistanceMeters(points)
+  if (chord <= 0) return null
+
+  try {
+    const { distanceMeters } = await callOsrmRoute(downsamplePoints(points, maxWaypoints), { retry: false })
+    if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return null
+
+    const ratio = distanceMeters / chord
+    if (ratio < SNAP_MIN_RATIO || ratio > SNAP_MAX_RATIO) {
+      console.warn(`[routing] implausible snap (${Math.round(distanceMeters)}m vs ${Math.round(chord)}m chord, ratio ${ratio.toFixed(2)}) — using chord`)
+      return null
+    }
+    return distanceMeters
+  } catch (err) {
+    console.error('[routing] snapDistanceMeters failed, caller falls back to chord:', err.message)
+    return null
+  }
+}
+
+module.exports = { getRoute, getRouteMultiWaypoint, snapDistanceMeters, SNAP_MIN_RATIO, SNAP_MAX_RATIO }
